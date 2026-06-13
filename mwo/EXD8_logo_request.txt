@@ -1,0 +1,39 @@
+EXD8 - EXDEATE Logo - Mood board
+
+Requirements:
+
+1) PNG of full logo, at least 512 x 512 px, preferably higher like at 1024 x 1024 px or 2048 x 2048 px. Hard max 5MB. Transparency where applicable.
+        - The logo will be used as:
+        - Full image where applicable,
+        - Thumbnail (128 x 128 resized down).
+        - Emoji / Discord badge (32 x 32 resized down)
+The text in the logo should be legible in full + thumbnail version. 
+If visible in Emoji version, great. If not, then a less detailed[1] or different angle[2] version is fine too.
+[1] - less detailed - the text could be disregarded and focus on the logo itself. 
+        - OR, the details near the logo can be reduced, so the text and overall outline are still clear.
+[2] - Rather than the described "weapon coming down towards you" angle, a simple "weapon at rest" approach can be taken, like the thumbnail when checking your inventory in a game
+
+Digital Style:
+1) Primarily like a vector graphic, or higher quality. Not expecting ultra 4K realism or 3D model image.
+2) If subject(s) has a background (shield, banner, flag, backdrop), try to contain most of the logo within it. Avoid sprawling trees or lightning or lens flare.
+
+Subject Specification:
+1) Hammer crashing down, lightning or force effect apparent along the head or backside
+2) It should be evidently a two handed hammer, not a one-handed one 
+3) Along the side of the hammer, it should say "EXD8". There should be an underline + overline of trim detail, extending the length of the side of the head.
+4) The feeling should be regal but foreboding and awe-inspiring.
+5) The hammer does not need hands or a user or any appendage to be swinging it. The hammer itself in motion is fine.
+6) Alternative options:
+   1) The hammer can be at rest as the logo. This is additionally a possible take for Requirement [2] for emoji.
+   2) The hammer can be a ham axe
+   3) The weapon can be a two-handed axe or one-handed axe as well, with two heads. One head should be larger. Draws from "Armads" in Fire Emblem or Power Axe in Space Marine series.
+        a) If it is an axe, "EXD8" should be displayed along the center. Vertically or horizontally is up to artist choice.
+        b) Less empty space. It's not a tree cutting or tactical axe but full of energy and mass (cleave right through). 
+
+Perspective:
+A) On an XYZ axis, with XY being the ground and Z being the height, the viewer at the origin:
+- The weapon should be coming from 1 or 2 o'clock, towards the viewer. 
+- The weapon is about to impact in front of the viewer. This means the head, and two major sides of the hammer can be seen. The text "EXD8" should be legible.
+B) If the weapon or weapon is at rest, the viewer should be looking straight on, as an XY axis. The 10 or 11 o clock should be the head, and 5 o clock should be the direction of the shaft.
+- The head can be enlarged and coming out toward the user, allowing the shaft to be smaller as it goes towards the background and fits within the logo borders.
+- It can look like a thumbnail tile of the weapon, as it would be in the user's inventory in a video game.

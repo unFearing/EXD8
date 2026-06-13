@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite cache (inside app/)
+app/.vite/
+
+# Node
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+
+# Local env files
+*.local
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Editor
+.idea/
+*.suo
+*.sln
