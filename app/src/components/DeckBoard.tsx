@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   AppBar,
   Autocomplete,
   Box,
@@ -26,6 +27,8 @@ import {
 } from "@mui/material";
 import { CS2026_ROUND1 } from "../data/decks";
 import { MECH_DATABASE, type MechBuild, type WeightClass } from "../data/mechs";
+import { useMatchNightApi } from "../hooks/useMatchNightApi";
+import type { Drop as ApiDrop, MatchNightCreateInput, WeightClass as ApiWeightClass } from "../types/contracts";
 
 type EditMode = "view" | "edit";
 type TeamSide = "Team 1" | "Team 2" | "Agnostic";
@@ -81,6 +84,30 @@ const PILOT_OPTIONS = [
   "NeirSolon",
 ];
 
+function getTonnage(weightClass: WeightClass): number {
+  switch (weightClass) {
+    case "Light":
+      return 35;
+    case "Medium":
+      return 55;
+    case "Heavy":
+      return 75;
+    case "Assault":
+      return 100;
+    case "Commander":
+      return 65;
+    default:
+      return 0;
+  }
+}
+
+function toApiWeightClass(weightClass: WeightClass | ""): ApiWeightClass {
+  if (weightClass === "Light" || weightClass === "Medium" || weightClass === "Heavy" || weightClass === "Assault") {
+    return weightClass;
+  }
+  return "Medium";
+}
+
 const ALL_VARIANTS: VariantRecord[] = MECH_DATABASE.flatMap((chassis) =>
   chassis.variants.map((variant) => ({
     code: variant.code,
@@ -88,7 +115,7 @@ const ALL_VARIANTS: VariantRecord[] = MECH_DATABASE.flatMap((chassis) =>
     chassisId: chassis.id,
     chassisName: chassis.displayName,
     weightClass: variant.weightClass,
-    tonnage: chassis.tonnage,
+    tonnage: getTonnage(variant.weightClass),
     builds: variant.builds,
   })),
 ).sort((a, b) => a.code.localeCompare(b.code));
@@ -133,6 +160,9 @@ export function DeckBoard() {
   const [selectedSide, setSelectedSide] = useState<TeamSide>("Team 1");
   const [templates, setTemplates] = useState<DeckTemplate[]>(defaultTemplates);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [lastSavedId, setLastSavedId] = useState<string>("");
+  const [loadId, setLoadId] = useState<string>("");
+  const { isSaving, isLoading, error, saveMatchNight, loadMatchNight } = useMatchNightApi();
 
   const templatesForSelection = useMemo(
     () => templates.filter((template) => template.map === selectedMap && template.side === selectedSide),
@@ -259,6 +289,95 @@ export function DeckBoard() {
     if (candidate) setSelectedTemplateId(candidate.id);
   };
 
+  const toApiPayload = (template: DeckTemplate): MatchNightCreateInput => {
+    const drops: ApiDrop[] = [
+      {
+        dropNumber: 1,
+        slots: template.rows.map((row) => ({
+          slotId: `d1-s${row.slot}`,
+          weightClass: toApiWeightClass(row.weightClass),
+          chassis: row.mech || "Unknown",
+          variant: row.mech || "Unknown",
+          pilot: row.primary[0] ?? "Unassigned",
+          candidatePilots: row.alternates,
+          buildLink: row.buildCode.startsWith("http") ? row.buildCode : "https://example.com/build",
+          skillCode: row.skillTree || "UNSET",
+          role: row.role || "Generalist",
+          keyFactors: {
+            ecm: false,
+            bap: false,
+            jumpJets: false,
+            speedKph: 0,
+          },
+          isBackup: false,
+          notes: row.weaponry,
+        })),
+        mapLink: activeTemplate?.map ? `https://example.com/maps/${encodeURIComponent(activeTemplate.map)}` : "",
+        locked: editMode === "view",
+      },
+    ];
+
+    return {
+      teamId: "exd8",
+      seasonId: "season-2026-spring",
+      date: new Date().toISOString().slice(0, 10),
+      round: 1,
+      opponent: "TBD",
+      drops,
+    };
+  };
+
+  const applyLoadedMatchNight = (loaded: { drops: ApiDrop[]; id: string }) => {
+    if (!activeTemplateId) return;
+    const firstDrop = loaded.drops[0];
+    if (!firstDrop) return;
+
+    setTemplates((previous) =>
+      previous.map((template) => {
+        if (template.id !== activeTemplateId) return template;
+        return {
+          ...template,
+          rows: template.rows.map((row, idx) => {
+            const slot = firstDrop.slots[idx];
+            if (!slot) return row;
+            return {
+              ...row,
+              mech: slot.variant,
+              role: slot.role,
+              weaponry: slot.notes,
+              buildCode: slot.buildLink,
+              skillTree: slot.skillCode,
+              weightClass: slot.weightClass,
+              tonnage: getTonnage(slot.weightClass),
+              primary: slot.pilot ? [slot.pilot] : [],
+              alternates: slot.candidatePilots,
+            };
+          }),
+        };
+      }),
+    );
+
+    setLastSavedId(loaded.id);
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!activeTemplate) return;
+    const payload = toApiPayload(activeTemplate);
+    const saved = await saveMatchNight(payload);
+    if (saved) {
+      setLastSavedId(saved.id);
+      setLoadId(saved.id);
+    }
+  };
+
+  const handleLoadTemplate = async () => {
+    if (!loadId) return;
+    const loaded = await loadMatchNight(loadId, "exd8");
+    if (loaded) {
+      applyLoadedMatchNight(loaded);
+    }
+  };
+
   return (
     <Box
       sx={{
@@ -340,6 +459,22 @@ export function DeckBoard() {
               <Button variant="outlined" onClick={createFreshTemplate}>
                 Fresh template
               </Button>
+
+              <Button variant="contained" onClick={handleSaveTemplate} disabled={!activeTemplate || isSaving}>
+                {isSaving ? "Saving..." : "Save to API"}
+              </Button>
+
+              <TextField
+                size="small"
+                label="Match ID"
+                value={loadId}
+                onChange={(event) => setLoadId(event.target.value)}
+                sx={{ minWidth: 190 }}
+              />
+
+              <Button variant="outlined" onClick={handleLoadTemplate} disabled={!loadId || isLoading}>
+                {isLoading ? "Loading..." : "Load from API"}
+              </Button>
             </>
           )}
 
@@ -357,6 +492,8 @@ export function DeckBoard() {
       <Container maxWidth={false} sx={{ pt: 2, px: { xs: 1, md: 2 } }}>
         {appView === 0 && (
           <Stack spacing={2}>
+            {lastSavedId && <Alert severity="success">Saved match night id: {lastSavedId}</Alert>}
+            {error && <Alert severity="error">{error}</Alert>}
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1.5fr 1fr" }, gap: 2 }}>
           <Paper
             elevation={0}
@@ -653,7 +790,7 @@ export function DeckBoard() {
                   {MECH_DATABASE.map((chassis) => (
                     <TableRow key={chassis.id}>
                       <TableCell sx={{ color: "#d3ddfc" }}>{chassis.id} | {chassis.displayName}</TableCell>
-                      <TableCell sx={{ color: "#d3ddfc" }}>{chassis.tonnage} t</TableCell>
+                      <TableCell sx={{ color: "#d3ddfc" }}>{getTonnage(chassis.variants[0]?.weightClass ?? "Medium")} t</TableCell>
                       <TableCell sx={{ color: "#d3ddfc" }}>
                         {chassis.variants.map((variant) => variant.code).join(", ")}
                       </TableCell>
