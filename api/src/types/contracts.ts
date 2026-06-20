@@ -3,6 +3,49 @@ import { z } from "zod";
 export const weightClassSchema = z.enum(["Light", "Medium", "Heavy", "Assault"]);
 export type WeightClass = z.infer<typeof weightClassSchema>;
 
+export const mechTechSchema = z.enum(["IS", "Clan"]);
+export type MechTech = z.infer<typeof mechTechSchema>;
+
+export const mechRoleSchema = z.enum([
+  "Capper",
+  "Striker",
+  "Skirmisher",
+  "Brawler",
+  "Sniper",
+  "Fire Support",
+  "Juggernaut",
+]);
+export type MechRole = z.infer<typeof mechRoleSchema>;
+
+const primaryRangeBracketSchema = z
+  .tuple([z.number().nonnegative(), z.number().nonnegative()])
+  .refine(([minimum, maximum]) => minimum <= maximum, {
+    message: "primaryRangeBracket must be ordered from min to max",
+  });
+
+const allowedTonnages = new Set([20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]);
+
+const weightClassByTonnage: Record<WeightClass, readonly number[]> = {
+  Light: [20, 25, 30, 35],
+  Medium: [40, 45, 50, 55],
+  Heavy: [60, 65, 70, 75],
+  Assault: [80, 85, 90, 95, 100],
+};
+
+function applyMechTonnageClassRefinement<T extends { class: WeightClass; tonnage: number }>(
+  schema: z.ZodType<T>
+): z.ZodEffects<z.ZodType<T>> {
+  return schema.superRefine((value, context) => {
+    if (!weightClassByTonnage[value.class].includes(value.tonnage)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tonnage"],
+        message: `tonnage ${value.tonnage} does not match class ${value.class}`,
+      });
+    }
+  });
+}
+
 export const keyFactorsSchema = z.object({
   ecm: z.boolean(),
   bap: z.boolean(),
@@ -43,6 +86,7 @@ export const matchNightCreateInputSchema = z.object({
 
 export const matchNightDocSchema = matchNightCreateInputSchema.extend({
   id: z.string().min(1),
+  comp: z.string().min(1),
   updatedAt: z.string().datetime(),
   updatedBy: z.string().min(1),
   schemaVersion: z.literal("1.0.0"),
@@ -66,6 +110,34 @@ export const buildDocSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   docType: z.literal("build"),
 });
+
+const mechDocBaseSchema = z.object({
+  id: z.string().uuid(),
+  class: weightClassSchema,
+  tech: mechTechSchema,
+  tonnage: z
+    .number()
+    .int()
+    .refine((value) => allowedTonnages.has(value), {
+      message: "tonnage must be between 20 and 100 in increments of 5",
+    }),
+  chassis: z.string().min(1),
+  variant: z.string().min(1),
+  buildUrl: z.string().url(),
+  skillCode: z.string().min(1),
+  weaponry: z.string(),
+  equipment: z.array(z.string().min(1)),
+  description: z.string(),
+  role: mechRoleSchema,
+  buildCodes: z.record(z.string()),
+  primaryRangeBracket: primaryRangeBracketSchema,
+  optimalRange: z.number().nonnegative(),
+  maxRange: z.number().nonnegative(),
+  schemaVersion: z.literal("1.0.0"),
+  docType: z.literal("mech"),
+});
+
+export const mechDocSchema = applyMechTonnageClassRefinement(mechDocBaseSchema);
 
 export const userDocSchema = z.object({
   id: z.string().min(1),
@@ -93,5 +165,21 @@ export type Drop = z.infer<typeof dropSchema>;
 export type MatchNightCreateInput = z.infer<typeof matchNightCreateInputSchema>;
 export type MatchNightDoc = z.infer<typeof matchNightDocSchema>;
 export type BuildDoc = z.infer<typeof buildDocSchema>;
+export type MechDoc = z.infer<typeof mechDocSchema>;
+
+const createMechInputBaseSchema = mechDocBaseSchema.omit({
+  id: true,
+  schemaVersion: true,
+  docType: true,
+});
+export const createMechInputSchema = applyMechTonnageClassRefinement(createMechInputBaseSchema);
+export type CreateMechInput = z.infer<typeof createMechInputSchema>;
+
+const upsertMechInputBaseSchema = mechDocBaseSchema.omit({
+  schemaVersion: true,
+  docType: true,
+});
+export const upsertMechInputSchema = applyMechTonnageClassRefinement(upsertMechInputBaseSchema);
+export type UpsertMechInput = z.infer<typeof upsertMechInputSchema>;
 export type UserDoc = z.infer<typeof userDocSchema>;
 export type SeasonDoc = z.infer<typeof seasonDocSchema>;

@@ -21,10 +21,18 @@ export function getCosmosClient(): CosmosClient {
 }
 
 export function getContainer(containerName: string): Container {
-  const dbName = requiredEnv("COSMOS_DATABASE");
+  const dbName = process.env.COSMOS_DATABASE ?? "repository";
   return getCosmosClient().database(dbName).container(containerName);
 }
 
 export function getMatchNightsContainer(): Container {
-  return getContainer(process.env.COSMOS_MATCHNIGHTS_CONTAINER ?? "matchNights");
+  return getContainer(process.env.COSMOS_DECKS_CONTAINER ?? process.env.COSMOS_MATCHNIGHTS_CONTAINER ?? "Decks");
+}
+
+export function getMechsContainer(): Container {
+  return getContainer(process.env.COSMOS_MECHS_CONTAINER ?? "Mechs");
+}
+
+export function getConfigContainer(): Container {
+  return getContainer(process.env.COSMOS_CONFIG_CONTAINER ?? "Config");
 }

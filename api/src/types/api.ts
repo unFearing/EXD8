@@ -1,4 +1,4 @@
-import type { MatchNightCreateInput, MatchNightDoc } from "./contracts.js";
+import type { CreateMechInput, MatchNightCreateInput, MatchNightDoc, MechDoc } from "./contracts.js";
 
 export type ApiErrorCode = "BAD_REQUEST" | "FORBIDDEN" | "NOT_FOUND" | "TEAM_MISMATCH" | "INTERNAL";
 
@@ -19,3 +19,9 @@ export type ApiSuccess<T> = {
 export type CreateMatchNightRequest = MatchNightCreateInput;
 export type CreateMatchNightResponse = ApiSuccess<MatchNightDoc> | ApiError;
 export type GetMatchNightResponse = ApiSuccess<MatchNightDoc> | ApiError;
+
+export type CreateMechRequest = CreateMechInput;
+export type CreateMechResponse = ApiSuccess<MechDoc> | ApiError;
+export type GetMechResponse = ApiSuccess<MechDoc> | ApiError;
+export type ListMechsResponse = ApiSuccess<MechDoc[]> | ApiError;
+export type UpsertMechResponse = ApiSuccess<MechDoc> | ApiError;

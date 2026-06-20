@@ -1,0 +1,48 @@
+name: export-cosmos-csv
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 4 * * *"
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        run: npm ci
+        working-directory: api
+
+      - name: Build API scripts
+        run: npm run build
+        working-directory: api
+
+      - name: Export Cosmos mechs to CSV
+        env:
+          COSMOS_ENDPOINT: ${{ secrets.COSMOS_ENDPOINT }}
+          COSMOS_KEY: ${{ secrets.COSMOS_KEY }}
+          COSMOS_DATABASE: ${{ secrets.COSMOS_DATABASE }}
+          COSMOS_MECHS_CONTAINER: ${{ secrets.COSMOS_MECHS_CONTAINER }}
+          COSMOS_EXPORT_DIR: ../backups/cosmos
+        run: npm run export:mechs-csv
+        working-directory: api
+
+      - name: Commit CSV backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/cosmos
+          if git diff --staged --quiet; then
+            echo "No CSV changes to commit"
+          else
+            git commit -m "chore(backup): daily cosmos csv export"
+            git push
+          fi

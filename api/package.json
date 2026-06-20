@@ -7,6 +7,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "sync:foam-to-cosmos": "node dist/src/scripts/syncFoamToCosmos.js",
+    "sync:cosmos-to-foam": "node dist/src/scripts/syncCosmosToFoam.js",
+    "export:mechs-csv": "node dist/src/scripts/exportMechsToCsv.js",
     "prestart": "npm run build",
     "start": "func start"
   },

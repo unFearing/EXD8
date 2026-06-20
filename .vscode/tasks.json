@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "api: build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/api"
+      },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "sync: foam to cosmos",
+      "type": "shell",
+      "command": "npm run build && npm run sync:foam-to-cosmos",
+      "options": {
+        "cwd": "${workspaceFolder}/api"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "sync: cosmos to foam",
+      "type": "shell",
+      "command": "npm run build && npm run sync:cosmos-to-foam",
+      "options": {
+        "cwd": "${workspaceFolder}/api"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
