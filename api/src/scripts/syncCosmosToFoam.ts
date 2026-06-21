@@ -30,7 +30,7 @@ function toMarkdown(doc: {
 
 async function main(): Promise<void> {
   const root = process.cwd();
-  const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo", "mechs");
+  const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo_docs", "mechs");
   await mkdir(mechsDir, { recursive: true });
 
   const docs = await listMechs();

@@ -103,7 +103,7 @@ function toMechId(frontmatter: FrontmatterRecord, fileName: string): string {
 
 async function main(): Promise<void> {
   const root = process.cwd();
-  const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo", "mechs");
+  const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo_docs", "mechs");
   const entries = await readdir(mechsDir, { withFileTypes: true });
 
   let upserted = 0;
