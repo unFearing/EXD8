@@ -32,6 +32,6 @@ export async function getMechByIdHandler(request: HttpRequest) {
 app.http("mechGetById", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "mechs/{id}",
+  route: "mechs/{id:guid}",
   handler: getMechByIdHandler,
 });

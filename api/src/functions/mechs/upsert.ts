@@ -45,6 +45,6 @@ export async function upsertMechHandler(request: HttpRequest) {
 app.http("mechUpsert", {
   methods: ["PUT"],
   authLevel: "anonymous",
-  route: "mechs/{id}",
+  route: "mechs/{id:guid}",
   handler: upsertMechHandler,
 });
