@@ -21,7 +21,7 @@ export function getCosmosClient(): CosmosClient {
 }
 
 export function getContainer(containerName: string): Container {
-  const dbName = process.env.COSMOS_DATABASE ?? "repository";
+  const dbName = process.env.COSMOS_DATABASE ?? "Repository";
   return getCosmosClient().database(dbName).container(containerName);
 }
 
