@@ -1,4 +1,11 @@
-import type { ApiFailure, ApiSuccess, MatchNightCreateInput, MatchNightDoc } from "../types/contracts";
+import type {
+  ApiFailure,
+  ApiSuccess,
+  MatchNightCreateInput,
+  MatchNightDoc,
+  MechDoc,
+  WeightClassSummary,
+} from "../types/contracts";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
@@ -50,5 +57,31 @@ export async function getMatchNightById(id: string, teamId: string): Promise<Mat
   });
 
   const parsed = await parseResponse<MatchNightDoc>(response);
+  return parsed.data;
+}
+
+export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
+  const response = await fetch(`${API_BASE}/mechs/hierarchy`, {
+    headers: {
+      "x-team-id": "exd8",
+      "x-user-role": "Pilot",
+      "x-user-id": "ui-local-user",
+    },
+  });
+
+  const parsed = await parseResponse<WeightClassSummary[]>(response);
+  return parsed.data;
+}
+
+export async function getMechs(): Promise<MechDoc[]> {
+  const response = await fetch(`${API_BASE}/mechs`, {
+    headers: {
+      "x-team-id": "exd8",
+      "x-user-role": "Pilot",
+      "x-user-id": "ui-local-user",
+    },
+  });
+
+  const parsed = await parseResponse<MechDoc[]>(response);
   return parsed.data;
 }

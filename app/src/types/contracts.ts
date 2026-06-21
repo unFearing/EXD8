@@ -46,5 +46,43 @@ export type MatchNightDoc = MatchNightCreateInput & {
   docType: "matchNight";
 };
 
+export type MechDoc = {
+  id: string;
+  class: WeightClass;
+  tech: "IS" | "Clan";
+  tonnage: number;
+  chassis: string;
+  variant: string;
+  buildUrl: string;
+  skillCode: string;
+  weaponry: string;
+  equipment: string[];
+  description: string;
+  role: string;
+  buildCodes: Record<string, string>;
+  primaryRangeBracket: [number, number];
+  optimalRange: number;
+  maxRange: number;
+  schemaVersion: "1.0.0";
+  docType: "mech";
+};
+
 export type ApiSuccess<T> = { ok: true; data: T };
 export type ApiFailure = { ok: false; error: { code: string; message: string; details?: unknown } };
+
+export type VariantSummary = {
+  variant: string;
+  buildCount: number;
+};
+
+export type ChassisSummary = {
+  chassis: string;
+  buildCount: number;
+  variants: VariantSummary[];
+};
+
+export type WeightClassSummary = {
+  class: WeightClass;
+  buildCount: number;
+  chassis: ChassisSummary[];
+};

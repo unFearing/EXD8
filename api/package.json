@@ -7,9 +7,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "sync:foam-to-cosmos": "node dist/src/scripts/syncFoamToCosmos.js",
-    "sync:cosmos-to-foam": "node dist/src/scripts/syncCosmosToFoam.js",
-    "export:mechs-csv": "node dist/src/scripts/exportMechsToCsv.js",
+    "validate:foam-mechs": "node dist/scripts/validateFoamMechs.js",
+    "sync:foam-to-cosmos": "node dist/scripts/syncFoamToCosmos.js",
+    "sync:cosmos-to-foam": "node dist/scripts/syncCosmosToFoam.js",
+    "sync:repository-index": "node dist/scripts/generateFoamRepositoryIndex.js",
+    "sync:all": "npm run sync:foam-to-cosmos && npm run sync:repository-index && npm run sync:cosmos-to-foam",
+    "watch:sync": "node dist/scripts/watchSync.js",
+    "export:mechs-csv": "node dist/scripts/exportMechsToCsv.js",
+    "prebuild": "npm run sync:all",
     "prestart": "npm run build",
     "start": "func start"
   },

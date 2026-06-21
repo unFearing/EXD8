@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import "./loadLocalEnv.js";
 import { upsertMechInputSchema } from "../types/contracts.js";
-import { upsertMechWithId } from "../db/repositories/mechRepository.js";
 
 type FrontmatterRecord = Record<string, unknown>;
 
@@ -55,7 +54,6 @@ function parseFrontmatter(markdown: string): FrontmatterRecord | null {
     data[key] = rawValue;
   }
 
-  // Parse simple bullet-list arrays for equipment.
   const equipmentBlock = markdown.match(/\nequipment:\n((?:\s*-\s.*\n)+)/);
   if (equipmentBlock) {
     data.equipment = equipmentBlock[1]
@@ -65,7 +63,6 @@ function parseFrontmatter(markdown: string): FrontmatterRecord | null {
       .map((line) => line.slice(2));
   }
 
-  // Parse simple key-value map block for buildCodes.
   const buildCodesBlock = markdown.match(/\nbuildCodes:\n((?:\s+[A-Za-z0-9_-]+:\s.*\n)+)/);
   if (buildCodesBlock) {
     const map: Record<string, string> = {};
@@ -78,9 +75,7 @@ function parseFrontmatter(markdown: string): FrontmatterRecord | null {
       if (sep < 0) {
         continue;
       }
-      const key = trimmed.slice(0, sep).trim();
-      const value = trimmed.slice(sep + 1).trim();
-      map[key] = value;
+      map[trimmed.slice(0, sep).trim()] = trimmed.slice(sep + 1).trim();
     }
     data.buildCodes = map;
   }
@@ -88,7 +83,7 @@ function parseFrontmatter(markdown: string): FrontmatterRecord | null {
   return data;
 }
 
-function toMechId(frontmatter: FrontmatterRecord, fileName: string): string {
+function resolveId(frontmatter: FrontmatterRecord, fileName: string): string {
   const idValue = frontmatter.id;
   if (typeof idValue === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(idValue)) {
     return idValue;
@@ -107,32 +102,36 @@ async function main(): Promise<void> {
   const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo_docs", "mechs");
   const entries = await readdir(mechsDir, { withFileTypes: true });
 
-  let upserted = 0;
+  const failures: string[] = [];
+  let checked = 0;
+
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name.endsWith(".template.md")) {
       continue;
     }
 
-    const content = await readFile(join(mechsDir, entry.name), "utf8");
+    const filePath = join(mechsDir, entry.name);
+    const content = await readFile(filePath, "utf8");
     const frontmatter = parseFrontmatter(content);
     if (!frontmatter) {
       continue;
     }
 
-    const id = toMechId(frontmatter, entry.name);
-    const parsed = upsertMechInputSchema.safeParse({
-      ...frontmatter,
-      id,
-    });
+    checked += 1;
+    const id = resolveId(frontmatter, entry.name);
+    const parsed = upsertMechInputSchema.safeParse({ ...frontmatter, id });
     if (!parsed.success) {
-      throw new Error(`Invalid mech frontmatter in ${entry.name}: ${parsed.error.message}`);
+      failures.push(`${entry.name}: ${parsed.error.message}`);
     }
-
-    await upsertMechWithId(id, parsed.data);
-    upserted += 1;
   }
 
-  console.log(`Synced ${upserted} mech markdown files to Cosmos DB`);
+  if (failures.length > 0) {
+    console.error("Foam mech validation failed:\n" + failures.join("\n"));
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Foam mech validation passed (${checked} document(s) checked)`);
 }
 
 main().catch((error) => {

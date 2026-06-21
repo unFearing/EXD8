@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import "./loadLocalEnv.js";
 import { listMechs } from "../db/repositories/mechRepository.js";
 
 function toMarkdown(doc: {

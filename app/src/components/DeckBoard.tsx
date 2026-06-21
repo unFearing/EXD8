@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   AppBar,
   Autocomplete,
@@ -25,10 +28,19 @@ import {
   Toolbar,
   Typography,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { getMechHierarchy, getMechs } from "../api/client";
 import { CS2026_ROUND1 } from "../data/decks";
-import { MECH_DATABASE, type MechBuild, type WeightClass } from "../data/mechs";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
-import type { Drop as ApiDrop, MatchNightCreateInput, WeightClass as ApiWeightClass } from "../types/contracts";
+import type {
+  ChassisSummary,
+  Drop as ApiDrop,
+  MechDoc,
+  MatchNightCreateInput,
+  WeightClass as ApiWeightClass,
+  WeightClass,
+  WeightClassSummary,
+} from "../types/contracts";
 
 type EditMode = "view" | "edit";
 type TeamSide = "Team 1" | "Team 2" | "Agnostic";
@@ -61,11 +73,9 @@ type DeckTemplate = {
 type VariantRecord = {
   code: string;
   displayName: string;
-  chassisId: string;
-  chassisName: string;
   weightClass: WeightClass;
   tonnage: number;
-  builds: MechBuild[];
+  builds: MechDoc[];
 };
 
 const MAP_OPTIONS = ["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "TBD"];
@@ -87,15 +97,13 @@ const PILOT_OPTIONS = [
 function getTonnage(weightClass: WeightClass): number {
   switch (weightClass) {
     case "Light":
-      return 35;
+      return 30;
     case "Medium":
-      return 55;
+      return 50;
     case "Heavy":
-      return 75;
+      return 70;
     case "Assault":
-      return 100;
-    case "Commander":
-      return 65;
+      return 90;
     default:
       return 0;
   }
@@ -107,20 +115,6 @@ function toApiWeightClass(weightClass: WeightClass | ""): ApiWeightClass {
   }
   return "Medium";
 }
-
-const ALL_VARIANTS: VariantRecord[] = MECH_DATABASE.flatMap((chassis) =>
-  chassis.variants.map((variant) => ({
-    code: variant.code,
-    displayName: variant.displayName,
-    chassisId: chassis.id,
-    chassisName: chassis.displayName,
-    weightClass: variant.weightClass,
-    tonnage: getTonnage(variant.weightClass),
-    builds: variant.builds,
-  })),
-).sort((a, b) => a.code.localeCompare(b.code));
-
-const VARIANT_LOOKUP = new Map(ALL_VARIANTS.map((variant) => [variant.code, variant]));
 
 function createEmptyRow(slot: number): DeckRow {
   return {
@@ -162,7 +156,86 @@ export function DeckBoard() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [lastSavedId, setLastSavedId] = useState<string>("");
   const [loadId, setLoadId] = useState<string>("");
+  const [mechs, setMechs] = useState<MechDoc[]>([]);
+  const [mechLoading, setMechLoading] = useState(false);
+  const [mechError, setMechError] = useState<string>("");
+  const [repoHierarchy, setRepoHierarchy] = useState<WeightClassSummary[]>([]);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [repoError, setRepoError] = useState<string>("");
   const { isSaving, isLoading, error, saveMatchNight, loadMatchNight } = useMatchNightApi();
+
+  useEffect(() => {
+    let cancelled = false;
+    setMechLoading(true);
+    setMechError("");
+
+    getMechs()
+      .then((data) => {
+        if (!cancelled) setMechs(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setMechError(err instanceof Error ? err.message : "Failed to load mechs");
+      })
+      .finally(() => {
+        if (!cancelled) setMechLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const allVariants: VariantRecord[] = useMemo(() => {
+    const variantBuckets = new Map<string, MechDoc[]>();
+    for (const mech of mechs) {
+      const key = mech.variant;
+      const existing = variantBuckets.get(key) ?? [];
+      existing.push(mech);
+      variantBuckets.set(key, existing);
+    }
+
+    return Array.from(variantBuckets.entries())
+      .map(([code, builds]) => ({
+        code,
+        displayName: builds[0]?.variant ?? code,
+        weightClass: builds[0]?.class ?? "Medium",
+        tonnage: builds[0]?.tonnage ?? getTonnage(builds[0]?.class ?? "Medium"),
+        builds,
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [mechs]);
+
+  const variantLookup = useMemo(() => new Map(allVariants.map((variant) => [variant.code, variant])), [allVariants]);
+
+  useEffect(() => {
+    if (appView !== 1) return;
+
+    let cancelled = false;
+    setRepoLoading(true);
+    setRepoError("");
+
+    getMechHierarchy()
+      .then((data) => {
+        if (!cancelled) setRepoHierarchy(data);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setRepoError(err instanceof Error ? err.message : "Failed to load repository hierarchy");
+      })
+      .finally(() => {
+        if (!cancelled) setRepoLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appView]);
+
+  const classLabel = (summary: WeightClassSummary): string => {
+    const chassis = summary.chassis
+      .map((entry: ChassisSummary) => `${entry.chassis} (${entry.buildCount})`)
+      .join(", ");
+    return `${summary.class}: ${chassis || "No entries"}`;
+  };
 
   const templatesForSelection = useMemo(
     () => templates.filter((template) => template.map === selectedMap && template.side === selectedSide),
@@ -198,7 +271,7 @@ export function DeckBoard() {
   };
 
   const applyVariantDefaults = (rowIndex: number, mechCode: string) => {
-    const variant = VARIANT_LOOKUP.get(mechCode);
+    const variant = variantLookup.get(mechCode);
     updateRow(rowIndex, (row) => {
       if (!variant) {
         return {
@@ -217,8 +290,8 @@ export function DeckBoard() {
         ...row,
         mech: mechCode,
         role: firstBuild?.role ?? row.role,
-        weaponry: firstBuild?.description ?? row.weaponry,
-        buildCode: firstBuild?.name ?? row.buildCode,
+        weaponry: firstBuild?.weaponry ?? row.weaponry,
+        buildCode: firstBuild?.buildUrl ?? row.buildCode,
         skillTree: firstBuild?.skillCode ?? row.skillTree,
         weightClass: variant.weightClass,
         tonnage: variant.tonnage,
@@ -228,15 +301,15 @@ export function DeckBoard() {
 
   const applyBuildDefaults = (rowIndex: number, buildCode: string) => {
     const row = activeTemplate?.rows[rowIndex];
-    const variant = row ? VARIANT_LOOKUP.get(row.mech) : undefined;
-    const build = variant?.builds.find((item) => item.name === buildCode);
+    const variant = row ? variantLookup.get(row.mech) : undefined;
+    const build = variant?.builds.find((item) => item.buildUrl === buildCode);
     if (!build) return;
 
     updateRow(rowIndex, (entry) => ({
       ...entry,
-      buildCode: build.name,
+      buildCode: build.buildUrl,
       role: build.role,
-      weaponry: build.description ?? entry.weaponry,
+      weaponry: build.weaponry ?? entry.weaponry,
       skillTree: build.skillCode ?? entry.skillTree,
     }));
   };
@@ -607,10 +680,10 @@ export function DeckBoard() {
               </TableHead>
               <TableBody>
                 {activeTemplate?.rows.map((row, rowIndex) => {
-                  const variant = VARIANT_LOOKUP.get(row.mech);
+                  const variant = variantLookup.get(row.mech);
                   const roleOptions = variant?.builds.map((build) => build.role) ?? [];
-                  const weaponryOptions = variant?.builds.map((build) => build.description).filter(Boolean) as string[];
-                  const buildCodeOptions = variant?.builds.map((build) => build.name) ?? [];
+                  const weaponryOptions = variant?.builds.map((build) => build.weaponry).filter(Boolean) as string[];
+                  const buildCodeOptions = variant?.builds.map((build) => build.buildUrl) ?? [];
                   const skillTreeOptions = variant?.builds.map((build) => build.skillCode).filter(Boolean) as string[];
 
                   return (
@@ -684,7 +757,7 @@ export function DeckBoard() {
                             <MenuItem value="">
                               <em>None</em>
                             </MenuItem>
-                            {ALL_VARIANTS.map((entry) => (
+                            {allVariants.map((entry) => (
                               <MenuItem key={entry.code} value={entry.code}>
                                 {entry.code} | {entry.displayName}
                               </MenuItem>
@@ -766,42 +839,54 @@ export function DeckBoard() {
             <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(130, 154, 217, 0.25)" }}>
               <Typography sx={{ color: "#eff4ff", fontWeight: 700 }}>Tracked Mech Repository</Typography>
               <Typography variant="body2" sx={{ color: "#adbee9" }}>
-                All mechs and variants currently available to deck templates.
+                Foam/Cosmos source of truth only. Legacy static mech list is excluded.
               </Typography>
             </Box>
 
-            <TableContainer sx={{ overflowX: "auto" }}>
-              <Table
-                size="medium"
-                sx={{
-                  minWidth: 980,
-                  "& .MuiTableCell-root": { borderBottom: "1px solid rgba(130, 154, 217, 0.14)", py: 1 },
-                }}
-              >
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ color: "#dce4ff", fontWeight: 700 }}>Chassis</TableCell>
-                    <TableCell sx={{ color: "#dce4ff", fontWeight: 700 }}>Tonnage</TableCell>
-                    <TableCell sx={{ color: "#dce4ff", fontWeight: 700 }}>Variants</TableCell>
-                    <TableCell sx={{ color: "#dce4ff", fontWeight: 700 }}>Builds</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {MECH_DATABASE.map((chassis) => (
-                    <TableRow key={chassis.id}>
-                      <TableCell sx={{ color: "#d3ddfc" }}>{chassis.id} | {chassis.displayName}</TableCell>
-                      <TableCell sx={{ color: "#d3ddfc" }}>{getTonnage(chassis.variants[0]?.weightClass ?? "Medium")} t</TableCell>
-                      <TableCell sx={{ color: "#d3ddfc" }}>
-                        {chassis.variants.map((variant) => variant.code).join(", ")}
-                      </TableCell>
-                      <TableCell sx={{ color: "#d3ddfc" }}>
-                        {chassis.variants.flatMap((variant) => variant.builds.map((build) => build.name)).join(", ")}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Stack spacing={1.25} sx={{ p: 1.5 }}>
+              {mechError && <Alert severity="error">{mechError}</Alert>}
+              {mechLoading && <Alert severity="info">Loading mech documents...</Alert>}
+              {repoError && <Alert severity="error">{repoError}</Alert>}
+              {repoLoading && <Alert severity="info">Loading repository hierarchy...</Alert>}
+              {!repoLoading && !repoHierarchy.length && !repoError && (
+                <Alert severity="info">No mech documents found in Cosmos yet.</Alert>
+              )}
+
+              {repoHierarchy.map((summary) => (
+                <Accordion key={summary.class} disableGutters elevation={0} sx={{ background: "rgba(13, 21, 42, 0.72)" }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#dce4ff" }} />}>
+                    <Typography sx={{ color: "#dce4ff", fontWeight: 700 }}>{classLabel(summary)}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1}>
+                      {summary.chassis.map((entry) => (
+                        <Accordion
+                          key={`${summary.class}-${entry.chassis}`}
+                          disableGutters
+                          elevation={0}
+                          sx={{ background: "rgba(15, 25, 50, 0.72)" }}
+                        >
+                          <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: "#cbd6f6" }} />}>
+                            <Typography sx={{ color: "#cbd6f6", fontWeight: 600 }}>
+                              {entry.chassis} ({entry.buildCount})
+                            </Typography>
+                          </AccordionSummary>
+                          <AccordionDetails>
+                            <Stack spacing={0.5}>
+                              {entry.variants.map((variant) => (
+                                <Typography key={`${entry.chassis}-${variant.variant}`} sx={{ color: "#adbee9" }}>
+                                  {variant.variant}: {variant.buildCount} build{variant.buildCount === 1 ? "" : "s"}
+                                </Typography>
+                              ))}
+                            </Stack>
+                          </AccordionDetails>
+                        </Accordion>
+                      ))}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Stack>
           </Paper>
         )}
       </Container>

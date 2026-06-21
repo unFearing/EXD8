@@ -12,6 +12,12 @@ node_modules/
 dist/
 dist-ssr/
 
+# Generated markdown (synced from Cosmos DB)
+mwo_docs/mechs/**/*.md
+!mwo_docs/mechs/*.template.md
+mwo_docs/repository/
+mwo_docs/repository-index.md
+
 # Local env files
 *.local
 .env
