@@ -1,4 +1,4 @@
-import type { MatchNightCreateInput, MatchNightDoc } from "../../types/contracts.js";
+import type { DropDeckDoc, MatchNightCreateInput, MatchNightDoc } from "../../types/contracts.js";
 import { getMatchNightsContainer } from "../cosmos.js";
 
 export async function createMatchNight(input: MatchNightCreateInput, updatedBy: string): Promise<MatchNightDoc> {
@@ -34,4 +34,16 @@ export async function getMatchNightById(id: string, teamId: string): Promise<Mat
     .fetchAll();
 
   return resources[0] ?? null;
+}
+
+export async function listDropDecks(): Promise<DropDeckDoc[]> {
+  const container = getMatchNightsContainer();
+  const { resources } = await container.items
+    .query<DropDeckDoc>({
+      query: "SELECT * FROM c WHERE c.docType = @docType ORDER BY c.updatedAt DESC",
+      parameters: [{ name: "@docType", value: "dropDeck" }],
+    })
+    .fetchAll();
+
+  return resources;
 }

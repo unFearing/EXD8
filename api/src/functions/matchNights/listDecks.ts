@@ -1,19 +1,19 @@
 import { app, type HttpRequest } from "@azure/functions";
-import { listMechs } from "../../db/repositories/mechRepository.js";
+import { listDropDecks } from "../../db/repositories/matchNightRepository.js";
 import { fail, ok } from "../../middleware/http.js";
 
-export async function listMechsHandler(_request?: HttpRequest) {
+export async function listDropDecksHandler(_request?: HttpRequest) {
   try {
-    const docs = await listMechs();
+    const docs = await listDropDecks();
     return ok(docs);
   } catch (error: unknown) {
     return fail(500, "INTERNAL", "Unexpected server error");
   }
 }
 
-app.http("mechList", {
+app.http("dropDeckList", {
   methods: ["GET"],
   authLevel: "anonymous",
-  route: "mechs",
-  handler: listMechsHandler,
+  route: "decks",
+  handler: listDropDecksHandler,
 });

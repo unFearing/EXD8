@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "COSMOS_ENDPOINT": "https://exd8.documents.azure.com:443/",
+    "COSMOS_KEY": "replace-with-cosmos-primary-key",
+    "COSMOS_DATABASE": "Repository",
+    "COSMOS_MECHS_CONTAINER": "Mechs",
+    "COSMOS_DECKS_CONTAINER": "Decks",
+    "COSMOS_CONFIG_CONTAINER": "Config"
+  }
+}

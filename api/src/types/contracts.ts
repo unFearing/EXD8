@@ -3,6 +3,12 @@ import { z } from "zod";
 export const weightClassSchema = z.enum(["Light", "Medium", "Heavy", "Assault"]);
 export type WeightClass = z.infer<typeof weightClassSchema>;
 
+export const deckMapSchema = z.enum(["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"]);
+export type DeckMap = z.infer<typeof deckMapSchema>;
+
+export const deckSideSchema = z.enum(["1", "2", "either"]);
+export type DeckSide = z.infer<typeof deckSideSchema>;
+
 export const mechTechSchema = z.enum(["IS", "Clan"]);
 export type MechTech = z.infer<typeof mechTechSchema>;
 
@@ -73,6 +79,35 @@ export const dropSchema = z.object({
   slots: z.array(slotSchema).min(1),
   mapLink: z.string().url().or(z.literal("")),
   locked: z.boolean(),
+});
+
+export const deckSlotSchema = z.object({
+  slot: z.number().int().positive(),
+  primary: z.array(z.string()).default([]),
+  alternates: z.array(z.string()).default([]),
+  lance: z.enum(["", "A", "B", "C"]).default(""),
+  mech: z.string().default(""),
+  role: z.string().default(""),
+  loadout: z.string().default(""),
+  buildCode: z.string().default(""),
+  skillTree: z.string().default(""),
+  weightClass: weightClassSchema.or(z.literal("")),
+  tonnage: z.number().int().positive().or(z.literal("")),
+});
+
+export const dropDeckDocSchema = z.object({
+  id: z.string().uuid(),
+  teamId: z.string().min(1),
+  map: deckMapSchema,
+  side: deckSideSchema,
+  name: z.string().min(1),
+  strategy: z.string().default(""),
+  deck: z.array(deckSlotSchema).min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  updatedBy: z.string().min(1),
+  schemaVersion: z.literal("1.0.0"),
+  docType: z.literal("dropDeck"),
 });
 
 export const matchNightCreateInputSchema = z.object({
@@ -162,6 +197,8 @@ export const seasonDocSchema = z.object({
 export type KeyFactors = z.infer<typeof keyFactorsSchema>;
 export type Slot = z.infer<typeof slotSchema>;
 export type Drop = z.infer<typeof dropSchema>;
+export type DeckSlot = z.infer<typeof deckSlotSchema>;
+export type DropDeckDoc = z.infer<typeof dropDeckDocSchema>;
 export type MatchNightCreateInput = z.infer<typeof matchNightCreateInputSchema>;
 export type MatchNightDoc = z.infer<typeof matchNightDocSchema>;
 export type BuildDoc = z.infer<typeof buildDocSchema>;

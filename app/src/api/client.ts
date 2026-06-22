@@ -1,6 +1,7 @@
 import type {
   ApiFailure,
   ApiSuccess,
+  DropDeckDoc,
   MatchNightCreateInput,
   MatchNightDoc,
   MechDoc,
@@ -61,27 +62,22 @@ export async function getMatchNightById(id: string, teamId: string): Promise<Mat
 }
 
 export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
-  const response = await fetch(`${API_BASE}/mechs/hierarchy`, {
-    headers: {
-      "x-team-id": "exd8",
-      "x-user-role": "Pilot",
-      "x-user-id": "ui-local-user",
-    },
-  });
+  const response = await fetch(`${API_BASE}/mechs/hierarchy`);
 
   const parsed = await parseResponse<WeightClassSummary[]>(response);
   return parsed.data;
 }
 
 export async function getMechs(): Promise<MechDoc[]> {
-  const response = await fetch(`${API_BASE}/mechs`, {
-    headers: {
-      "x-team-id": "exd8",
-      "x-user-role": "Pilot",
-      "x-user-id": "ui-local-user",
-    },
-  });
+  const response = await fetch(`${API_BASE}/mechs`);
 
   const parsed = await parseResponse<MechDoc[]>(response);
+  return parsed.data;
+}
+
+export async function getDropDecks(): Promise<DropDeckDoc[]> {
+  const response = await fetch(`${API_BASE}/decks`);
+
+  const parsed = await parseResponse<DropDeckDoc[]>(response);
   return parsed.data;
 }

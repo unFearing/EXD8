@@ -1,5 +1,39 @@
 export type WeightClass = "Light" | "Medium" | "Heavy" | "Assault";
 
+export type DeckMap = "Alpine Peaks" | "Bear Claw II" | "Crimson Strait" | "Frozen City" | "River City";
+export type DeckSide = "1" | "2" | "either";
+export type LegacyDeckSide = DeckSide | "Team 1" | "Team 2" | "Agnostic";
+export type Lance = "A" | "B" | "C" | "";
+
+export type DeckRowDoc = {
+  slot: number;
+  primary: string[];
+  alternates: string[];
+  lance: Lance;
+  mech: string;
+  role: string;
+  loadout: string;
+  buildCode: string;
+  skillTree: string;
+  weightClass: WeightClass | "";
+  tonnage: number | "";
+};
+
+export type DropDeckDoc = {
+  id: string;
+  teamId: string;
+  map: DeckMap;
+  side: LegacyDeckSide;
+  name: string;
+  strategy?: string;
+  deck: DeckRowDoc[];
+  createdAt?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  schemaVersion?: "1.0.0";
+  docType?: "dropDeck";
+};
+
 export type KeyFactors = {
   ecm: boolean;
   bap: boolean;

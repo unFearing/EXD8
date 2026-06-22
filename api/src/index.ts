@@ -6,3 +6,4 @@ import "./functions/mechs/getById.js";
 import "./functions/mechs/upsert.js";
 import "./functions/matchNights/create.js";
 import "./functions/matchNights/getById.js";
+import "./functions/matchNights/listDecks.js";
