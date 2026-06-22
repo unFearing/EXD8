@@ -48,7 +48,20 @@ function mergeEditable(
       continue;
     }
 
-    merged[key] = incoming[key];
+    switch (key) {
+      case "map":
+        merged.map = incoming.map;
+        break;
+      case "side":
+        merged.side = incoming.side;
+        break;
+      case "name":
+        merged.name = incoming.name;
+        break;
+      case "description":
+        merged.description = incoming.description;
+        break;
+    }
   }
 
   const slotIndex = new Map<number, { base?: DropDeckEditable["deck"][number]; current?: DropDeckEditable["deck"][number]; incoming?: DropDeckEditable["deck"][number] }>();

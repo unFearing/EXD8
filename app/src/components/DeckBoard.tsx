@@ -34,6 +34,7 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { getDropDecks, getMapConfigs, getMechHierarchy, getMechs, saveDropDeck } from "../api/client";
 import { CS2026_ROUND1 } from "../data/decks";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
+import { MechSelector } from "./MechSelector";
 import type {
   ChassisSummary,
   DeckMap,
@@ -74,11 +75,6 @@ type DeckTemplate = {
   revision?: number;
   updatedAt?: string;
   rows: DeckRow[];
-};
-
-type MechOption = {
-  id: string;
-  label: string;
 };
 
 type DeckBoardProps = {
@@ -316,15 +312,6 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
       cancelled = true;
     };
   }, [appView, mapOptions]);
-
-  const mechOptions: MechOption[] = useMemo(() => {
-    return [...mechs]
-      .map((mech) => ({
-        id: mech.id,
-        label: `${mech.chassis} ${mech.variant}`,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [mechs]);
 
   const mechLookup = useMemo(() => new Map(mechs.map((mech) => [mech.id, mech])), [mechs]);
 
@@ -859,23 +846,18 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                         </FormControl>
                       </TableCell>
                       <TableCell>
-                        <FormControl size="small" fullWidth variant="standard">
-                          <Select
-                            variant="standard"
-                            value={row.mech}
-                            disabled={editMode !== "edit"}
-                            onChange={(event) => applyMechDefaults(rowIndex, event.target.value)}
-                          >
-                            <MenuItem value="">
-                              <em>None</em>
-                            </MenuItem>
-                            {mechOptions.map((entry) => (
-                              <MenuItem key={entry.id} value={entry.id}>
-                                {entry.label}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
+                        {editMode === "edit" ? (
+                          <MechSelector
+                            selectedMechId={row.mech || null}
+                            allMechs={mechs}
+                            onChange={(mechId) => applyMechDefaults(rowIndex, mechId)}
+                            disabled={false}
+                          />
+                        ) : (
+                          <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
+                            {mech ? `${mech.chassis} ${mech.variant}` : "-"}
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
