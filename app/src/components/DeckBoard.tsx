@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
   Alert,
   AppBar,
-  Autocomplete,
   Box,
   Button,
   ButtonGroup,
@@ -32,16 +31,18 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
-import { getDropDecks, getMechHierarchy, getMechs } from "../api/client";
+import { getDropDecks, getMapConfigs, getMechHierarchy, getMechs, saveDropDeck } from "../api/client";
 import { CS2026_ROUND1 } from "../data/decks";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import type {
   ChassisSummary,
   DeckMap,
+  DropDeckEditable,
   DeckSide,
   DropDeckDoc,
+  DropDeckUpsertInput,
+  MapConfigDoc,
   MechDoc,
-  WeightClass,
   WeightClassSummary,
 } from "../types/contracts";
 
@@ -56,12 +57,6 @@ type DeckRow = {
   alternates: string[];
   lance: Lance;
   mech: string;
-  role: string;
-  loadout: string;
-  buildCode: string;
-  skillTree: string;
-  weightClass: WeightClass | "";
-  tonnage: number | "";
 };
 
 type DeckTemplate = {
@@ -69,23 +64,15 @@ type DeckTemplate = {
   name: string;
   map: DeckMap;
   side: TeamSide;
-  strategy: string;
+  description: string;
+  revision?: number;
   updatedAt?: string;
   rows: DeckRow[];
 };
 
 type MechOption = {
-  code: string;
+  id: string;
   label: string;
-  chassis: string;
-  variant: string;
-  weightClass: WeightClass;
-  tonnage: number;
-  builds: MechDoc[];
-};
-
-type LegacyDeckRow = Partial<DeckRow> & {
-  weaponry?: string;
 };
 
 type DeckBoardProps = {
@@ -93,10 +80,12 @@ type DeckBoardProps = {
   onToggleMode: () => void;
 };
 
-const MAP_OPTIONS: DeckMap[] = ["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"];
+const MAP_FALLBACK_OPTIONS: DeckMap[] = ["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"];
 const SIDE_OPTIONS: TeamSide[] = ["1", "2", "either"];
 const ROW_COUNT = 8;
 const LANCE_OPTIONS: Lance[] = ["", "A", "B", "C"];
+const DECK_AUTOSAVE_DELAY_MS = 1000;
+const DECK_POLL_INTERVAL_MS = 5000;
 
 const PILOT_OPTIONS = [
   "Extra_Better",
@@ -109,21 +98,6 @@ const PILOT_OPTIONS = [
   "NeirSolon",
 ];
 
-function getTonnage(weightClass: WeightClass): number {
-  switch (weightClass) {
-    case "Light":
-      return 30;
-    case "Medium":
-      return 50;
-    case "Heavy":
-      return 70;
-    case "Assault":
-      return 90;
-    default:
-      return 0;
-  }
-}
-
 function createEmptyRow(slot: number): DeckRow {
   return {
     slot,
@@ -131,12 +105,6 @@ function createEmptyRow(slot: number): DeckRow {
     alternates: [],
     lance: "",
     mech: "",
-    role: "",
-    loadout: "",
-    buildCode: "",
-    skillTree: "",
-    weightClass: "",
-    tonnage: "",
   };
 }
 
@@ -146,28 +114,22 @@ function createTemplate(map: DeckMap, side: TeamSide, version = 1): DeckTemplate
     name: `${map} ${side} v${version}`,
     map,
     side,
-    strategy: "",
+    description: "",
     rows: Array.from({ length: ROW_COUNT }, (_, idx) => createEmptyRow(idx + 1)),
   };
 }
 
-function defaultTemplates(): DeckTemplate[] {
-  return MAP_OPTIONS.flatMap((map) => SIDE_OPTIONS.map((side) => createTemplate(map, side, 1)));
+function defaultTemplates(mapOptions: DeckMap[]): DeckTemplate[] {
+  return mapOptions.flatMap((map) => SIDE_OPTIONS.map((side) => createTemplate(map, side, 1)));
 }
 
-function normalizeRow(slot: number, row?: LegacyDeckRow): DeckRow {
+function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
   return {
     slot,
     primary: row?.primary ?? [],
     alternates: row?.alternates ?? [],
     lance: row?.lance ?? "",
     mech: row?.mech ?? "",
-    role: row?.role ?? "",
-    loadout: row?.loadout ?? row?.weaponry ?? "",
-    buildCode: row?.buildCode ?? "",
-    skillTree: row?.skillTree ?? "",
-    weightClass: row?.weightClass ?? "",
-    tonnage: row?.tonnage ?? "",
   };
 }
 
@@ -182,7 +144,8 @@ function toTemplate(doc: DropDeckDoc): DeckTemplate {
     name: doc.name,
     map: doc.map,
     side: doc.side === "Team 1" ? "1" : doc.side === "Team 2" ? "2" : doc.side === "Agnostic" ? "either" : doc.side,
-    strategy: doc.strategy ?? "",
+    description: doc.description ?? doc.strategy ?? "",
+    revision: doc.revision,
     updatedAt: doc.updatedAt,
     rows,
   };
@@ -199,16 +162,58 @@ function formatUpdatedAt(value?: string): string {
   return date.toLocaleString();
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function templateSignature(template: DeckTemplate): string {
+  return JSON.stringify({
+    map: template.map,
+    side: template.side,
+    name: template.name,
+    description: template.description,
+    rows: template.rows,
+  });
+}
+
+function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
+  return {
+    map: template.map,
+    side: template.side,
+    description: template.description,
+    name: template.name,
+    deck: template.rows.map((row) => ({
+      slot: row.slot,
+      primary: row.primary,
+      alternates: row.alternates,
+      lance: row.lance,
+      mech: row.mech,
+    })),
+  };
+}
+
+function toDropDeckUpsertInput(template: DeckTemplate, baseTemplate?: DeckTemplate): DropDeckUpsertInput {
+  return {
+    id: isUuid(template.id) ? template.id : undefined,
+    baseRevision: baseTemplate?.revision,
+    baseDeck: baseTemplate ? toDropDeckEditable(baseTemplate) : undefined,
+    ...toDropDeckEditable(template),
+  };
+}
+
 export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   const isLight = mode === "light";
+  const syncedSignaturesRef = useRef<Map<string, string>>(new Map());
+  const syncedTemplatesRef = useRef<Map<string, DeckTemplate>>(new Map());
 
   const [appView, setAppView] = useState<AppView>(0);
   const [editMode, setEditMode] = useState<EditMode>("edit");
-  const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_OPTIONS[0]);
-  const [selectedSide, setSelectedSide] = useState<TeamSide>("1");
-  const [templates, setTemplates] = useState<DeckTemplate[]>(defaultTemplates);
+  const [mapConfigs, setMapConfigs] = useState<MapConfigDoc[]>([]);
+  const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_FALLBACK_OPTIONS[0]);
+  const [templates, setTemplates] = useState<DeckTemplate[]>(defaultTemplates(MAP_FALLBACK_OPTIONS));
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [deckLoading, setDeckLoading] = useState(false);
+  const [deckSaving, setDeckSaving] = useState(false);
   const [deckError, setDeckError] = useState("");
   const [mechs, setMechs] = useState<MechDoc[]>([]);
   const [mechLoading, setMechLoading] = useState(false);
@@ -217,6 +222,31 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   const [repoLoading, setRepoLoading] = useState(false);
   const [repoError, setRepoError] = useState<string>("");
   const { error } = useMatchNightApi();
+
+  const mapOptions = useMemo<DeckMap[]>(() => {
+    if (!mapConfigs.length) return MAP_FALLBACK_OPTIONS;
+    return mapConfigs.map((entry) => entry.name);
+  }, [mapConfigs]);
+
+  const selectedMapConfig = useMemo(() => mapConfigs.find((entry) => entry.name === selectedMap), [mapConfigs, selectedMap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMapConfigs()
+      .then((configs) => {
+        if (cancelled) return;
+        if (!configs.length) return;
+        setMapConfigs(configs);
+        setSelectedMap((previous) => (configs.some((entry) => entry.name === previous) ? previous : configs[0].name));
+      })
+      .catch(() => {
+        // Keep fallback map tabs when config docs are unavailable.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -251,15 +281,18 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
         if (cancelled) return;
 
         if (!docs.length) {
-          setTemplates(defaultTemplates());
+          syncedSignaturesRef.current = new Map();
+          syncedTemplatesRef.current = new Map();
+          setTemplates(defaultTemplates(mapOptions));
           setSelectedTemplateId("");
           return;
         }
 
         const mapped = docs.map((doc) => toTemplate(doc));
+        syncedSignaturesRef.current = new Map(mapped.map((template) => [template.id, templateSignature(template)]));
+        syncedTemplatesRef.current = new Map(mapped.map((template) => [template.id, template]));
         setTemplates(mapped);
         setSelectedMap(mapped[0].map);
-        setSelectedSide(mapped[0].side);
         setSelectedTemplateId(mapped[0].id);
       })
       .catch((err: unknown) => {
@@ -267,7 +300,7 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
         const message = err instanceof Error ? err.message : "Failed to load drop decks";
         const looksLikeNetworkError = /NetworkError|Failed to fetch|Load failed/i.test(message);
         setDeckError(looksLikeNetworkError ? "" : message);
-        setTemplates(defaultTemplates());
+        setTemplates(defaultTemplates(mapOptions));
       })
       .finally(() => {
         if (!cancelled) setDeckLoading(false);
@@ -276,31 +309,18 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
     return () => {
       cancelled = true;
     };
-  }, [appView]);
+  }, [appView, mapOptions]);
 
   const mechOptions: MechOption[] = useMemo(() => {
-    const variantBuckets = new Map<string, MechDoc[]>();
-    for (const mech of mechs) {
-      const key = `${mech.chassis}::${mech.variant}`;
-      const existing = variantBuckets.get(key) ?? [];
-      existing.push(mech);
-      variantBuckets.set(key, existing);
-    }
-
-    return Array.from(variantBuckets.entries())
-      .map(([code, builds]) => ({
-        code,
-        label: `${builds[0]?.chassis ?? "Unknown"} ${builds[0]?.variant ?? code}`,
-        chassis: builds[0]?.chassis ?? "",
-        variant: builds[0]?.variant ?? "",
-        weightClass: builds[0]?.class ?? "Medium",
-        tonnage: builds[0]?.tonnage ?? getTonnage(builds[0]?.class ?? "Medium"),
-        builds,
+    return [...mechs]
+      .map((mech) => ({
+        id: mech.id,
+        label: `${mech.chassis} ${mech.variant}`,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [mechs]);
 
-  const mechLookup = useMemo(() => new Map(mechOptions.map((option) => [option.code, option])), [mechOptions]);
+  const mechLookup = useMemo(() => new Map(mechs.map((mech) => [mech.id, mech])), [mechs]);
 
   useEffect(() => {
     if (appView !== 1) return;
@@ -333,8 +353,8 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   };
 
   const templatesForSelection = useMemo(
-    () => templates.filter((template) => template.map === selectedMap && template.side === selectedSide),
-    [templates, selectedMap, selectedSide],
+    () => templates.filter((template) => template.map === selectedMap),
+    [templates, selectedMap],
   );
 
   useEffect(() => {
@@ -347,11 +367,15 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
     templatesForSelection.find((template) => template.id === selectedTemplateId) ?? templatesForSelection[0];
 
   const activeTemplateId = activeTemplate?.id ?? "";
-
-  const totalTonnage = useMemo(
-    () => activeTemplate?.rows.reduce((sum, row) => sum + (typeof row.tonnage === "number" ? row.tonnage : 0), 0) ?? 0,
+  const activeTemplateSignature = useMemo(
+    () => (activeTemplate ? templateSignature(activeTemplate) : ""),
     [activeTemplate],
   );
+
+  const totalTonnage = useMemo(() => {
+    if (!activeTemplate) return 0;
+    return activeTemplate.rows.reduce((sum, row) => sum + (mechLookup.get(row.mech)?.tonnage ?? 0), 0);
+  }, [activeTemplate, mechLookup]);
 
   const updateActiveTemplate = (updater: (template: DeckTemplate) => DeckTemplate) => {
     if (!activeTemplateId) return;
@@ -366,49 +390,12 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   };
 
   const applyMechDefaults = (rowIndex: number, mechCode: string) => {
-    const mechOption = mechLookup.get(mechCode);
     updateRow(rowIndex, (row) => {
-      if (!mechOption) {
-        return {
-          ...row,
-          mech: mechCode,
-          loadout: "",
-          role: "",
-          buildCode: "",
-          skillTree: "",
-          weightClass: "",
-          tonnage: "",
-        };
-      }
-      const firstBuild = mechOption.builds[0];
       return {
         ...row,
         mech: mechCode,
-        loadout: firstBuild?.weaponry ?? "",
-        role: firstBuild?.role ?? row.role,
-        buildCode: firstBuild?.buildUrl ?? row.buildCode,
-        skillTree: firstBuild?.skillCode ?? row.skillTree,
-        weightClass: mechOption.weightClass,
-        tonnage: mechOption.tonnage,
       };
     });
-  };
-
-  const applyLoadoutDefaults = (rowIndex: number, loadout: string) => {
-    const row = activeTemplate?.rows[rowIndex];
-    const mechOption = row ? mechLookup.get(row.mech) : undefined;
-    const build = mechOption?.builds.find((item) => item.weaponry === loadout);
-    if (!build) return;
-
-    updateRow(rowIndex, (entry) => ({
-      ...entry,
-      loadout: build.weaponry ?? loadout,
-      buildCode: build.buildUrl,
-      role: build.role,
-      skillTree: build.skillCode ?? entry.skillTree,
-      weightClass: build.class,
-      tonnage: build.tonnage,
-    }));
   };
 
   const getVisibleAlternates = (row: DeckRow): string[] =>
@@ -427,12 +414,11 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
 
   const createTemplateCopy = () => {
     if (!activeTemplate) return;
-    const version =
-      templates.filter((template) => template.map === selectedMap && template.side === selectedSide).length + 1;
+    const version = templates.filter((template) => template.map === selectedMap).length + 1;
     const copy: DeckTemplate = {
       ...activeTemplate,
       id: `${activeTemplate.id}-copy-${Date.now()}`,
-      name: `${selectedMap} ${selectedSide} v${version}`,
+      name: `${selectedMap} ${sideLabel(activeTemplate.side)} v${version}`,
       rows: activeTemplate.rows.map((row) => ({ ...row, primary: [...row.primary], alternates: [...row.alternates] })),
     };
     setTemplates((previous) => [...previous, copy]);
@@ -440,24 +426,106 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   };
 
   const createFreshTemplate = () => {
-    const version =
-      templates.filter((template) => template.map === selectedMap && template.side === selectedSide).length + 1;
-    const fresh = createTemplate(selectedMap, selectedSide, version);
+    const version = templates.filter((template) => template.map === selectedMap).length + 1;
+    const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", version);
     setTemplates((previous) => [...previous, fresh]);
     setSelectedTemplateId(fresh.id);
   };
 
   const onMapChange = (map: DeckMap) => {
     setSelectedMap(map);
-    const candidate = templates.find((template) => template.map === map && template.side === selectedSide);
+    const candidate = templates.find((template) => template.map === map);
     if (candidate) setSelectedTemplateId(candidate.id);
   };
 
-  const onSideChange = (side: TeamSide) => {
-    setSelectedSide(side);
-    const candidate = templates.find((template) => template.map === selectedMap && template.side === side);
-    if (candidate) setSelectedTemplateId(candidate.id);
-  };
+  useEffect(() => {
+    if (appView !== 0 || !activeTemplate) return;
+
+    const syncedSignature = syncedSignaturesRef.current.get(activeTemplate.id);
+    if (syncedSignature === activeTemplateSignature) return;
+
+    const baseTemplate = syncedTemplatesRef.current.get(activeTemplate.id);
+
+    const timeoutId = window.setTimeout(async () => {
+      setDeckSaving(true);
+      try {
+        const savedDoc = await saveDropDeck(toDropDeckUpsertInput(activeTemplate, baseTemplate));
+        const savedTemplate = toTemplate(savedDoc);
+        syncedSignaturesRef.current.set(savedTemplate.id, templateSignature(savedTemplate));
+        syncedTemplatesRef.current.set(savedTemplate.id, savedTemplate);
+        if (savedTemplate.id !== activeTemplate.id) {
+          syncedSignaturesRef.current.delete(activeTemplate.id);
+          syncedTemplatesRef.current.delete(activeTemplate.id);
+        }
+
+        setTemplates((previous) =>
+          previous.map((template) => (template.id === activeTemplate.id ? savedTemplate : template)),
+        );
+        if (savedTemplate.id !== activeTemplate.id) {
+          setSelectedTemplateId(savedTemplate.id);
+        }
+        setDeckError("");
+      } catch (err: unknown) {
+        const error = err as Error & { code?: string; details?: unknown };
+        if (error.code === "WRITE_CONFLICT") {
+          const latest = (error.details as { latest?: DropDeckDoc } | undefined)?.latest;
+          if (latest) {
+            const latestTemplate = toTemplate(latest);
+            syncedSignaturesRef.current.set(latestTemplate.id, templateSignature(latestTemplate));
+            syncedTemplatesRef.current.set(latestTemplate.id, latestTemplate);
+            setTemplates((previous) =>
+              previous.map((template) => (template.id === activeTemplate.id ? latestTemplate : template)),
+            );
+            if (latestTemplate.id !== activeTemplate.id) {
+              setSelectedTemplateId(latestTemplate.id);
+            }
+          }
+          setDeckError("This deck was changed by another user. Latest changes were loaded.");
+        } else {
+          setDeckError(err instanceof Error ? err.message : "Failed to save drop deck");
+        }
+      } finally {
+        setDeckSaving(false);
+      }
+    }, DECK_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeTemplate, activeTemplateSignature, appView]);
+
+  useEffect(() => {
+    if (appView !== 0) return;
+
+    const intervalId = window.setInterval(async () => {
+      const dirtyActiveTemplate = activeTemplate
+        ? syncedSignaturesRef.current.get(activeTemplate.id) !== templateSignature(activeTemplate)
+        : false;
+
+      if (dirtyActiveTemplate || deckSaving) {
+        return;
+      }
+
+      try {
+        const docs = await getDropDecks();
+        if (!docs.length) {
+          return;
+        }
+
+        const mapped = docs.map((doc) => toTemplate(doc));
+        syncedSignaturesRef.current = new Map(mapped.map((template) => [template.id, templateSignature(template)]));
+        syncedTemplatesRef.current = new Map(mapped.map((template) => [template.id, template]));
+        setTemplates(mapped);
+        setSelectedTemplateId((previous) => (mapped.some((template) => template.id === previous) ? previous : mapped[0]?.id ?? ""));
+      } catch {
+        // Keep stale data on screen until the next successful poll.
+      }
+    }, DECK_POLL_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeTemplate, appView, deckSaving]);
 
   return (
     <Box
@@ -508,21 +576,8 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
-                {MAP_OPTIONS.map((map) => (
+                {mapOptions.map((map) => (
                   <Tab key={map} label={map} value={map} />
-                ))}
-              </Tabs>
-
-              <Tabs
-                value={selectedSide}
-                onChange={(_, value: TeamSide) => onSideChange(value)}
-                sx={{
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 34 },
-                  "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
-                }}
-              >
-                {SIDE_OPTIONS.map((side) => (
-                  <Tab key={side} label={sideLabel(side)} value={side} />
                 ))}
               </Tabs>
 
@@ -535,7 +590,27 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                 >
                   {templatesForSelection.map((template) => (
                     <MenuItem key={template.id} value={template.id}>
-                      {template.name}
+                      {template.name} ({sideLabel(template.side)})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl size="small" sx={{ minWidth: 130 }}>
+                <InputLabel>Side</InputLabel>
+                <Select
+                  label="Side"
+                  value={activeTemplate?.side ?? "either"}
+                  onChange={(event) =>
+                    updateActiveTemplate((template) => ({
+                      ...template,
+                      side: event.target.value as TeamSide,
+                    }))
+                  }
+                >
+                  {SIDE_OPTIONS.map((side) => (
+                    <MenuItem key={side} value={side}>
+                      {sideLabel(side)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -599,19 +674,18 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
               background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
             }}
           >
-            <Typography sx={{ color: isLight ? "#2f3f59" : "#edf4ff", fontWeight: 700, mb: 1.2 }}>Strategy ({selectedSide})</Typography>
+            <Typography sx={{ color: isLight ? "#2f3f59" : "#edf4ff", fontWeight: 700, mb: 1.2 }}>Description</Typography>
             <TextField
               variant="standard"
               fullWidth
               multiline
               minRows={11}
-              placeholder="Dropdeck description."
-              value={activeTemplate?.strategy ?? ""}
+              value={activeTemplate?.description ?? ""}
               disabled={editMode !== "edit"}
               onChange={(event) =>
                 updateActiveTemplate((template) => ({
                   ...template,
-                  strategy: event.target.value,
+                  description: event.target.value,
                 }))
               }
             />
@@ -633,11 +707,14 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                 minHeight: { xs: 320, lg: 520 },
                 aspectRatio: "1 / 1",
                 position: "relative",
+                backgroundPosition: "center",
+                backgroundRepeat: "no-repeat",
+                backgroundBlendMode: "overlay",
                 backgroundImage:
-                  isLight
+                  `${isLight
                     ? "linear-gradient(rgba(99,119,148,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(99,119,148,0.16) 1px, transparent 1px)"
-                    : "linear-gradient(rgba(207,221,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(207,221,255,0.08) 1px, transparent 1px)",
-                backgroundSize: "30px 30px",
+                    : "linear-gradient(rgba(207,221,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(207,221,255,0.08) 1px, transparent 1px)"}${selectedMapConfig?.imageUrl ? `, url(${selectedMapConfig.imageUrl})` : ""}`,
+                backgroundSize: selectedMapConfig?.imageUrl ? "30px 30px, 30px 30px, cover" : "30px 30px, 30px 30px",
               }}
             >
               <Box
@@ -678,11 +755,13 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
           >
             <Stack spacing={0.2}>
               <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>
-                Deck Table ({selectedMap} | {sideLabel(selectedSide)})
+                Deck Table ({selectedMap})
               </Typography>
               <Typography variant="body2" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>
                 {activeTemplate?.name || "Unnamed dropdeck"}
+                {activeTemplate?.side ? ` | Side ${sideLabel(activeTemplate.side)}` : ""}
                 {formatUpdatedAt(activeTemplate?.updatedAt) ? ` | Updated ${formatUpdatedAt(activeTemplate?.updatedAt)}` : ""}
+                {deckSaving ? " | Syncing..." : ""}
               </Typography>
             </Stack>
             <Typography sx={{ color: isLight ? "#556887" : "#bfd0ff", fontWeight: 700 }}>Total Tonnage: {totalTonnage} t</Typography>
@@ -692,7 +771,7 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
             <Table
               size="medium"
               sx={{
-                minWidth: 1700,
+                minWidth: 980,
                 "& .MuiTableCell-root": {
                   borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.22)" : "1px solid rgba(130, 154, 217, 0.14)",
                   py: 1,
@@ -708,19 +787,12 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                   <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 220 }}>Alternates</TableCell>
                   <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 110 }}>Lance</TableCell>
                   <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 240 }}>Mech</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 150 }}>Role</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 210 }}>Loadout</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 170 }}>Build Code</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 170 }}>Skill Tree</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 140 }}>Weight Class</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 110 }}>Tonnage</TableCell>
+                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 280 }}>Mech Data</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {activeTemplate?.rows.map((row, rowIndex) => {
-                  const mechOption = mechLookup.get(row.mech);
-                  const roleOptions = Array.from(new Set((mechOption?.builds.map((build) => build.role) ?? []).filter(Boolean)));
-                  const loadoutOptions = Array.from(new Set((mechOption?.builds.map((build) => build.weaponry) ?? []).filter(Boolean)));
+                  const mech = mechLookup.get(row.mech);
 
                   return (
                     <TableRow key={row.slot} hover>
@@ -792,7 +864,7 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                               <em>None</em>
                             </MenuItem>
                             {mechOptions.map((entry) => (
-                              <MenuItem key={entry.code} value={entry.code}>
+                              <MenuItem key={entry.id} value={entry.id}>
                                 {entry.label}
                               </MenuItem>
                             ))}
@@ -800,55 +872,9 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
                         </FormControl>
                       </TableCell>
                       <TableCell>
-                        <Autocomplete
-                          freeSolo
-                          size="small"
-                          options={roleOptions}
-                          value={row.role}
-                          disabled={editMode !== "edit"}
-                          onInputChange={(_, value) => updateRow(rowIndex, (entry) => ({ ...entry, role: value }))}
-                          renderInput={(params) => <TextField {...params} variant="standard" />}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Autocomplete
-                          freeSolo
-                          size="small"
-                          options={loadoutOptions}
-                          value={row.loadout}
-                          disabled={editMode !== "edit"}
-                          onChange={(_, value) => applyLoadoutDefaults(rowIndex, value ?? "")}
-                          onInputChange={(_, value) => updateRow(rowIndex, (entry) => ({ ...entry, loadout: value }))}
-                          renderInput={(params) => <TextField {...params} variant="standard" />}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Autocomplete
-                          freeSolo
-                          size="small"
-                          options={[]}
-                          value={row.buildCode}
-                          disabled
-                          renderInput={(params) => <TextField {...params} variant="standard" />}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Autocomplete
-                          freeSolo
-                          size="small"
-                          options={[]}
-                          value={row.skillTree}
-                          disabled
-                          renderInput={(params) => <TextField {...params} variant="standard" />}
-                        />
-                      </TableCell>
-                      <TableCell>
                         <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
-                          {row.weightClass && typeof row.tonnage === "number" ? `${row.tonnage}T | ${row.weightClass}` : row.weightClass || "-"}
+                          {mech ? `${mech.tonnage}T | ${mech.class} | ${mech.role}` : "-"}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>{row.tonnage === "" ? "-" : `${row.tonnage}`}</Typography>
                       </TableCell>
                     </TableRow>
                   );

@@ -1,4 +1,5 @@
 import "./functions/health/get.js";
+import "./functions/config/listMaps.js";
 import "./functions/mechs/create.js";
 import "./functions/mechs/hierarchy.js";
 import "./functions/mechs/list.js";
@@ -7,3 +8,4 @@ import "./functions/mechs/upsert.js";
 import "./functions/matchNights/create.js";
 import "./functions/matchNights/getById.js";
 import "./functions/matchNights/listDecks.js";
+import "./functions/matchNights/upsertDeck.js";

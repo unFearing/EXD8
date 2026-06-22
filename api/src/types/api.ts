@@ -1,6 +1,6 @@
 import type { CreateMechInput, MatchNightCreateInput, MatchNightDoc, MechDoc } from "./contracts.js";
 
-export type ApiErrorCode = "BAD_REQUEST" | "FORBIDDEN" | "NOT_FOUND" | "TEAM_MISMATCH" | "INTERNAL";
+export type ApiErrorCode = "BAD_REQUEST" | "FORBIDDEN" | "NOT_FOUND" | "TEAM_MISMATCH" | "WRITE_CONFLICT" | "INTERNAL";
 
 export type ApiError = {
   ok: false;

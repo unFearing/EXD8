@@ -18,5 +18,10 @@
     "_site/**": true
   },
   "files.insertFinalNewline": true,
-  "markdown.styles": [".vscode/custom-tag-style.css"]
+  "markdown.styles": [
+    ".vscode/custom-tag-style.css"
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "npm test": true
+  }
 }

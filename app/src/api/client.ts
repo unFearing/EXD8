@@ -2,8 +2,10 @@ import type {
   ApiFailure,
   ApiSuccess,
   DropDeckDoc,
+  DropDeckUpsertInput,
   MatchNightCreateInput,
   MatchNightDoc,
+  MapConfigDoc,
   MechDoc,
   WeightClassSummary,
 } from "../types/contracts";
@@ -27,7 +29,17 @@ async function parseResponse<T>(response: Response): Promise<ApiSuccess<T>> {
 
   if (!response.ok || !payload.ok) {
     const errorMessage = payload && !payload.ok ? payload.error.message : `Request failed (${response.status})`;
-    throw new Error(errorMessage);
+    const error = new Error(errorMessage) as Error & {
+      status?: number;
+      code?: string;
+      details?: unknown;
+    };
+    if (payload && !payload.ok) {
+      error.code = payload.error.code;
+      error.details = payload.error.details;
+    }
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -79,5 +91,26 @@ export async function getDropDecks(): Promise<DropDeckDoc[]> {
   const response = await fetch(`${API_BASE}/decks`);
 
   const parsed = await parseResponse<DropDeckDoc[]>(response);
+  return parsed.data;
+}
+
+export async function getMapConfigs(): Promise<MapConfigDoc[]> {
+  const response = await fetch(`${API_BASE}/config/maps`);
+
+  const parsed = await parseResponse<MapConfigDoc[]>(response);
+  return parsed.data;
+}
+
+export async function saveDropDeck(input: DropDeckUpsertInput): Promise<DropDeckDoc> {
+  const response = await fetch(`${API_BASE}/decks`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-user-id": "deckboard-ui",
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<DropDeckDoc>(response);
   return parsed.data;
 }

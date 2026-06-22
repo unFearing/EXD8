@@ -11,27 +11,47 @@ export type DeckRowDoc = {
   alternates: string[];
   lance: Lance;
   mech: string;
-  role: string;
-  loadout: string;
-  buildCode: string;
-  skillTree: string;
-  weightClass: WeightClass | "";
-  tonnage: number | "";
 };
 
 export type DropDeckDoc = {
   id: string;
-  teamId: string;
   map: DeckMap;
   side: LegacyDeckSide;
-  name: string;
+  description?: string;
   strategy?: string;
+  name: string;
   deck: DeckRowDoc[];
+  revision?: number;
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
   schemaVersion?: "1.0.0";
   docType?: "dropDeck";
+};
+
+export type DropDeckEditable = {
+  map: DeckMap;
+  side: DeckSide;
+  description: string;
+  name: string;
+  deck: DeckRowDoc[];
+};
+
+export type DropDeckUpsertInput = {
+  id?: string;
+  baseRevision?: number;
+  baseDeck?: DropDeckEditable;
+  map: DeckMap;
+  side: DeckSide;
+  description: string;
+  name: string;
+  deck: DeckRowDoc[];
+};
+
+export type MapConfigDoc = {
+  id: string;
+  name: DeckMap;
+  imageUrl: string;
 };
 
 export type KeyFactors = {
