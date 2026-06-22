@@ -57,6 +57,12 @@ type DeckRow = {
   alternates: string[];
   lance: Lance;
   mech: string;
+  role?: string;
+  loadout?: string;
+  buildCode?: string;
+  skillTree?: string;
+  weightClass?: string;
+  tonnage?: number | "";
 };
 
 type DeckTemplate = {

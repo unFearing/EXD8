@@ -1,6 +1,7 @@
 import type {
   ApiFailure,
   ApiSuccess,
+  CreateMechInput,
   DropDeckDoc,
   DropDeckUpsertInput,
   MatchNightCreateInput,
@@ -112,5 +113,21 @@ export async function saveDropDeck(input: DropDeckUpsertInput): Promise<DropDeck
   });
 
   const parsed = await parseResponse<DropDeckDoc>(response);
+  return parsed.data;
+}
+
+export async function createMech(input: CreateMechInput): Promise<MechDoc> {
+  const response = await fetch(`${API_BASE}/mechs`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-team-id": "EXD8",
+      "x-user-role": "TL",
+      "x-user-id": "ui-local-user",
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<MechDoc>(response);
   return parsed.data;
 }

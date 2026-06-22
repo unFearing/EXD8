@@ -11,6 +11,12 @@ export type DeckRowDoc = {
   alternates: string[];
   lance: Lance;
   mech: string;
+  role?: string;
+  loadout?: string;
+  buildCode?: string;
+  skillTree?: string;
+  weightClass?: WeightClass | "";
+  tonnage?: number | "";
 };
 
 export type DropDeckDoc = {
@@ -139,4 +145,32 @@ export type WeightClassSummary = {
   class: WeightClass;
   buildCount: number;
   chassis: ChassisSummary[];
+};
+
+export type DropDeckRules = {
+  maxLights?: number;
+  maxMediums?: number;
+  maxHeavies?: number;
+  maxAssaults?: number;
+  maxTonnage?: number;
+  minTonnage?: number;
+  maxDuplicateChassis?: number;
+};
+
+export type CreateMechInput = {
+  chassis: string;
+  variant: string;
+  class: WeightClass;
+  tech: "IS" | "Clan";
+  tonnage: number;
+  buildUrl: string;
+  weaponry: string;
+  equipment: string[];
+  description: string;
+  role: string;
+  buildCodes: Record<string, string>;
+  skillCode: string;
+  primaryRangeBracket?: [number, number];
+  optimalRange?: number;
+  maxRange?: number;
 };
