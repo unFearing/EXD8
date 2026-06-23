@@ -8,6 +8,7 @@ import type {
   MatchNightDoc,
   MapConfigDoc,
   MechDoc,
+  ParsedMechBuild,
   WeightClassSummary,
 } from "../types/contracts";
 
@@ -129,5 +130,18 @@ export async function createMech(input: CreateMechInput): Promise<MechDoc> {
   });
 
   const parsed = await parseResponse<MechDoc>(response);
+  return parsed.data;
+}
+
+export async function parseMechBuild(url: string): Promise<ParsedMechBuild> {
+  const response = await fetch(`${API_BASE}/mechs/parseBuild`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ url }),
+  });
+
+  const parsed = await parseResponse<ParsedMechBuild>(response);
   return parsed.data;
 }

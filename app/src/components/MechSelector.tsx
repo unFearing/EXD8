@@ -11,166 +11,89 @@ type MechSelectorProps = {
 
 type ChassiGroup = {
   chassis: string;
-  variants: VariantGroup[];
-};
-
-type VariantGroup = {
-  variant: string;
-  mechs: MechDoc[];
-  buildCodes: string[];
+  variants: string[];
 };
 
 export const MechSelector: React.FC<MechSelectorProps> = ({ selectedMechId, allMechs, onChange, disabled }) => {
-  // Build hierarchy: Chassis → Variant → Mechs
+  // Build hierarchy: Chassis → Variant
   const chassisHierarchy = useMemo(() => {
-    const groups = new Map<string, Map<string, MechDoc[]>>();
+    const groups = new Map<string, Set<string>>();
 
     allMechs.forEach((mech) => {
       if (!groups.has(mech.chassis)) {
-        groups.set(mech.chassis, new Map());
+        groups.set(mech.chassis, new Set());
       }
-      const variantMap = groups.get(mech.chassis)!;
-      if (!variantMap.has(mech.variant)) {
-        variantMap.set(mech.variant, []);
-      }
-      variantMap.get(mech.variant)!.push(mech);
+      groups.get(mech.chassis)!.add(mech.variant);
     });
 
     const result: ChassiGroup[] = [];
-    groups.forEach((variantMap, chassis) => {
-      const variants: VariantGroup[] = [];
-      variantMap.forEach((mechs, variant) => {
-        const buildCodes = mechs.flatMap((m) => Object.keys(m.buildCodes ?? {}));
-        variants.push({
-          variant,
-          mechs,
-          buildCodes: [...new Set(buildCodes)].sort(),
-        });
-      });
+    groups.forEach((variantSet, chassis) => {
       result.push({
         chassis,
-        variants: variants.sort((a, b) => a.variant.localeCompare(b.variant)),
+        variants: [...variantSet].sort((a, b) => a.localeCompare(b)),
       });
     });
 
     return result.sort((a, b) => a.chassis.localeCompare(b.chassis));
   }, [allMechs]);
 
-  // Current selection state
-  const selectedMech = useMemo(() => allMechs.find((m) => m.id === selectedMechId), [allMechs, selectedMechId]);
-  const selectedChassis = selectedMech?.chassis ?? null;
-  const selectedVariant = selectedMech?.variant ?? null;
+  const options = useMemo(
+    () =>
+      chassisHierarchy.flatMap((group) => [
+        { value: group.chassis, label: group.chassis },
+        ...group.variants.map((variant) => ({
+          value: `${group.chassis}-${variant}`,
+          label: `${group.chassis}-${variant}`,
+        })),
+      ]),
+    [chassisHierarchy],
+  );
 
-  // Filtered options
-  const availableChassisOptions = useMemo(() => chassisHierarchy.map((g) => g.chassis), [chassisHierarchy]);
-
-  const availableVariantOptions = useMemo(() => {
-    if (!selectedChassis) return [];
-    const group = chassisHierarchy.find((g) => g.chassis === selectedChassis);
-    return group?.variants.map((v) => v.variant) ?? [];
-  }, [selectedChassis, chassisHierarchy]);
-
-  const availableBuildCodes = useMemo(() => {
-    if (!selectedChassis || !selectedVariant) return [];
-    const group = chassisHierarchy.find((g) => g.chassis === selectedChassis);
-    const variantGroup = group?.variants.find((v) => v.variant === selectedVariant);
-    return variantGroup?.buildCodes ?? [];
-  }, [selectedChassis, selectedVariant, chassisHierarchy]);
-
-  const handleChassiChange = (newChassis: string) => {
-    // Auto-select first variant when chassis changes
-    const group = chassisHierarchy.find((g) => g.chassis === newChassis);
-    const firstVariant = group?.variants[0];
-    if (firstVariant && firstVariant.mechs.length > 0) {
-      onChange(firstVariant.mechs[0].id);
+  const selectedOption = useMemo(() => {
+    if (!selectedMechId) return "";
+    if (options.some((option) => option.value === selectedMechId)) {
+      return selectedMechId;
     }
-  };
 
-  const handleVariantChange = (newVariant: string) => {
-    if (!selectedChassis) return;
-    const group = chassisHierarchy.find((g) => g.chassis === selectedChassis);
-    const variantGroup = group?.variants.find((v) => v.variant === newVariant);
-    if (variantGroup && variantGroup.mechs.length > 0) {
-      onChange(variantGroup.mechs[0].id);
+    const selectedMech = allMechs.find((mech) => mech.id === selectedMechId);
+    if (!selectedMech) return "";
+
+    const variantOption = `${selectedMech.chassis}-${selectedMech.variant}`;
+    if (options.some((option) => option.value === variantOption)) {
+      return variantOption;
     }
-  };
+
+    if (options.some((option) => option.value === selectedMech.chassis)) {
+      return selectedMech.chassis;
+    }
+
+    return "";
+  }, [allMechs, options, selectedMechId]);
 
   return (
-    <Stack spacing={1.5} sx={{ width: "100%" }}>
-      {/* Chassis Selector */}
+    <Stack spacing={1} sx={{ width: "100%" }}>
       <Box>
         <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.7 }}>
-          Chassis
+          Mech
         </Typography>
         <FormControl fullWidth size="small" variant="standard">
           <Select
-            value={selectedChassis ?? ""}
-            onChange={(e) => handleChassiChange(e.target.value)}
-            disabled={disabled || availableChassisOptions.length === 0}
+            value={selectedOption}
+            onChange={(e) => onChange(e.target.value)}
+            disabled={disabled || options.length === 0}
             displayEmpty
           >
             <MenuItem value="">
-              <em>Select Chassis</em>
+              <em>Select chassis or chassis-variant</em>
             </MenuItem>
-            {availableChassisOptions.map((chassis) => (
-              <MenuItem key={chassis} value={chassis}>
-                {chassis}
+            {options.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
       </Box>
-
-      {/* Variant Selector */}
-      <Box>
-        <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.7 }}>
-          Variant
-        </Typography>
-        <FormControl fullWidth size="small" variant="standard" disabled={!selectedChassis}>
-          <Select
-            value={selectedVariant ?? ""}
-            onChange={(e) => handleVariantChange(e.target.value)}
-            disabled={disabled || !selectedChassis || availableVariantOptions.length === 0}
-            displayEmpty
-          >
-            <MenuItem value="">
-              <em>Select Variant</em>
-            </MenuItem>
-            {availableVariantOptions.map((variant) => (
-              <MenuItem key={variant} value={variant}>
-                {variant}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-
-      {/* Loadout Display */}
-      {availableBuildCodes.length > 0 && (
-        <Box>
-          <Typography variant="caption" sx={{ fontWeight: 600, opacity: 0.7 }}>
-            Available Loadouts
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8 }}>
-            {availableBuildCodes.join(", ")}
-          </Typography>
-        </Box>
-      )}
-
-      {/* Selected Mech Info */}
-      {selectedMech && (
-        <Box
-          sx={{
-            p: 1,
-            borderRadius: 1,
-            backgroundColor: "rgba(130, 154, 217, 0.1)",
-          }}
-        >
-          <Typography variant="caption" sx={{ fontWeight: 600 }}>
-            {selectedMech.tonnage}T | {selectedMech.class} | {selectedMech.role}
-          </Typography>
-        </Box>
-      )}
     </Stack>
   );
 };

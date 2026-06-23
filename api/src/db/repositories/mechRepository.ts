@@ -5,6 +5,10 @@ import { getMechsContainer } from "../cosmos.js";
 export type VariantSummary = {
   variant: string;
   buildCount: number;
+  builds: {
+    id: string;
+    markdown: string;
+  }[];
 };
 
 export type ChassisSummary = {
@@ -18,6 +22,40 @@ export type WeightClassSummary = {
   buildCount: number;
   chassis: ChassisSummary[];
 };
+
+function toBuildMarkdown(doc: MechDoc): string {
+  const equipment = doc.equipment.length
+    ? doc.equipment.map((item) => `- ${item}`).join("\n")
+    : "- None listed";
+
+  const buildCodes = Object.keys(doc.buildCodes).length
+    ? Object.entries(doc.buildCodes)
+        .map(([label, code]) => `- ${label}: \`${code}\``)
+        .join("\n")
+    : "- None listed";
+
+  return [
+    `## ${doc.chassis}-${doc.variant}`,
+    "",
+    doc.description || "No description provided.",
+    "",
+    `- Role: ${doc.role}`,
+    `- Tech: ${doc.tech}`,
+    `- Tonnage: ${doc.tonnage}`,
+    `- Range: ${doc.primaryRangeBracket[0]}-${doc.primaryRangeBracket[1]}m (optimal ${doc.optimalRange}m, max ${doc.maxRange}m)`,
+    "",
+    "### Weaponry",
+    doc.weaponry || "Not specified",
+    "",
+    "### Equipment",
+    equipment,
+    "",
+    "### Build Codes",
+    buildCodes,
+    "",
+    `### Build Link\n[Open Build](${doc.buildUrl})`,
+  ].join("\n");
+}
 
 export async function createMech(input: CreateMechInput): Promise<MechDoc> {
   const doc: MechDoc = {
@@ -92,13 +130,25 @@ export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
 
     const chassis = Array.from(chassisMap.entries())
       .map(([chassisCode, chassisDocs]) => {
-        const variantMap = new Map<string, number>();
+        const variantMap = new Map<string, MechDoc[]>();
         for (const doc of chassisDocs) {
-          variantMap.set(doc.variant, (variantMap.get(doc.variant) ?? 0) + 1);
+          const bucket = variantMap.get(doc.variant) ?? [];
+          bucket.push(doc);
+          variantMap.set(doc.variant, bucket);
         }
 
         const variants = Array.from(variantMap.entries())
-          .map(([variant, buildCount]) => ({ variant, buildCount }))
+          .map(([variant, variantDocs]) => ({
+            variant,
+            buildCount: variantDocs.length,
+            builds: variantDocs
+              .slice()
+              .sort((a, b) => a.id.localeCompare(b.id))
+              .map((doc) => ({
+                id: doc.id,
+                markdown: toBuildMarkdown(doc),
+              })),
+          }))
           .sort((a, b) => a.variant.localeCompare(b.variant));
 
         return {

@@ -5,6 +5,7 @@ import "./functions/mechs/hierarchy.js";
 import "./functions/mechs/list.js";
 import "./functions/mechs/getById.js";
 import "./functions/mechs/upsert.js";
+import "./functions/mechs/parseBuild.js";
 import "./functions/matchNights/create.js";
 import "./functions/matchNights/getById.js";
 import "./functions/matchNights/listDecks.js";

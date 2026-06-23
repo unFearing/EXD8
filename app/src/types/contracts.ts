@@ -133,6 +133,10 @@ export type ApiFailure = { ok: false; error: { code: string; message: string; de
 export type VariantSummary = {
   variant: string;
   buildCount: number;
+  builds: Array<{
+    id: string;
+    markdown: string;
+  }>;
 };
 
 export type ChassisSummary = {
@@ -173,4 +177,11 @@ export type CreateMechInput = {
   primaryRangeBracket?: [number, number];
   optimalRange?: number;
   maxRange?: number;
+};
+
+export type ParsedMechBuild = {
+  sourceUrl: string;
+  warnings: string[];
+  metadata: Record<string, string | number | boolean | null>;
+  draft: CreateMechInput;
 };
