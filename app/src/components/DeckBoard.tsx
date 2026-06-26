@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   AppBar,
   Box,
@@ -28,16 +25,15 @@ import {
   Typography,
   Tooltip,
 } from "@mui/material";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
-import { createMech, getDropDecks, getMapConfigs, getMechHierarchy, getMechs, parseMechBuild, saveDropDeck } from "../api/client";
+import { getDropDecks, getMapConfigs, getMechHierarchy, getMechs, saveDropDeck } from "../api/client";
 import { CS2026_ROUND1 } from "../data/decks";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import { MechSelector } from "./MechSelector";
+import { AddBuildDialog } from "./AddBuildDialog";
+import { RepositoryView } from "./RepositoryView";
 import type {
-  ChassisSummary,
-  CreateMechInput,
   DeckMap,
   DropDeckEditable,
   DeckSide,
@@ -51,7 +47,6 @@ import type {
 type EditMode = "view" | "edit";
 type TeamSide = DeckSide;
 type AppView = 0 | 1;
-type BuildInputMode = "import" | "manual";
 type Lance = "A" | "B" | "C" | "";
 
 type DeckRow = {
@@ -90,62 +85,6 @@ const ROW_COUNT = 8;
 const LANCE_OPTIONS: Lance[] = ["", "A", "B", "C"];
 const DECK_AUTOSAVE_DELAY_MS = 1000;
 const DECK_POLL_INTERVAL_MS = 5000;
-const ROLE_OPTIONS = ["Capper", "Striker", "Skirmisher", "Brawler", "Sniper", "Fire Support", "Juggernaut"];
-
-function defaultBuildDraft(): CreateMechInput {
-  return {
-    chassis: "",
-    variant: "",
-    class: "Medium",
-    tech: "IS",
-    tonnage: 50,
-    buildUrl: "",
-    weaponry: "",
-    equipment: [],
-    description: "",
-    role: "Skirmisher",
-    buildCodes: {},
-    skillCode: "pending",
-    primaryRangeBracket: [0, 0],
-    optimalRange: 0,
-    maxRange: 0,
-  };
-}
-
-function parseListText(value: string): string[] {
-  return value
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function listToText(items: string[]): string {
-  return items.join("\n");
-}
-
-function buildCodesToText(codes: Record<string, string>): string {
-  return Object.entries(codes)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join("\n");
-}
-
-function parseBuildCodesText(value: string): Record<string, string> {
-  const pairs = value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const idx = line.indexOf(":");
-      if (idx === -1) return null;
-      const key = line.slice(0, idx).trim();
-      const val = line.slice(idx + 1).trim();
-      if (!key || !val) return null;
-      return [key, val] as const;
-    })
-    .filter((entry): entry is readonly [string, string] => entry !== null);
-
-  return Object.fromEntries(pairs);
-}
 
 const PILOT_OPTIONS = [
   "Extra_Better",
@@ -293,22 +232,10 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   const [deckSaving, setDeckSaving] = useState(false);
   const [deckError, setDeckError] = useState("");
   const [mechs, setMechs] = useState<MechDoc[]>([]);
-  const [mechLoading, setMechLoading] = useState(false);
-  const [mechError, setMechError] = useState<string>("");
   const [repoHierarchy, setRepoHierarchy] = useState<WeightClassSummary[]>([]);
   const [repoLoading, setRepoLoading] = useState(false);
   const [repoError, setRepoError] = useState<string>("");
-  const [buildDraft, setBuildDraft] = useState<CreateMechInput>(defaultBuildDraft());
-  const [buildCodeText, setBuildCodeText] = useState("");
-  const [equipmentText, setEquipmentText] = useState("");
-  const [buildUrlInput, setBuildUrlInput] = useState("");
-  const [buildInputMode, setBuildInputMode] = useState<BuildInputMode>("import");
-  const [buildMeta, setBuildMeta] = useState<Record<string, string | number | boolean | null>>({});
-  const [buildWarnings, setBuildWarnings] = useState<string[]>([]);
-  const [buildActionError, setBuildActionError] = useState("");
-  const [buildActionNotice, setBuildActionNotice] = useState("");
-  const [buildParsing, setBuildParsing] = useState(false);
-  const [buildSaving, setBuildSaving] = useState(false);
+  const [addBuildDialogOpen, setAddBuildDialogOpen] = useState(false);
   const { error } = useMatchNightApi();
 
   const mapOptions = useMemo<DeckMap[]>(() => {
@@ -338,18 +265,13 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
 
   useEffect(() => {
     let cancelled = false;
-    setMechLoading(true);
-    setMechError("");
 
     getMechs()
       .then((data) => {
         if (!cancelled) setMechs(data);
       })
-      .catch((err: unknown) => {
-        if (!cancelled) setMechError(err instanceof Error ? err.message : "Failed to load mechs");
-      })
-      .finally(() => {
-        if (!cancelled) setMechLoading(false);
+      .catch(() => {
+        // Silently fail, mechs are used for the deck selector
       });
 
     return () => {
@@ -428,13 +350,6 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
     const [mechDocs, hierarchy] = await Promise.all([getMechs(), getMechHierarchy()]);
     setMechs(mechDocs);
     setRepoHierarchy(hierarchy);
-  };
-
-  const classLabel = (summary: WeightClassSummary): string => {
-    const chassis = summary.chassis
-      .map((entry: ChassisSummary) => `${entry.chassis} (${entry.buildCount})`)
-      .join(", ");
-    return `${summary.class}: ${chassis || "No entries"}`;
   };
 
   const templatesForSelection = useMemo(
@@ -990,502 +905,22 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
               overflow: "hidden",
             }}
           >
-            <Box sx={{ px: 2, py: 1.5, borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.3)" : "1px solid rgba(130, 154, 217, 0.25)" }}>
-              <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>Tracked Mech Repository</Typography>
-              <Typography variant="body2" sx={{ color: isLight ? "#5f7191" : "#adbee9" }}>
-                Foam/Cosmos source of truth only. Legacy static mech list is excluded.
-              </Typography>
+            <Box sx={{ px: 2, py: 1.5 }}>
+              <RepositoryView
+                hierarchy={repoHierarchy}
+                loading={repoLoading}
+                error={repoError}
+                onAddBuild={() => setAddBuildDialogOpen(true)}
+                mode={mode}
+              />
             </Box>
 
-            <Stack spacing={1.25} sx={{ p: 1.5 }}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 1,
-                  borderRadius: 1.5,
-                  border: isLight ? "1px solid rgba(114, 133, 162, 0.3)" : "1px solid rgba(130, 154, 217, 0.32)",
-                  background: isLight ? "rgba(245, 249, 253, 0.92)" : "rgba(16, 27, 51, 0.78)",
-                }}
-              >
-                <Stack spacing={0.75}>
-                  <Typography sx={{ color: isLight ? "#334866" : "#e7eeff", fontWeight: 700 }}>Create Build</Typography>
-                  <ButtonGroup size="small" sx={{ alignSelf: "flex-start" }}>
-                    <Button
-                      variant={buildInputMode === "import" ? "contained" : "outlined"}
-                      onClick={() => setBuildInputMode("import")}
-                    >
-                      Import Build From Link
-                    </Button>
-                    <Button
-                      variant={buildInputMode === "manual" ? "contained" : "outlined"}
-                      onClick={() => {
-                        setBuildInputMode("manual");
-                        setBuildActionError("");
-                        setBuildActionNotice("Manual mode active. Fill in the fields and create.");
-                      }}
-                    >
-                      Manual Input
-                    </Button>
-                  </ButtonGroup>
-
-                  {buildInputMode === "import" && (
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                      <TextField
-                        label="Build URL"
-                        size="small"
-                        fullWidth
-                        value={buildUrlInput}
-                        onChange={(event) => setBuildUrlInput(event.target.value)}
-                        placeholder="https://mwo.nav-alpha.com/mechlab?b=..."
-                      />
-                      <Button
-                        variant="outlined"
-                        disabled={buildParsing || !buildUrlInput.trim()}
-                        onClick={async () => {
-                          setBuildParsing(true);
-                          setBuildActionError("");
-                          setBuildActionNotice("");
-                          try {
-                            const parsed = await parseMechBuild(buildUrlInput.trim());
-                            setBuildDraft(parsed.draft);
-                            setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
-                            setEquipmentText(listToText(parsed.draft.equipment));
-                            setBuildWarnings(parsed.warnings);
-                            setBuildMeta(parsed.metadata);
-                            setBuildActionNotice("Build link parsed. Review fields and save.");
-                          } catch (err: unknown) {
-                            setBuildActionError(err instanceof Error ? err.message : "Failed to parse build link");
-                          } finally {
-                            setBuildParsing(false);
-                          }
-                        }}
-                      >
-                        {buildParsing ? "Parsing..." : "Parse URL"}
-                      </Button>
-                    </Stack>
-                  )}
-
-                  {buildInputMode === "manual" && (
-                    <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                      <Alert severity="info" sx={{ flex: 1 }}>
-                        Manual mode uses editable fields below.
-                      </Alert>
-                      <Button
-                        variant="outlined"
-                        onClick={() => {
-                          const draft = defaultBuildDraft();
-                          setBuildDraft(draft);
-                          setBuildCodeText(buildCodesToText(draft.buildCodes));
-                          setEquipmentText(listToText(draft.equipment));
-                          setBuildMeta({});
-                          setBuildWarnings([]);
-                          setBuildActionNotice("Manual draft reset.");
-                        }}
-                      >
-                        Reset Draft
-                      </Button>
-                    </Stack>
-                  )}
-
-                  {buildActionError && <Alert severity="error">{buildActionError}</Alert>}
-                  {buildActionNotice && <Alert severity="success">{buildActionNotice}</Alert>}
-                  {buildWarnings.map((warning, index) => (
-                    <Alert key={`warning-${index}`} severity="warning">
-                      {warning}
-                    </Alert>
-                  ))}
-
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      px: 1,
-                      py: 0.75,
-                      maxHeight: 190,
-                      overflowY: "auto",
-                      border: isLight ? "1px solid rgba(114, 133, 162, 0.24)" : "1px solid rgba(130, 154, 217, 0.24)",
-                      background: isLight ? "rgba(236, 244, 252, 0.9)" : "rgba(9, 16, 35, 0.84)",
-                    }}
-                  >
-                    <Typography sx={{ fontSize: "0.76rem", color: isLight ? "#3f5575" : "#c7d6f8", fontWeight: 700, mb: 0.4 }}>
-                      Parsed / Editable Data ({buildInputMode === "import" ? "Import Build From Link" : "Manual Input"})
-                    </Typography>
-                    <Typography
-                      component="pre"
-                      sx={{ m: 0, whiteSpace: "pre-wrap", fontSize: "0.72rem", color: isLight ? "#3f5575" : "#c7d6f8" }}
-                    >
-                      {JSON.stringify(
-                        {
-                          chassis: buildDraft.chassis,
-                          variant: buildDraft.variant,
-                          class: buildDraft.class,
-                          tech: buildDraft.tech,
-                          tonnage: buildDraft.tonnage,
-                          role: buildDraft.role,
-                          weaponry: buildDraft.weaponry,
-                          equipment: parseListText(equipmentText),
-                          buildCodes: parseBuildCodesText(buildCodeText),
-                          skillCode: buildDraft.skillCode,
-                          buildUrl: buildDraft.buildUrl,
-                          description: buildDraft.description,
-                          primaryRangeBracket: buildDraft.primaryRangeBracket,
-                          optimalRange: buildDraft.optimalRange,
-                          maxRange: buildDraft.maxRange,
-                        },
-                        null,
-                        2,
-                      )}
-                    </Typography>
-                  </Box>
-
-                  <Accordion
-                    disableGutters
-                    defaultExpanded={false}
-                    elevation={0}
-                    sx={{
-                      borderRadius: 1,
-                      border: isLight ? "1px solid rgba(114, 133, 162, 0.24)" : "1px solid rgba(130, 154, 217, 0.24)",
-                      background: isLight ? "rgba(236, 244, 252, 0.85)" : "rgba(10, 18, 36, 0.66)",
-                    }}
-                  >
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography sx={{ fontWeight: 700, color: isLight ? "#3b4f6d" : "#d8e4ff" }}>
-                        Build Data ({buildDraft.chassis || "chassis"} {buildDraft.variant || "variant"})
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Stack spacing={0.75}>
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                          <TextField
-                            size="small"
-                            label="Chassis"
-                            fullWidth
-                            value={buildDraft.chassis}
-                            onChange={(event) => setBuildDraft((prev) => ({ ...prev, chassis: event.target.value }))}
-                          />
-                          <TextField
-                            size="small"
-                            label="Variant"
-                            fullWidth
-                            value={buildDraft.variant}
-                            onChange={(event) => setBuildDraft((prev) => ({ ...prev, variant: event.target.value }))}
-                          />
-                          <TextField
-                            size="small"
-                            label="Tonnage"
-                            type="number"
-                            value={buildDraft.tonnage}
-                            onChange={(event) => setBuildDraft((prev) => ({ ...prev, tonnage: Number(event.target.value) || 0 }))}
-                          />
-                        </Stack>
-
-                        <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                          <FormControl size="small" fullWidth>
-                            <InputLabel id="create-build-class-label">Class</InputLabel>
-                            <Select
-                              labelId="create-build-class-label"
-                              label="Class"
-                              value={buildDraft.class}
-                              onChange={(event) =>
-                                setBuildDraft((prev) => ({ ...prev, class: event.target.value as CreateMechInput["class"] }))
-                              }
-                            >
-                              {["Light", "Medium", "Heavy", "Assault"].map((wc) => (
-                                <MenuItem key={wc} value={wc}>
-                                  {wc}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-
-                          <FormControl size="small" fullWidth>
-                            <InputLabel id="create-build-tech-label">Tech</InputLabel>
-                            <Select
-                              labelId="create-build-tech-label"
-                              label="Tech"
-                              value={buildDraft.tech}
-                              onChange={(event) =>
-                                setBuildDraft((prev) => ({ ...prev, tech: event.target.value as CreateMechInput["tech"] }))
-                              }
-                            >
-                              <MenuItem value="IS">IS</MenuItem>
-                              <MenuItem value="Clan">Clan</MenuItem>
-                            </Select>
-                          </FormControl>
-
-                          <FormControl size="small" fullWidth>
-                            <InputLabel id="create-build-role-label">Role</InputLabel>
-                            <Select
-                              labelId="create-build-role-label"
-                              label="Role"
-                              value={buildDraft.role}
-                              onChange={(event) => setBuildDraft((prev) => ({ ...prev, role: event.target.value }))}
-                            >
-                              {ROLE_OPTIONS.map((role) => (
-                                <MenuItem key={role} value={role}>
-                                  {role}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </Stack>
-
-                        <TextField
-                          size="small"
-                          label="Weaponry (critical)"
-                          multiline
-                          minRows={2}
-                          value={buildDraft.weaponry}
-                          onChange={(event) => setBuildDraft((prev) => ({ ...prev, weaponry: event.target.value }))}
-                        />
-
-                        <TextField
-                          size="small"
-                          label="Equipment (comma or newline separated)"
-                          multiline
-                          minRows={1}
-                          value={equipmentText}
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            setEquipmentText(value);
-                            setBuildDraft((prev) => ({ ...prev, equipment: parseListText(value) }));
-                          }}
-                        />
-
-                        <Accordion disableGutters elevation={0} sx={{ background: "transparent" }}>
-                          <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 34, px: 0 }}>
-                            <Typography sx={{ fontSize: "0.78rem", color: isLight ? "#5a6f8f" : "#b9caef", fontWeight: 700 }}>
-                              Advanced Fields
-                            </Typography>
-                          </AccordionSummary>
-                          <AccordionDetails sx={{ px: 0, pt: 0 }}>
-                            <Stack spacing={0.75}>
-                              <TextField
-                                size="small"
-                                label="Build Codes (key: value per line)"
-                                multiline
-                                minRows={2}
-                                value={buildCodeText}
-                                onChange={(event) => {
-                                  const value = event.target.value;
-                                  setBuildCodeText(value);
-                                  setBuildDraft((prev) => ({ ...prev, buildCodes: parseBuildCodesText(value) }));
-                                }}
-                              />
-
-                              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                                <TextField
-                                  size="small"
-                                  label="Skill Code"
-                                  fullWidth
-                                  value={buildDraft.skillCode}
-                                  onChange={(event) => setBuildDraft((prev) => ({ ...prev, skillCode: event.target.value }))}
-                                />
-                                <TextField
-                                  size="small"
-                                  label="Build URL"
-                                  fullWidth
-                                  value={buildDraft.buildUrl}
-                                  onChange={(event) => setBuildDraft((prev) => ({ ...prev, buildUrl: event.target.value }))}
-                                />
-                              </Stack>
-
-                              <TextField
-                                size="small"
-                                label="Description"
-                                multiline
-                                minRows={2}
-                                value={buildDraft.description}
-                                onChange={(event) => setBuildDraft((prev) => ({ ...prev, description: event.target.value }))}
-                              />
-
-                              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
-                                <TextField
-                                  size="small"
-                                  label="Range Min"
-                                  type="number"
-                                  value={buildDraft.primaryRangeBracket?.[0] ?? 0}
-                                  onChange={(event) => {
-                                    const min = Number(event.target.value) || 0;
-                                    setBuildDraft((prev) => ({
-                                      ...prev,
-                                      primaryRangeBracket: [min, prev.primaryRangeBracket?.[1] ?? 0],
-                                    }));
-                                  }}
-                                />
-                                <TextField
-                                  size="small"
-                                  label="Range Max"
-                                  type="number"
-                                  value={buildDraft.primaryRangeBracket?.[1] ?? 0}
-                                  onChange={(event) => {
-                                    const max = Number(event.target.value) || 0;
-                                    setBuildDraft((prev) => ({
-                                      ...prev,
-                                      primaryRangeBracket: [prev.primaryRangeBracket?.[0] ?? 0, max],
-                                    }));
-                                  }}
-                                />
-                                <TextField
-                                  size="small"
-                                  label="Optimal Range"
-                                  type="number"
-                                  value={buildDraft.optimalRange ?? 0}
-                                  onChange={(event) => setBuildDraft((prev) => ({ ...prev, optimalRange: Number(event.target.value) || 0 }))}
-                                />
-                                <TextField
-                                  size="small"
-                                  label="Max Range"
-                                  type="number"
-                                  value={buildDraft.maxRange ?? 0}
-                                  onChange={(event) => setBuildDraft((prev) => ({ ...prev, maxRange: Number(event.target.value) || 0 }))}
-                                />
-                              </Stack>
-
-                              {!!Object.keys(buildMeta).length && (
-                                <Box
-                                  sx={{
-                                    borderRadius: 1,
-                                    px: 1,
-                                    py: 0.75,
-                                    maxHeight: 120,
-                                    overflowY: "auto",
-                                    background: isLight ? "rgba(230, 237, 246, 0.9)" : "rgba(9, 16, 35, 0.8)",
-                                  }}
-                                >
-                                  <Typography
-                                    component="pre"
-                                    sx={{ m: 0, whiteSpace: "pre-wrap", fontSize: "0.7rem", color: isLight ? "#3f5575" : "#c7d6f8" }}
-                                  >
-                                    {JSON.stringify(buildMeta, null, 2)}
-                                  </Typography>
-                                </Box>
-                              )}
-                            </Stack>
-                          </AccordionDetails>
-                        </Accordion>
-                      </Stack>
-                    </AccordionDetails>
-                  </Accordion>
-
-                  <Button
-                    variant="contained"
-                    disabled={buildSaving}
-                    onClick={async () => {
-                      setBuildSaving(true);
-                      setBuildActionError("");
-                      setBuildActionNotice("");
-                      try {
-                        const payload: CreateMechInput = {
-                          ...buildDraft,
-                          equipment: parseListText(equipmentText),
-                          buildCodes: parseBuildCodesText(buildCodeText),
-                        };
-                        await createMech(payload);
-                        await refreshRepositoryData();
-                        setBuildActionNotice(
-                          `Build created for ${payload.chassis}-${payload.variant}. Existing chassis/variant are grouped automatically.`,
-                        );
-                      } catch (err: unknown) {
-                        setBuildActionError(err instanceof Error ? err.message : "Failed to create build");
-                      } finally {
-                        setBuildSaving(false);
-                      }
-                    }}
-                  >
-                    {buildSaving ? "Saving..." : "Create Build"}
-                  </Button>
-                </Stack>
-              </Paper>
-
-              {mechError && <Alert severity="error">{mechError}</Alert>}
-              {mechLoading && <Alert severity="info">Loading mech documents...</Alert>}
-              {repoError && <Alert severity="error">{repoError}</Alert>}
-              {repoLoading && <Alert severity="info">Loading repository hierarchy...</Alert>}
-              {!repoLoading && !repoHierarchy.length && !repoError && (
-                <Alert severity="info">No mech documents found in Cosmos yet.</Alert>
-              )}
-
-              {repoHierarchy.map((summary) => (
-                <Accordion key={summary.class} disableGutters elevation={0} sx={{ background: isLight ? "rgba(233, 239, 247, 0.85)" : "rgba(13, 21, 42, 0.72)" }}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: isLight ? "#4b607f" : "#dce4ff" }} />}>
-                    <Typography sx={{ color: isLight ? "#3a4e6d" : "#dce4ff", fontWeight: 700 }}>{classLabel(summary)}</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Stack spacing={1}>
-                      {summary.chassis.map((entry) => (
-                        <Accordion
-                          key={`${summary.class}-${entry.chassis}`}
-                          disableGutters
-                          elevation={0}
-                          sx={{ background: isLight ? "rgba(226, 234, 244, 0.88)" : "rgba(15, 25, 50, 0.72)" }}
-                        >
-                          <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: isLight ? "#4f6382" : "#cbd6f6" }} />}>
-                            <Typography sx={{ color: isLight ? "#4f6382" : "#cbd6f6", fontWeight: 600 }}>
-                              {entry.chassis} ({entry.buildCount})
-                            </Typography>
-                          </AccordionSummary>
-                          <AccordionDetails>
-                            <Stack spacing={0.5}>
-                              {entry.variants.map((variant) => (
-                                <Box
-                                  key={`${entry.chassis}-${variant.variant}`}
-                                  sx={{
-                                    px: 1.25,
-                                    py: 1,
-                                    borderRadius: 1,
-                                    border: isLight ? "1px solid rgba(114, 133, 162, 0.28)" : "1px solid rgba(130, 154, 217, 0.3)",
-                                    background: isLight ? "rgba(241, 246, 252, 0.9)" : "rgba(18, 30, 58, 0.74)",
-                                  }}
-                                >
-                                  <Typography sx={{ color: isLight ? "#4f6382" : "#cbd6f6", fontWeight: 700, mb: 0.75 }}>
-                                    {variant.variant}: {variant.buildCount} build{variant.buildCount === 1 ? "" : "s"}
-                                  </Typography>
-
-                                  {!variant.builds.length ? (
-                                    <Typography sx={{ color: isLight ? "#5d7191" : "#adbee9" }}>
-                                      No markdown content found.
-                                    </Typography>
-                                  ) : (
-                                    <Stack spacing={1}>
-                                      {variant.builds.map((build) => (
-                                        <Box
-                                          key={build.id}
-                                          sx={{
-                                            px: 1,
-                                            py: 0.75,
-                                            borderRadius: 1,
-                                            background: isLight ? "rgba(255, 255, 255, 0.75)" : "rgba(9, 14, 28, 0.72)",
-                                            color: isLight ? "#30425f" : "#dce4ff",
-                                          }}
-                                        >
-                                          <Typography
-                                            component="pre"
-                                            sx={{
-                                              m: 0,
-                                              whiteSpace: "pre-wrap",
-                                              wordBreak: "break-word",
-                                              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, monospace",
-                                              fontSize: "0.82rem",
-                                              lineHeight: 1.5,
-                                            }}
-                                          >
-                                            {build.markdown}
-                                          </Typography>
-                                        </Box>
-                                      ))}
-                                    </Stack>
-                                  )}
-                                </Box>
-                              ))}
-                            </Stack>
-                          </AccordionDetails>
-                        </Accordion>
-                      ))}
-                    </Stack>
-                  </AccordionDetails>
-                </Accordion>
-              ))}
-            </Stack>
+            <AddBuildDialog
+              open={addBuildDialogOpen}
+              onClose={() => setAddBuildDialogOpen(false)}
+              onBuildCreated={() => refreshRepositoryData()}
+              mode={mode}
+            />
           </Paper>
         )}
       </Container>

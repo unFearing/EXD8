@@ -34,3 +34,4 @@ pnpm-debug.log*
 .idea/
 *.suo
 *.sln
+api/local.settings.json
