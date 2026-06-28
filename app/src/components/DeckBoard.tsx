@@ -5,6 +5,8 @@ import {
   Box,
   Button,
   ButtonGroup,
+  Checkbox,
+  Chip,
   Container,
   FormControl,
   InputLabel,
@@ -21,6 +23,8 @@ import {
   TableRow,
   Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Toolbar,
   Typography,
   Tooltip,
@@ -39,8 +43,12 @@ import type {
   DeckSide,
   DropDeckDoc,
   DropDeckUpsertInput,
+  ConfigMech,
   MapConfigDoc,
   MechDoc,
+  MechsConfigFile,
+  SelectorSource,
+  WeightClass,
   WeightClassSummary,
 } from "../types/contracts";
 
@@ -55,6 +63,12 @@ type DeckRow = {
   alternates: string[];
   lance: Lance;
   mech: string;
+  chassis: string;
+  variant: string;
+  weaponry: string;
+  equipmentText: string;
+  codename: string;
+  buildUrl: string;
   role?: string;
   loadout?: string;
   buildCode?: string;
@@ -97,6 +111,21 @@ const PILOT_OPTIONS = [
   "NeirSolon",
 ];
 
+const getPilotShortcode = (pilotName: string): string => {
+  return pilotName.substring(0, 4).toUpperCase();
+};
+
+const formatPilotDisplay = (pilots: string[]): string => {
+  if (!pilots.length) return "";
+  return pilots.map(getPilotShortcode).join(", ");
+};
+
+const editSelectIconSx = {
+  "& .MuiSelect-icon": { opacity: 0, transition: "opacity 140ms ease" },
+  "&:hover .MuiSelect-icon": { opacity: 0.5 },
+  "&.Mui-focused .MuiSelect-icon": { opacity: 0.5 },
+};
+
 function createEmptyRow(slot: number): DeckRow {
   return {
     slot,
@@ -104,6 +133,14 @@ function createEmptyRow(slot: number): DeckRow {
     alternates: [],
     lance: "",
     mech: "",
+    chassis: "",
+    variant: "",
+    weaponry: "",
+    equipmentText: "",
+    codename: "",
+    buildUrl: "",
+    role: "",
+    skillTree: "",
   };
 }
 
@@ -129,6 +166,14 @@ function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
     alternates: row?.alternates ?? [],
     lance: row?.lance ?? "",
     mech: row?.mech ?? "",
+    chassis: row?.chassis ?? "",
+    variant: row?.variant ?? "",
+    weaponry: row?.weaponry ?? "",
+    equipmentText: row?.equipmentText ?? "",
+    codename: row?.codename ?? "",
+    buildUrl: row?.buildUrl ?? "",
+    role: row?.role ?? "",
+    skillTree: row?.skillTree ?? "",
   };
 }
 
@@ -156,11 +201,18 @@ function sideLabel(side: TeamSide): string {
   return "Either";
 }
 
-function resolveMechDetails(selection: string, mechs: MechDoc[]): { mech?: MechDoc; label: string } {
+function resolveMechDetails(
+  selection: string,
+  mechs: MechDoc[],
+  configuredByKey: Map<string, ConfigMech>,
+): { mech?: MechDoc; configMech?: ConfigMech; label: string } {
   if (!selection) return { label: "-" };
 
   const byId = mechs.find((mech) => mech.id === selection);
   if (byId) return { mech: byId, label: `${byId.chassis}-${byId.variant}` };
+
+  const config = configuredByKey.get(selection);
+  if (config) return { configMech: config, label: `${config.chassis}-${config.variant}` };
 
   const byVariant = mechs.find((mech) => `${mech.chassis}-${mech.variant}` === selection);
   if (byVariant) return { mech: byVariant, label: selection };
@@ -169,6 +221,55 @@ function resolveMechDetails(selection: string, mechs: MechDoc[]): { mech?: MechD
   if (byChassis) return { mech: byChassis, label: selection };
 
   return { label: selection };
+}
+
+function toWeightClassLabel(value: string): "Light" | "Medium" | "Heavy" | "Assault" {
+  if (value === "LIGHT") return "Light";
+  if (value === "MEDIUM") return "Medium";
+  if (value === "HEAVY") return "Heavy";
+  return "Assault";
+}
+
+function flattenMechsConfig(file: MechsConfigFile): ConfigMech[] {
+  const list: ConfigMech[] = [];
+  for (const tech of Object.keys(file.mechs) as Array<"IS" | "Clan">) {
+    const byClass = file.mechs[tech];
+    for (const classKey of Object.keys(byClass) as Array<"LIGHT" | "MEDIUM" | "HEAVY" | "ASSAULT">) {
+      const chassisRecords = byClass[classKey];
+      for (const chassisName of Object.keys(chassisRecords)) {
+        const chassis = chassisRecords[chassisName];
+        for (const variant of chassis.variants) {
+          list.push({
+            key: `${chassis.chassis_name}|${variant}`,
+            tech,
+            class: toWeightClassLabel(classKey),
+            chassis: chassis.chassis_name,
+            variant,
+            tonnage: chassis.tonnage,
+          });
+        }
+      }
+    }
+  }
+
+  return list;
+}
+
+async function loadMechsConfig(): Promise<ConfigMech[]> {
+  const candidates = ["/mwo_docs/mechs_config.json", "/mechs_config.json"];
+  for (const path of candidates) {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) continue;
+      const parsed = (await response.json()) as MechsConfigFile;
+      if (!parsed?.mechs) continue;
+      return flattenMechsConfig(parsed);
+    } catch {
+      // Try next location.
+    }
+  }
+
+  return [];
 }
 
 function formatUpdatedAt(value?: string): string {
@@ -204,6 +305,14 @@ function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
       alternates: row.alternates,
       lance: row.lance,
       mech: row.mech,
+      chassis: row.chassis,
+      variant: row.variant,
+      weaponry: row.weaponry,
+      equipmentText: row.equipmentText,
+      codename: row.codename,
+      buildUrl: row.buildUrl,
+      role: row.role ?? "",
+      skillTree: row.skillTree ?? "",
     })),
   };
 }
@@ -231,7 +340,11 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   const [deckLoading, setDeckLoading] = useState(false);
   const [deckSaving, setDeckSaving] = useState(false);
   const [deckError, setDeckError] = useState("");
+  const descriptionDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descriptionDraftRef = useRef("");
   const [mechs, setMechs] = useState<MechDoc[]>([]);
+  const [configuredMechs, setConfiguredMechs] = useState<ConfigMech[]>([]);
+  const [mechSelectorSource, setMechSelectorSource] = useState<SelectorSource>("repository");
   const [repoHierarchy, setRepoHierarchy] = useState<WeightClassSummary[]>([]);
   const [repoLoading, setRepoLoading] = useState(false);
   const [repoError, setRepoError] = useState<string>("");
@@ -266,12 +379,19 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   useEffect(() => {
     let cancelled = false;
 
-    getMechs()
-      .then((data) => {
-        if (!cancelled) setMechs(data);
+    Promise.all([getMechs(), loadMechsConfig()])
+      .then(([cosmosMechs, configMechs]) => {
+        if (cancelled) return;
+        setMechs(cosmosMechs);
+        setConfiguredMechs(configMechs);
       })
-      .catch(() => {
-        // Silently fail, mechs are used for the deck selector
+      .catch(async () => {
+        try {
+          const cosmosMechs = await getMechs();
+          if (!cancelled) setMechs(cosmosMechs);
+        } catch {
+          // Silently fail, mechs are used for the deck selector.
+        }
       });
 
     return () => {
@@ -322,6 +442,89 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   }, [appView, mapOptions]);
 
   const mechLookup = useMemo(() => new Map(mechs.map((mech) => [mech.id, mech])), [mechs]);
+  const configuredByKey = useMemo(() => new Map(configuredMechs.map((mech) => [mech.key, mech])), [configuredMechs]);
+  // Config catalog indexed by normalized chassis|variant for enrichment lookups.
+  const configuredByPair = useMemo(
+    () => new Map(configuredMechs.map((mech) => [`${mech.chassis}|${mech.variant}`.toLowerCase(), mech])),
+    [configuredMechs],
+  );
+  // Repository mechs = all Cosmos docs shaped as ConfigMech (key = doc UUID).
+  // Tech and tonnage are enriched from the config catalog when the Cosmos doc omits them.
+  const repositoryMechs = useMemo<ConfigMech[]>(
+    () =>
+      mechs.map((doc) => {
+        // Infer tech from chassis name prefix when not stored on doc.
+        const inferredTech: "IS" | "Clan" =
+          doc.tech ?? (/^clan\s/i.test(doc.chassis) ? "Clan" : "IS");
+        const chassis = doc.chassis.toLowerCase();
+        const variant = doc.variant.toLowerCase();
+        const stripped = chassis.replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "");
+        // Try increasingly loose config matches to find the canonical tonnage.
+        const configEntry =
+          configuredByPair.get(`${chassis}|${variant}`) ??
+          configuredByPair.get(`${stripped}|${variant}`) ??
+          [...configuredByPair.entries()].find(
+            ([k]) => k.startsWith(`${stripped}|`) && k.endsWith(variant),
+          )?.[1];
+        return {
+          key: doc.id,
+          tech: inferredTech,
+          class: (doc.class ?? configEntry?.class ?? "Medium") as WeightClass,
+          chassis: doc.chassis,
+          variant: doc.variant,
+          tonnage: doc.tonnage ?? configEntry?.tonnage ?? 0,
+        };
+      }),
+    [mechs, configuredByPair],
+  );
+  // Map doc-id -> MechDoc for fast tonnage lookup.
+  const repositoryMechById = useMemo(() => {
+    const map = new Map<string, MechDoc>();
+    for (const mech of mechs) map.set(mech.id, mech);
+    return map;
+  }, [mechs]);
+  const repoIdToAllKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const mech of mechs) {
+      const chassis = mech.chassis.toLowerCase();
+      const variant = mech.variant.toLowerCase();
+      const stripped = chassis.replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "");
+      const configEntry =
+        configuredByPair.get(`${chassis}|${variant}`) ??
+        configuredByPair.get(`${stripped}|${variant}`) ??
+        [...configuredByPair.entries()].find(([k]) => k.startsWith(`${stripped}|`) && k.endsWith(variant))?.[1];
+      if (configEntry) map.set(mech.id, configEntry.key);
+    }
+    return map;
+  }, [configuredByPair, mechs]);
+  const repositoryMechIds = useMemo(() => new Set(mechs.map((m) => m.id)), [mechs]);
+  const filteredRepoHierarchy = useMemo(() => {
+    return repoHierarchy
+      .map((weightClass) => ({
+        ...weightClass,
+        chassis: weightClass.chassis
+          .map((chassis) => ({
+            ...chassis,
+            variants: chassis.variants
+              .map((variant) => ({
+                ...variant,
+                builds: variant.builds.filter((build) => repositoryMechIds.has(build.id)),
+              }))
+              .filter((variant) => variant.builds.length > 0)
+              .map((variant) => ({ ...variant, buildCount: variant.builds.length })),
+          }))
+          .filter((chassis) => chassis.variants.length > 0)
+          .map((chassis) => ({
+            ...chassis,
+            buildCount: chassis.variants.reduce((sum, variant) => sum + variant.buildCount, 0),
+          })),
+      }))
+      .filter((weightClass) => weightClass.chassis.length > 0)
+      .map((weightClass) => ({
+        ...weightClass,
+        buildCount: weightClass.chassis.reduce((sum, chassis) => sum + chassis.buildCount, 0),
+      }));
+  }, [repoHierarchy, repositoryMechIds]);
 
   useEffect(() => {
     if (appView !== 1) return;
@@ -374,8 +577,12 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
 
   const totalTonnage = useMemo(() => {
     if (!activeTemplate) return 0;
-    return activeTemplate.rows.reduce((sum, row) => sum + (mechLookup.get(row.mech)?.tonnage ?? 0), 0);
-  }, [activeTemplate, mechLookup]);
+    return activeTemplate.rows.reduce((sum, row) => {
+      const byId = mechLookup.get(row.mech)?.tonnage ?? repositoryMechById.get(row.mech)?.tonnage;
+      const byConfig = configuredByKey.get(row.mech)?.tonnage;
+      return sum + (byId ?? byConfig ?? 0);
+    }, 0);
+  }, [activeTemplate, configuredByKey, mechLookup, repositoryMechById]);
 
   const updateActiveTemplate = (updater: (template: DeckTemplate) => DeckTemplate) => {
     if (!activeTemplateId) return;
@@ -389,12 +596,57 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
     }));
   };
 
-  const applyMechDefaults = (rowIndex: number, mechCode: string) => {
+  const getBuildOptions = (chassis: string, variant: string): MechDoc[] => {
+    if (!chassis) return [];
+    const normalize = (value: string) => value.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
+    const c = normalize(chassis);
+    const v = variant.toLowerCase().trim();
+    return mechs.filter((doc) => {
+      if (normalize(doc.chassis) !== c) return false;
+      if (!variant) return true;
+      return doc.variant.toLowerCase().trim() === v;
+    });
+  };
+
+  const formatBuildLabel = (weaponry: string, codename: string): string => {
+    const w = weaponry.trim();
+    const c = codename.trim();
+    if (w && c) return `${w} | ${c}`;
+    return w || c || "-";
+  };
+
+  const applyBuildToRow = (row: DeckRow, build: MechDoc): DeckRow => ({
+    ...row,
+    mech: build.id,
+    chassis: build.chassis,
+    variant: build.variant,
+    weaponry: build.weaponry,
+    codename: build.codename ?? "",
+    buildUrl: build.link || build.buildUrl || "",
+    role: build.role ?? row.role ?? "",
+    skillTree: build.skillCode ?? row.skillTree ?? "",
+    equipmentText: (build.metadata?.equipment ?? build.equipment ?? []).join(", "),
+  });
+
+  const setRowChassisVariant = (rowIndex: number, value: { mechId: string; chassis: string; variant: string }) => {
     updateRow(rowIndex, (row) => {
       return {
         ...row,
-        mech: mechCode,
+        mech: "",
+        chassis: value.chassis,
+        variant: value.variant,
+        weaponry: "",
+        codename: "",
+        buildUrl: "",
       };
+    });
+  };
+
+  const setRowBuild = (rowIndex: number, mechId: string) => {
+    updateRow(rowIndex, (row) => {
+      const build = mechLookup.get(mechId);
+      if (!build) return { ...row, mech: mechId };
+      return applyBuildToRow(row, build);
     });
   };
 
@@ -432,6 +684,27 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
     setSelectedTemplateId(fresh.id);
   };
 
+  // Explicit first-save for new (unsaved) decks.
+  const saveNewDeck = async () => {
+    if (!activeTemplate || isUuid(activeTemplate.id)) return;
+    setDeckSaving(true);
+    setDeckError("");
+    try {
+      const savedDoc = await saveDropDeck(toDropDeckUpsertInput(activeTemplate));
+      const savedTemplate = toTemplate(savedDoc);
+      syncedSignaturesRef.current.set(savedTemplate.id, templateSignature(savedTemplate));
+      syncedTemplatesRef.current.set(savedTemplate.id, savedTemplate);
+      setTemplates((previous) =>
+        previous.map((template) => (template.id === activeTemplate.id ? savedTemplate : template)),
+      );
+      setSelectedTemplateId(savedTemplate.id);
+    } catch (err: unknown) {
+      setDeckError(err instanceof Error ? err.message : "Failed to save deck");
+    } finally {
+      setDeckSaving(false);
+    }
+  };
+
   const onMapChange = (map: DeckMap) => {
     setSelectedMap(map);
     const candidate = templates.find((template) => template.map === map);
@@ -439,7 +712,21 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
   };
 
   useEffect(() => {
+    descriptionDraftRef.current = activeTemplate?.description ?? "";
+  }, [activeTemplate?.id, activeTemplate?.description]);
+
+  useEffect(() => {
+    return () => {
+      if (descriptionDebounceRef.current) {
+        clearTimeout(descriptionDebounceRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (appView !== 0 || !activeTemplate) return;
+    // Only autosave decks that already exist in Cosmos (UUID id).
+    if (!isUuid(activeTemplate.id)) return;
 
     const syncedSignature = syncedSignaturesRef.current.get(activeTemplate.id);
     if (syncedSignature === activeTemplateSignature) return;
@@ -636,6 +923,17 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
               <Button variant="outlined" onClick={createFreshTemplate}>
                 Fresh template
               </Button>
+
+                {activeTemplate && !isUuid(activeTemplate.id) && (
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    disabled={deckSaving}
+                    onClick={saveNewDeck}
+                  >
+                    {deckSaving ? "Saving…" : "Save Deck"}
+                  </Button>
+                )}
             </>
           )}
 
@@ -681,27 +979,340 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
           <Paper
             elevation={0}
             sx={{
-              p: 2,
               borderRadius: 2,
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-              background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+              background: isLight ? "rgba(235, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.92)",
+              overflow: "hidden",
             }}
           >
-            <Typography sx={{ color: isLight ? "#2f3f59" : "#edf4ff", fontWeight: 700, mb: 1.2 }}>Description</Typography>
-            <TextField
-              variant="standard"
-              fullWidth
-              multiline
-              minRows={11}
-              value={activeTemplate?.description ?? ""}
-              disabled={editMode !== "edit"}
-              onChange={(event) =>
-                updateActiveTemplate((template) => ({
-                  ...template,
-                  description: event.target.value,
-                }))
-              }
-            />
+            <Box
+              sx={{
+                px: 2,
+                py: 1.4,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 1,
+                flexWrap: "wrap",
+                borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.3)" : "1px solid rgba(130, 154, 217, 0.25)",
+              }}
+            >
+              <Stack spacing={0.2}>
+                <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>
+                  Deck Table ({selectedMap})
+                </Typography>
+                <Typography variant="body2" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>
+                  {activeTemplate?.name || "Unnamed dropdeck"}
+                  {activeTemplate?.side ? ` | ${sideLabel(activeTemplate.side)}` : ""}
+                  {formatUpdatedAt(activeTemplate?.updatedAt) ? ` | Updated ${formatUpdatedAt(activeTemplate?.updatedAt)}` : ""}
+                  {deckSaving ? " | Syncing..." : ""}
+                </Typography>
+              </Stack>
+              <Typography sx={{ color: isLight ? "#556887" : "#bfd0ff", fontWeight: 700 }}>Total Tonnage: {totalTonnage} t</Typography>
+            </Box>
+
+            <TableContainer
+              sx={{
+                overflowX: "auto",
+                overflowY: "hidden",
+                overscrollBehaviorX: "contain",
+                WebkitOverflowScrolling: "touch",
+                scrollbarGutter: "stable both-edges",
+                scrollbarWidth: "thin",
+                "&::-webkit-scrollbar": { height: 8 },
+                "&::-webkit-scrollbar-track": {
+                  background: isLight ? "rgba(170, 185, 206, 0.22)" : "rgba(97, 121, 176, 0.2)",
+                  borderRadius: 999,
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  background: isLight ? "rgba(96, 120, 156, 0.45)" : "rgba(142, 170, 235, 0.38)",
+                  borderRadius: 999,
+                },
+              }}
+            >
+              <Table
+                size="medium"
+                sx={{
+                  minWidth: 980,
+                  "& .MuiTableCell-root": {
+                    borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.22)" : "1px solid rgba(130, 154, 217, 0.14)",
+                    py: 1.25,
+                  },
+                  "& .MuiTableHead-root .MuiTableCell-root": {
+                    fontSize: "0.72rem",
+                    letterSpacing: "0.04em",
+                  },
+                  "& .MuiTableRow-hover:hover": {
+                    backgroundColor: isLight ? "rgba(188, 204, 227, 0.08)" : "rgba(114, 145, 219, 0.08)",
+                  },
+                  "& .MuiInputBase-root:before": {
+                    borderBottomColor: isLight ? "rgba(108, 128, 158, 0.5)" : "rgba(170, 187, 233, 0.32)",
+                  },
+                }}
+              >
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 130 }}>Primary</TableCell>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 130 }}>Alternates</TableCell>
+                      <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 35, maxWidth: 35 }}>Lance</TableCell>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 300 }}>
+                      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
+                        <Typography component="span" sx={{ fontWeight: 700, color: "inherit" }}>Mech</Typography>
+                        <ToggleButtonGroup
+                          exclusive
+                          size="small"
+                          value={mechSelectorSource}
+                          onChange={(_, value: SelectorSource | null) => {
+                            if (value) setMechSelectorSource(value);
+                          }}
+                        >
+                          <ToggleButton value="repository">Repository</ToggleButton>
+                          <ToggleButton value="all">All</ToggleButton>
+                        </ToggleButtonGroup>
+                      </Stack>
+                    </TableCell>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 90 }}>Role</TableCell>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 240 }}>Build</TableCell>
+                    <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 180 }}>Skill Tree</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {activeTemplate?.rows.map((row, rowIndex) => {
+                    const mechDetails = resolveMechDetails(row.mech, mechs, configuredByKey);
+                    const mech = mechDetails.mech;
+                    const rowChassis = row.chassis || mech?.chassis || "";
+                    const rowVariant = row.variant || mech?.variant || "";
+                    const buildOptions = getBuildOptions(rowChassis, rowVariant);
+                    const selectedBuildId = mech?.id || row.mech || "";
+
+                    return (
+                      <TableRow key={row.slot} hover>
+                        <TableCell sx={{ minWidth: 130 }}>
+                          {editMode === "edit" ? (
+                            <FormControl size="small" fullWidth variant="standard">
+                              <Select
+                                multiple
+                                variant="standard"
+                                value={row.primary}
+                                displayEmpty
+                                onChange={(event) => setPrimaryPilots(rowIndex, event.target.value as string[])}
+                                renderValue={(value) => formatPilotDisplay(value as string[])}
+                                sx={editSelectIconSx}
+                              >
+                                {PILOT_OPTIONS.map((pilot) => (
+                                  <MenuItem key={pilot} value={pilot}>
+                                    <Checkbox checked={row.primary.includes(pilot)} size="small" sx={{ mr: 1 }} />
+                                    {getPilotShortcode(pilot)}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+                              {(row.primary.length ? row.primary : ["-"]).map((pilot) => (
+                                <Chip
+                                  key={`primary-${row.slot}-${pilot}`}
+                                  size="small"
+                                  label={pilot === "-" ? "-" : getPilotShortcode(pilot)}
+                                  sx={{
+                                    height: 20,
+                                    fontSize: "0.68rem",
+                                    color: isLight ? "#425576" : "#d3ddfc",
+                                    backgroundColor: isLight ? "rgba(145, 165, 196, 0.22)" : "rgba(111, 137, 197, 0.24)",
+                                  }}
+                                />
+                              ))}
+                            </Stack>
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ minWidth: 130 }}>
+                          {editMode === "edit" ? (
+                            <FormControl size="small" fullWidth variant="standard">
+                              <Select
+                                multiple
+                                variant="standard"
+                                value={getVisibleAlternates(row)}
+                                displayEmpty
+                                onChange={(event) => setAlternatePilots(rowIndex, event.target.value as string[])}
+                                renderValue={(value) => formatPilotDisplay(value as string[])}
+                                sx={editSelectIconSx}
+                              >
+                                {PILOT_OPTIONS.map((pilot) => (
+                                  <MenuItem key={pilot} value={pilot}>
+                                    <Checkbox checked={getVisibleAlternates(row).includes(pilot)} size="small" sx={{ mr: 1 }} />
+                                    {getPilotShortcode(pilot)}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+                              {(getVisibleAlternates(row).length ? getVisibleAlternates(row) : ["-"]).map((pilot) => (
+                                <Chip
+                                  key={`alternate-${row.slot}-${pilot}`}
+                                  size="small"
+                                  label={pilot === "-" ? "-" : getPilotShortcode(pilot)}
+                                  sx={{
+                                    height: 20,
+                                    fontSize: "0.68rem",
+                                    color: isLight ? "#425576" : "#d3ddfc",
+                                    backgroundColor: isLight ? "rgba(145, 165, 196, 0.22)" : "rgba(111, 137, 197, 0.24)",
+                                  }}
+                                />
+                              ))}
+                            </Stack>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <FormControl size="small" fullWidth variant="standard">
+                            <Select
+                              variant="standard"
+                              value={row.lance}
+                              displayEmpty
+                              disabled={editMode !== "edit"}
+                              onChange={(event) => updateRow(rowIndex, (entry) => ({ ...entry, lance: event.target.value as Lance }))}
+                              renderValue={(value) => (value ? value : "-")}
+                              sx={editMode === "edit" ? editSelectIconSx : { "& .MuiSelect-icon": { display: "none" } }}
+                            >
+                              {LANCE_OPTIONS.map((lane) => (
+                                <MenuItem key={`lance-${lane || "none"}`} value={lane}>
+                                  {lane || "-"}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </TableCell>
+                        <TableCell>
+                          {editMode === "edit" ? (
+                            <MechSelector
+                              selectedMechId={row.mech}
+                              selectedChassis={rowChassis}
+                              selectedVariant={rowVariant}
+                              allConfiguredMechs={configuredMechs}
+                              repositoryMechs={repositoryMechs}
+                              repoIdToAllKey={repoIdToAllKey}
+                              source={mechSelectorSource}
+                              onChange={(value) => setRowChassisVariant(rowIndex, value)}
+                              disabled={false}
+                            />
+                          ) : (
+                            <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
+                              {mechDetails.label}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editMode === "edit" ? (
+                              <FormControl size="small" fullWidth variant="standard">
+                                <Select
+                                  variant="standard"
+                                  value={row.role ?? ""}
+                                  displayEmpty
+                                  onChange={(event) => updateRow(rowIndex, (entry) => ({ ...entry, role: event.target.value }))}
+                                  renderValue={(value) => value || (mech?.role ? `${mech.role} (from build)` : "-")}
+                                  sx={editSelectIconSx}
+                                >
+                                  <MenuItem value="">{mech?.role ? `${mech.role} (from build)` : "- (none)"}</MenuItem>
+                                  {["Light", "Medium", "Heavy", "Assault", "Support", "Sniper", "Brawler"].map((role) => (
+                                    <MenuItem key={role} value={role}>{role}</MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                          ) : (
+                            <Chip
+                              size="small"
+                              label={row.role || mech?.role || "-"}
+                              sx={{
+                                height: 22,
+                                fontSize: "0.72rem",
+                                color: isLight ? "#425576" : "#d3ddfc",
+                                backgroundColor: isLight ? "rgba(145, 165, 196, 0.22)" : "rgba(111, 137, 197, 0.24)",
+                              }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editMode === "edit" ? (
+                            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                              <FormControl size="small" fullWidth variant="standard">
+                                <Select
+                                  variant="standard"
+                                  value={selectedBuildId}
+                                  displayEmpty
+                                  disabled={!rowChassis || buildOptions.length === 0}
+                                  onChange={(event) => setRowBuild(rowIndex, String(event.target.value))}
+                                  sx={editSelectIconSx}
+                                  renderValue={(value) => {
+                                    const picked = buildOptions.find((b) => b.id === String(value));
+                                    return formatBuildLabel(picked?.weaponry ?? row.weaponry ?? "", picked?.codename ?? row.codename ?? "");
+                                  }}
+                                >
+                                  {buildOptions.map((build) => (
+                                    <MenuItem key={build.id} value={build.id}>
+                                      {formatBuildLabel(build.weaponry, build.codename ?? "")}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </Stack>
+                          ) : null}
+                          {editMode !== "edit" && (row.buildUrl || mech?.link || mech?.buildUrl) ? (
+                              <Stack direction="column" spacing={0.5}>
+                                <a
+                              href={row.buildUrl || mech?.link || mech?.buildUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: isLight ? "#3a6fbd" : "#7fb3ff", fontSize: "0.8rem", display: "block" }}
+                            >
+                              {formatBuildLabel(row.weaponry || mech?.weaponry || "", row.codename || mech?.codename || "")}
+                                </a>
+                                  {mech?.link && (
+                                  <a
+                                      href={mech.link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ color: isLight ? "#3a6fbd" : "#7fb3ff", fontSize: "0.75rem", display: "block" }}
+                                  >
+                                    Full Build
+                                  </a>
+                                )}
+                              </Stack>
+                          ) : editMode !== "edit" ? (
+                            <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.78rem" }}>
+                              {formatBuildLabel(row.weaponry || mech?.weaponry || "", row.codename || mech?.codename || "")}
+                            </Typography>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          {editMode === "edit" ? (
+                            <TextField
+                              variant="standard"
+                              fullWidth
+                              value={row.skillTree ?? ""}
+                              onChange={(event) => updateRow(rowIndex, (entry) => ({ ...entry, skillTree: event.target.value }))}
+                            />
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              sx={{
+                                color: isLight ? "#4f6282" : "#d3ddfc",
+                                maxWidth: 140,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                              title={row.skillTree || mech?.skillCode || ""}
+                            >
+                              {row.skillTree || mech?.skillCode || "-"}
+                            </Typography>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Paper>
 
           <Paper
@@ -748,149 +1359,49 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
         <Paper
           elevation={0}
           sx={{
+            p: 2,
             borderRadius: 2,
             border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-            background: isLight ? "rgba(235, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.92)",
-            overflow: "hidden",
+            background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
           }}
         >
-          <Box
-            sx={{
-              px: 2,
-              py: 1.4,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 1,
-              flexWrap: "wrap",
-              borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.3)" : "1px solid rgba(130, 154, 217, 0.25)",
+          <Typography sx={{ color: isLight ? "#2f3f59" : "#edf4ff", fontWeight: 700, mb: 1.2 }}>Description</Typography>
+          <TextField
+            key={activeTemplateId || "description"}
+            variant="standard"
+            fullWidth
+            multiline
+            minRows={5}
+            defaultValue={activeTemplate?.description ?? ""}
+            disabled={editMode !== "edit"}
+            onChange={(event) => {
+              descriptionDraftRef.current = event.target.value;
+              if (descriptionDebounceRef.current) {
+                clearTimeout(descriptionDebounceRef.current);
+              }
+              descriptionDebounceRef.current = setTimeout(() => {
+                updateActiveTemplate((template) => ({
+                  ...template,
+                  description:
+                    template.description === descriptionDraftRef.current
+                      ? template.description
+                      : descriptionDraftRef.current,
+                }));
+              }, 1200);
             }}
-          >
-            <Stack spacing={0.2}>
-              <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>
-                Deck Table ({selectedMap})
-              </Typography>
-              <Typography variant="body2" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>
-                {activeTemplate?.name || "Unnamed dropdeck"}
-                {activeTemplate?.side ? ` | ${sideLabel(activeTemplate.side)}` : ""}
-                {formatUpdatedAt(activeTemplate?.updatedAt) ? ` | Updated ${formatUpdatedAt(activeTemplate?.updatedAt)}` : ""}
-                {deckSaving ? " | Syncing..." : ""}
-              </Typography>
-            </Stack>
-            <Typography sx={{ color: isLight ? "#556887" : "#bfd0ff", fontWeight: 700 }}>Total Tonnage: {totalTonnage} t</Typography>
-          </Box>
-
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table
-              size="medium"
-              sx={{
-                minWidth: 980,
-                "& .MuiTableCell-root": {
-                  borderBottom: isLight ? "1px solid rgba(114, 133, 162, 0.22)" : "1px solid rgba(130, 154, 217, 0.14)",
-                  py: 1,
-                },
-                "& .MuiInputBase-root:before": {
-                  borderBottomColor: isLight ? "rgba(108, 128, 158, 0.5)" : "rgba(170, 187, 233, 0.32)",
-                },
-              }}
-            >
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 220 }}>Primary</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 220 }}>Alternates</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 110 }}>Lance</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 240 }}>Mech</TableCell>
-                  <TableCell sx={{ color: isLight ? "#3d4f6f" : "#dce4ff", fontWeight: 700, minWidth: 280 }}>Mech Data</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {activeTemplate?.rows.map((row, rowIndex) => {
-                  const mechDetails = resolveMechDetails(row.mech, mechs);
-                  const mech = mechDetails.mech;
-
-                  return (
-                    <TableRow key={row.slot} hover>
-                      <TableCell>
-                        <FormControl size="small" fullWidth variant="standard">
-                          <Select
-                            multiple
-                            variant="standard"
-                            value={row.primary}
-                            displayEmpty
-                            disabled={editMode !== "edit"}
-                            onChange={(event) => setPrimaryPilots(rowIndex, event.target.value as string[])}
-                            renderValue={(value) => ((value as string[]).length ? (value as string[]).join(", ") : "")}
-                          >
-                            {PILOT_OPTIONS.map((pilot) => (
-                              <MenuItem key={pilot} value={pilot}>
-                                {pilot}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </TableCell>
-                      <TableCell>
-                        <FormControl size="small" fullWidth variant="standard">
-                          <Select
-                            multiple
-                            variant="standard"
-                            value={getVisibleAlternates(row)}
-                            displayEmpty
-                            disabled={editMode !== "edit"}
-                            onChange={(event) => setAlternatePilots(rowIndex, event.target.value as string[])}
-                            renderValue={(value) => ((value as string[]).length ? (value as string[]).join(", ") : "")}
-                          >
-                            {PILOT_OPTIONS.map((pilot) => (
-                              <MenuItem key={pilot} value={pilot}>
-                                {pilot}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </TableCell>
-                      <TableCell>
-                        <FormControl size="small" fullWidth variant="standard">
-                          <Select
-                            variant="standard"
-                            value={row.lance}
-                            displayEmpty
-                            disabled={editMode !== "edit"}
-                            onChange={(event) => updateRow(rowIndex, (entry) => ({ ...entry, lance: event.target.value as Lance }))}
-                            renderValue={(value) => (value ? value : "-")}
-                          >
-                            {LANCE_OPTIONS.map((lane) => (
-                              <MenuItem key={`lance-${lane || "none"}`} value={lane}>
-                                {lane || "-"}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </TableCell>
-                      <TableCell>
-                        {editMode === "edit" ? (
-                          <MechSelector
-                            selectedMechId={row.mech || null}
-                            allMechs={mechs}
-                            onChange={(mechId) => applyMechDefaults(rowIndex, mechId)}
-                            disabled={false}
-                          />
-                        ) : (
-                          <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
-                            {mechDetails.label}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc" }}>
-                          {mech ? `${mech.tonnage}T | ${mech.class} | ${mech.role}` : "-"}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
+            onBlur={() => {
+              if (descriptionDebounceRef.current) {
+                clearTimeout(descriptionDebounceRef.current);
+              }
+              updateActiveTemplate((template) => ({
+                ...template,
+                description:
+                  template.description === descriptionDraftRef.current
+                    ? template.description
+                    : descriptionDraftRef.current,
+              }));
+            }}
+          />
         </Paper>
           </Stack>
         )}
@@ -907,7 +1418,7 @@ export function DeckBoard({ mode, onToggleMode }: DeckBoardProps) {
           >
             <Box sx={{ px: 2, py: 1.5 }}>
               <RepositoryView
-                hierarchy={repoHierarchy}
+                hierarchy={filteredRepoHierarchy}
                 loading={repoLoading}
                 error={repoError}
                 onAddBuild={() => setAddBuildDialogOpen(true)}

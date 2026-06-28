@@ -356,15 +356,35 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       tonnage,
       chassis,
       variant: variantLabel,
+      codename: `${chassis}-${variantLabel}`,
+      link: sourceUrl,
       buildUrl: sourceUrl,
       skillCode: "pending",
       weaponry: "Parsed from link. Please review and update weapon details.",
-      equipment: [],
       description: "Imported from NAV-Alpha build link.",
       role: tonnage >= 80 ? "Juggernaut" : tonnage >= 60 ? "Brawler" : "Skirmisher",
       buildCodes: {
         imported: variantCode,
       },
+      metadata: {
+        equipment: [],
+        ranges: {
+          optimal: 0,
+          max: 0,
+          idealMin: 0,
+          idealMax: 0,
+        },
+        heat: {
+          generation: 0,
+          capacity: 0,
+          dissipation: 0,
+        },
+        dps: {
+          sustained: 0,
+          max: 0,
+        },
+      },
+      equipment: [],
       primaryRangeBracket: [0, 0],
       optimalRange: 0,
       maxRange: 0,
@@ -408,6 +428,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         result.metadata.parseMode = "rendered-sidebar";
       }
       if (parsed?.equipment.length) {
+        result.draft.metadata.equipment = parsed.equipment;
         result.draft.equipment = parsed.equipment;
         result.metadata.extractedEquipmentLines = parsed.equipment.length;
       }
@@ -427,6 +448,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           result.metadata.parseMode = "nav-alpha-api";
         }
         if (parsed?.equipment.length) {
+          result.draft.metadata.equipment = parsed.equipment;
           result.draft.equipment = parsed.equipment;
           result.metadata.extractedEquipmentLines = parsed.equipment.length;
         }

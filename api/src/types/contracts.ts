@@ -3,7 +3,7 @@ import { z } from "zod";
 export const weightClassSchema = z.enum(["Light", "Medium", "Heavy", "Assault"]);
 export type WeightClass = z.infer<typeof weightClassSchema>;
 
-export const deckMapSchema = z.enum(["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"]);
+export const deckMapSchema = z.string().min(1);
 export type DeckMap = z.infer<typeof deckMapSchema>;
 
 export const deckSideSchema = z.enum(["1", "2", "either"]);
@@ -37,20 +37,6 @@ const weightClassByTonnage: Record<WeightClass, readonly number[]> = {
   Heavy: [60, 65, 70, 75],
   Assault: [80, 85, 90, 95, 100],
 };
-
-function applyMechTonnageClassRefinement<T extends { class: WeightClass; tonnage: number }>(
-  schema: z.ZodType<T>
-): z.ZodEffects<z.ZodType<T>> {
-  return schema.superRefine((value, context) => {
-    if (!weightClassByTonnage[value.class].includes(value.tonnage)) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["tonnage"],
-        message: `tonnage ${value.tonnage} does not match class ${value.class}`,
-      });
-    }
-  });
-}
 
 export const keyFactorsSchema = z.object({
   ecm: z.boolean(),
@@ -87,7 +73,25 @@ export const deckSlotSchema = z.object({
   alternates: z.array(z.string()).default([]),
   lance: z.enum(["", "A", "B", "C"]).default(""),
   mech: z.string().default(""),
+  chassis: z.string().default(""),
+  variant: z.string().default(""),
+  weaponry: z.string().default(""),
+  equipmentText: z.string().default(""),
+  codename: z.string().default(""),
+  buildUrl: z.string().default(""),
+  role: z.string().default(""),
+  skillTree: z.string().default(""),
 });
+
+const cosmosSystemFieldsSchema = z.object({
+  _rid: z.string().optional(),
+  _self: z.string().optional(),
+  _etag: z.string().optional(),
+  _attachments: z.string().optional(),
+  _ts: z.number().int().optional(),
+});
+
+export const schemaVersionSchema = z.enum(["1.0", "1.0.0"]);
 
 export const dropDeckDocSchema = z.object({
   id: z.string().uuid(),
@@ -100,9 +104,9 @@ export const dropDeckDocSchema = z.object({
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   updatedBy: z.string().min(1),
-  schemaVersion: z.literal("1.0.0"),
-  docType: z.literal("dropDeck"),
-});
+  schemaVersion: schemaVersionSchema,
+  docType: z.literal("dropDeck").optional(),
+}).extend(cosmosSystemFieldsSchema.shape);
 
 const dropDeckEditableSchema = z.object({
   map: deckMapSchema,
@@ -167,31 +171,68 @@ export const buildDocSchema = z.object({
 
 const mechDocBaseSchema = z.object({
   id: z.string().uuid(),
-  class: weightClassSchema,
-  tech: mechTechSchema,
+  chassis: z.string().min(1),
+  variant: z.string().min(1),
+  codename: z.string().default(""),
+  link: z.string().url().or(z.literal("")),
+  skillCode: z.string().min(1),
+  weaponry: z.string(),
+  description: z.string(),
+  role: z.string().min(1),
+  buildCodes: z.record(z.string()),
+  metadata: z.object({
+    equipment: z.array(z.string().min(1)).default([]),
+    ranges: z.object({
+      optimal: z.number().nonnegative(),
+      max: z.number().nonnegative(),
+      idealMin: z.number().nonnegative(),
+      idealMax: z.number().nonnegative(),
+    }),
+    heat: z.object({
+      generation: z.number().nonnegative(),
+      capacity: z.number().nonnegative(),
+      dissipation: z.number().nonnegative(),
+    }),
+    dps: z.object({
+      sustained: z.number().nonnegative(),
+      max: z.number().nonnegative(),
+    }),
+  }),
+  schemaVersion: schemaVersionSchema,
+  docType: z.literal("mech").optional(),
+  // Backward-compatible fields kept for existing docs and helpers.
+  class: weightClassSchema.optional(),
+  tech: mechTechSchema.optional(),
   tonnage: z
     .number()
     .int()
     .refine((value) => allowedTonnages.has(value), {
       message: "tonnage must be between 20 and 100 in increments of 5",
-    }),
-  chassis: z.string().min(1),
-  variant: z.string().min(1),
-  buildUrl: z.string().url(),
-  skillCode: z.string().min(1),
-  weaponry: z.string(),
-  equipment: z.array(z.string().min(1)),
-  description: z.string(),
-  role: mechRoleSchema,
-  buildCodes: z.record(z.string()),
-  primaryRangeBracket: primaryRangeBracketSchema,
-  optimalRange: z.number().nonnegative(),
-  maxRange: z.number().nonnegative(),
-  schemaVersion: z.literal("1.0.0"),
-  docType: z.literal("mech"),
-});
+    }).optional(),
+  buildUrl: z.string().url().optional(),
+  equipment: z.array(z.string().min(1)).optional(),
+  primaryRangeBracket: primaryRangeBracketSchema.optional(),
+  optimalRange: z.number().nonnegative().optional(),
+  maxRange: z.number().nonnegative().optional(),
+}).extend(cosmosSystemFieldsSchema.shape);
 
-export const mechDocSchema = applyMechTonnageClassRefinement(mechDocBaseSchema);
+export const mechDocSchema = mechDocBaseSchema.superRefine((value, context) => {
+  if (value.class && typeof value.tonnage === "number" && !weightClassByTonnage[value.class].includes(value.tonnage)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["tonnage"],
+      message: `tonnage ${value.tonnage} does not match class ${value.class}`,
+    });
+  }
+
+  if (value.metadata.ranges.idealMin > value.metadata.ranges.idealMax) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["metadata", "ranges"],
+      message: "metadata.ranges.idealMin must be <= idealMax",
+    });
+  }
+});
 
 export const userDocSchema = z.object({
   id: z.string().min(1),
@@ -229,15 +270,25 @@ const createMechInputBaseSchema = mechDocBaseSchema.omit({
   id: true,
   schemaVersion: true,
   docType: true,
+  _rid: true,
+  _self: true,
+  _etag: true,
+  _attachments: true,
+  _ts: true,
 });
-export const createMechInputSchema = applyMechTonnageClassRefinement(createMechInputBaseSchema);
+export const createMechInputSchema = createMechInputBaseSchema;
 export type CreateMechInput = z.infer<typeof createMechInputSchema>;
 
 const upsertMechInputBaseSchema = mechDocBaseSchema.omit({
   schemaVersion: true,
   docType: true,
+  _rid: true,
+  _self: true,
+  _etag: true,
+  _attachments: true,
+  _ts: true,
 });
-export const upsertMechInputSchema = applyMechTonnageClassRefinement(upsertMechInputBaseSchema);
+export const upsertMechInputSchema = upsertMechInputBaseSchema;
 export type UpsertMechInput = z.infer<typeof upsertMechInputSchema>;
 export type UserDoc = z.infer<typeof userDocSchema>;
 export type SeasonDoc = z.infer<typeof seasonDocSchema>;

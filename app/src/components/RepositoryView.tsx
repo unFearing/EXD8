@@ -1,4 +1,4 @@
-import { Stack, Alert, Typography, Box, Button } from "@mui/material";
+import { Stack, Alert, Box, Button } from "@mui/material";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { WeightClassSummary } from "../types/contracts";
@@ -47,15 +47,7 @@ export function RepositoryView({
 
   return (
     <Stack spacing={2}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Box>
-          <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700, fontSize: "1.1rem" }}>
-            Tracked Mech Repository
-          </Typography>
-          <Typography variant="body2" sx={{ color: isLight ? "#5f7191" : "#adbee9" }}>
-            Foam/Cosmos source of truth only. Legacy static mech list is excluded.
-          </Typography>
-        </Box>
+      <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
         <Button variant="contained" onClick={onAddBuild}>
           + Add a Build
         </Button>

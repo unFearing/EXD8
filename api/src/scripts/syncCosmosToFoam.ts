@@ -2,31 +2,25 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import "./loadLocalEnv.js";
 import { listMechs } from "../db/repositories/mechRepository.js";
+import type { MechDoc } from "../types/contracts.js";
 
-function toMarkdown(doc: {
-  id: string;
-  class: string;
-  tech: string;
-  tonnage: number;
-  chassis: string;
-  variant: string;
-  buildUrl: string;
-  skillCode: string;
-  weaponry: string;
-  equipment: string[];
-  description: string;
-  role: string;
-  buildCodes: Record<string, string>;
-  primaryRangeBracket: [number, number];
-  optimalRange: number;
-  maxRange: number;
-}): string {
-  const equipmentList = doc.equipment.map((item) => `  - ${item}`).join("\n");
+function toMarkdown(doc: MechDoc): string {
+  const equipment = doc.metadata?.equipment ?? doc.equipment ?? [];
+  const ranges = doc.metadata?.ranges;
+  const className = doc.class ?? "Unknown";
+  const tech = doc.tech ?? "Unknown";
+  const tonnage = doc.tonnage ?? 0;
+  const buildUrl = doc.link || doc.buildUrl || "";
+  const rangeMin = doc.primaryRangeBracket?.[0] ?? ranges?.idealMin ?? 0;
+  const rangeMax = doc.primaryRangeBracket?.[1] ?? ranges?.idealMax ?? 0;
+  const optimalRange = doc.optimalRange ?? ranges?.optimal ?? 0;
+  const maxRange = doc.maxRange ?? ranges?.max ?? 0;
+  const equipmentList = equipment.map((item) => `  - ${item}`).join("\n") || "  - None listed";
   const buildCodesLines = Object.entries(doc.buildCodes)
     .map(([key, value]) => `  ${key}: ${value}`)
-    .join("\n");
+    .join("\n") || "  imported: pending";
 
-  return `---\nid: ${doc.id}\nclass: ${doc.class}\ntech: ${doc.tech}\ntonnage: ${doc.tonnage}\nchassis: ${doc.chassis}\nvariant: ${doc.variant}\nbuildUrl: ${doc.buildUrl}\nskillCode: ${doc.skillCode}\nweaponry: \"${doc.weaponry.replaceAll("\"", "\\\"")}\"\nrole: ${doc.role}\nprimaryRangeBracket: [${doc.primaryRangeBracket[0]}, ${doc.primaryRangeBracket[1]}]\noptimalRange: ${doc.optimalRange}\nmaxRange: ${doc.maxRange}\nequipment:\n${equipmentList}\nbuildCodes:\n${buildCodesLines}\n---\n\n# ${doc.id}\n\n[[${doc.class}]] [[${doc.chassis}]] [[${doc.variant}]]\n\n${doc.description}\n`;
+  return `---\nid: ${doc.id}\nclass: ${className}\ntech: ${tech}\ntonnage: ${tonnage}\nchassis: ${doc.chassis}\nvariant: ${doc.variant}\nbuildUrl: ${buildUrl}\nskillCode: ${doc.skillCode}\nweaponry: \"${doc.weaponry.replaceAll("\"", "\\\"")}\"\nrole: ${doc.role}\nprimaryRangeBracket: [${rangeMin}, ${rangeMax}]\noptimalRange: ${optimalRange}\nmaxRange: ${maxRange}\nequipment:\n${equipmentList}\nbuildCodes:\n${buildCodesLines}\n---\n\n# ${doc.id}\n\n[[${className}]] [[${doc.chassis}]] [[${doc.variant}]]\n\n${doc.description}\n`;
 }
 
 async function main(): Promise<void> {

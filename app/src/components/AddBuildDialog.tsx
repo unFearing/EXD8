@@ -30,16 +30,36 @@ function defaultBuildDraft(): CreateMechInput {
   return {
     chassis: "",
     variant: "",
-    class: "Medium",
-    tech: "IS",
-    tonnage: 50,
-    buildUrl: "",
+    codename: "",
+    link: "",
     weaponry: "",
-    equipment: [],
     description: "",
     role: "Skirmisher",
     buildCodes: {},
     skillCode: "pending",
+    metadata: {
+      equipment: [],
+      ranges: {
+        optimal: 0,
+        max: 0,
+        idealMin: 0,
+        idealMax: 0,
+      },
+      heat: {
+        generation: 0,
+        capacity: 0,
+        dissipation: 0,
+      },
+      dps: {
+        sustained: 0,
+        max: 0,
+      },
+    },
+    class: "Medium",
+    tech: "IS",
+    tonnage: 50,
+    buildUrl: "",
+    equipment: [],
     primaryRangeBracket: [0, 0],
     optimalRange: 0,
     maxRange: 0,
@@ -117,7 +137,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
       const parsed = await parseMechBuild(urlInput.trim());
       setBuildDraft(parsed.draft);
       setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
-      setEquipmentText(listToText(parsed.draft.equipment));
+      setEquipmentText(listToText(parsed.draft.metadata.equipment ?? parsed.draft.equipment ?? []));
       setWarnings(parsed.warnings);
       setBuildMeta(parsed.metadata);
       setExpanded(true);
@@ -137,6 +157,10 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     try {
       const payload: CreateMechInput = {
         ...buildDraft,
+        metadata: {
+          ...buildDraft.metadata,
+          equipment: parseListText(equipmentText),
+        },
         equipment: parseListText(equipmentText),
         buildCodes: parseBuildCodesText(buildCodeText),
       };
@@ -231,14 +255,14 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                   size="small"
                   fullWidth
                   value={buildDraft.chassis}
-                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, chassis: e.target.value }))}
+                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, chassis: e.target.value, codename: `${e.target.value}-${prev.variant}` }))}
                 />
                 <TextField
                   label="Variant"
                   size="small"
                   fullWidth
                   value={buildDraft.variant}
-                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, variant: e.target.value }))}
+                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, variant: e.target.value, codename: `${prev.chassis}-${e.target.value}` }))}
                 />
                 <TextField
                   label="Tonnage"
@@ -315,7 +339,14 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                 onChange={(e) => {
                   const value = e.target.value;
                   setEquipmentText(value);
-                  setBuildDraft((prev) => ({ ...prev, equipment: parseListText(value) }));
+                    setBuildDraft((prev) => ({
+                      ...prev,
+                      equipment: parseListText(value),
+                      metadata: {
+                        ...prev.metadata,
+                        equipment: parseListText(value),
+                      },
+                    }));
                 }}
               />
 
@@ -353,8 +384,8 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                         label="Build URL"
                         size="small"
                         fullWidth
-                        value={buildDraft.buildUrl}
-                        onChange={(e) => setBuildDraft((prev) => ({ ...prev, buildUrl: e.target.value }))}
+                        value={buildDraft.link || buildDraft.buildUrl || ""}
+                        onChange={(e) => setBuildDraft((prev) => ({ ...prev, link: e.target.value, buildUrl: e.target.value }))}
                       />
                     </Stack>
 

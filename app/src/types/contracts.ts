@@ -11,6 +11,12 @@ export type DeckRowDoc = {
   alternates: string[];
   lance: Lance;
   mech: string;
+  chassis?: string;
+  variant?: string;
+  weaponry?: string;
+  equipmentText?: string;
+  codename?: string;
+  buildUrl?: string;
   role?: string;
   loadout?: string;
   buildCode?: string;
@@ -31,8 +37,13 @@ export type DropDeckDoc = {
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
-  schemaVersion?: "1.0.0";
+  schemaVersion?: "1.0" | "1.0.0";
   docType?: "dropDeck";
+  _rid?: string;
+  _self?: string;
+  _etag?: string;
+  _attachments?: string;
+  _ts?: number;
 };
 
 export type DropDeckEditable = {
@@ -108,24 +119,74 @@ export type MatchNightDoc = MatchNightCreateInput & {
 
 export type MechDoc = {
   id: string;
-  class: WeightClass;
-  tech: "IS" | "Clan";
-  tonnage: number;
   chassis: string;
   variant: string;
-  buildUrl: string;
+  codename: string;
+  link: string;
   skillCode: string;
   weaponry: string;
-  equipment: string[];
   description: string;
   role: string;
   buildCodes: Record<string, string>;
-  primaryRangeBracket: [number, number];
-  optimalRange: number;
-  maxRange: number;
-  schemaVersion: "1.0.0";
-  docType: "mech";
+  metadata: {
+    equipment: string[];
+    ranges: {
+      optimal: number;
+      max: number;
+      idealMin: number;
+      idealMax: number;
+    };
+    heat: {
+      generation: number;
+      capacity: number;
+      dissipation: number;
+    };
+    dps: {
+      sustained: number;
+      max: number;
+    };
+  };
+  schemaVersion: "1.0" | "1.0.0";
+  docType?: "mech";
+  class?: WeightClass;
+  tech?: "IS" | "Clan";
+  tonnage?: number;
+  buildUrl?: string;
+  equipment?: string[];
+  primaryRangeBracket?: [number, number];
+  optimalRange?: number;
+  maxRange?: number;
+  _rid?: string;
+  _self?: string;
+  _etag?: string;
+  _attachments?: string;
+  _ts?: number;
 };
+
+export type MechsConfigClass = "LIGHT" | "MEDIUM" | "HEAVY" | "ASSAULT";
+export type MechsConfigTech = "IS" | "Clan";
+
+export type MechsConfigChassis = {
+  chassis_name: string;
+  tonnage: number;
+  chassis_code: string;
+  variants: string[];
+};
+
+export type MechsConfigFile = {
+  mechs: Record<MechsConfigTech, Record<MechsConfigClass, Record<string, MechsConfigChassis>>>;
+};
+
+export type ConfigMech = {
+  key: string;
+  tech: MechsConfigTech;
+  class: WeightClass;
+  chassis: string;
+  variant: string;
+  tonnage: number;
+};
+
+export type SelectorSource = "repository" | "all";
 
 export type ApiSuccess<T> = { ok: true; data: T };
 export type ApiFailure = { ok: false; error: { code: string; message: string; details?: unknown } };
@@ -164,16 +225,36 @@ export type DropDeckRules = {
 export type CreateMechInput = {
   chassis: string;
   variant: string;
-  class: WeightClass;
-  tech: "IS" | "Clan";
-  tonnage: number;
-  buildUrl: string;
+  codename: string;
+  link: string;
   weaponry: string;
-  equipment: string[];
   description: string;
   role: string;
   buildCodes: Record<string, string>;
   skillCode: string;
+  metadata: {
+    equipment: string[];
+    ranges: {
+      optimal: number;
+      max: number;
+      idealMin: number;
+      idealMax: number;
+    };
+    heat: {
+      generation: number;
+      capacity: number;
+      dissipation: number;
+    };
+    dps: {
+      sustained: number;
+      max: number;
+    };
+  };
+  class?: WeightClass;
+  tech?: "IS" | "Clan";
+  tonnage?: number;
+  buildUrl?: string;
+  equipment?: string[];
   primaryRangeBracket?: [number, number];
   optimalRange?: number;
   maxRange?: number;

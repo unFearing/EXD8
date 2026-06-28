@@ -12,24 +12,32 @@ import { upsertMechHandler } from "./upsert.js";
 
 function validPayload() {
   return {
-    class: "Heavy",
-    tech: "Clan",
-    tonnage: 75,
     chassis: "TIMB",
     variant: "S",
+    codename: "TIMB-S",
+    link: "https://example.com/builds/timberwolf-s",
     buildUrl: "https://example.com/builds/timberwolf-s",
     skillCode: "a1b2c3",
     weaponry: "2x ERPPC, 4x ERML",
-    equipment: ["ECM", "Targeting Computer Mk I"],
     description: "Long-range poke with mobile follow-up pressure.",
     role: "Sniper",
     buildCodes: {
       stock: "ABC123",
       premium: "DEF456",
     },
+    metadata: {
+      equipment: ["ECM", "Targeting Computer Mk I"],
+      ranges: { optimal: 420, max: 900, idealMin: 540, idealMax: 810 },
+      heat: { generation: 2.5, capacity: 40, dissipation: 2.2 },
+      dps: { sustained: 12, max: 24 },
+    },
+    class: "Heavy",
+    tech: "Clan",
+    tonnage: 75,
+    equipment: ["ECM", "Targeting Computer Mk I"],
     primaryRangeBracket: [540, 810] as [number, number],
     optimalRange: 420,
-    maxRange: 300,
+    maxRange: 900,
   };
 }
 

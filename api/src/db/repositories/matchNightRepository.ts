@@ -21,6 +21,14 @@ function cloneEditable(value: DropDeckEditable): DropDeckEditable {
       alternates: [...slot.alternates],
       lance: slot.lance,
       mech: slot.mech,
+      chassis: slot.chassis ?? "",
+      variant: slot.variant ?? "",
+      weaponry: slot.weaponry ?? "",
+      equipmentText: slot.equipmentText ?? "",
+      codename: slot.codename ?? "",
+      buildUrl: slot.buildUrl ?? "",
+      role: slot.role ?? "",
+      skillTree: slot.skillTree ?? "",
     })),
   };
 }
@@ -77,6 +85,14 @@ function mergeEditable(
     "alternates",
     "lance",
     "mech",
+    "chassis",
+    "variant",
+    "weaponry",
+    "equipmentText",
+    "codename",
+    "buildUrl",
+    "role",
+    "skillTree",
   ];
 
   for (const [slotNumber, value] of slotIndex.entries()) {
@@ -86,6 +102,14 @@ function mergeEditable(
       alternates: [],
       lance: "",
       mech: "",
+      chassis: "",
+      variant: "",
+      weaponry: "",
+      equipmentText: "",
+      codename: "",
+      buildUrl: "",
+      role: "",
+      skillTree: "",
     };
     const currentSlot = value.current ?? baseSlot;
     const incomingSlot = value.incoming ?? baseSlot;
@@ -161,8 +185,8 @@ export async function listDropDecks(): Promise<DropDeckDoc[]> {
   const container = getMatchNightsContainer();
   const { resources } = await container.items
     .query<DropDeckDoc>({
-      query: "SELECT * FROM c WHERE c.docType = @docType ORDER BY c.updatedAt DESC",
-      parameters: [{ name: "@docType", value: "dropDeck" }],
+      query:
+        "SELECT * FROM c WHERE IS_DEFINED(c.map) AND IS_DEFINED(c.side) AND IS_DEFINED(c.deck) AND IS_ARRAY(c.deck) ORDER BY c.updatedAt DESC",
     })
     .fetchAll();
 
@@ -173,11 +197,9 @@ export async function getDropDeckById(id: string): Promise<DropDeckDoc | null> {
   const container = getMatchNightsContainer();
   const { resources } = await container.items
     .query<DropDeckDoc>({
-      query: "SELECT * FROM c WHERE c.docType = @docType AND c.id = @id",
-      parameters: [
-        { name: "@docType", value: "dropDeck" },
-        { name: "@id", value: id },
-      ],
+      query:
+        "SELECT * FROM c WHERE c.id = @id AND IS_DEFINED(c.map) AND IS_DEFINED(c.side) AND IS_DEFINED(c.deck) AND IS_ARRAY(c.deck)",
+      parameters: [{ name: "@id", value: id }],
     })
     .fetchAll();
 

@@ -1,0 +1,2219 @@
+{
+  "mechs": {
+    "Clan": {
+      "LIGHT": {
+        "Adder": {
+          "chassis_name": "Adder",
+          "tonnage": 35,
+          "chassis_code": "ADR",
+          "variants": [
+            "ADR-A",
+            "ADR-A(P)",
+            "ADR-B",
+            "ADR-D",
+            "ADR-PRIME",
+            "ADR-PRIME(C)",
+            "ADR-PRIME(G)",
+            "ADR-PRIME(I)",
+            "ADR-W",
+            "ADR-W(L)",
+            "CINDER"
+          ]
+        },
+        "Arctic Cheetah": {
+          "chassis_name": "Arctic Cheetah",
+          "tonnage": 30,
+          "chassis_code": "ACH",
+          "variants": [
+            "ACH-A",
+            "ACH-B",
+            "ACH-C",
+            "ACH-E",
+            "ACH-E(P)",
+            "ACH-PRIME",
+            "ACH-PRIME(C)",
+            "ACH-PRIME(I)",
+            "ACH-PRIME(S)",
+            "SHARD"
+          ]
+        },
+        "Clan Flea": {
+          "chassis_name": "Clan Flea",
+          "tonnage": 20,
+          "chassis_code": "FLE-16",
+          "variants": [
+            "FLE-16-C",
+            "FLE-16-C(S)"
+          ]
+        },
+        "Clan Wolfhound": {
+          "chassis_name": "Clan Wolfhound",
+          "tonnage": 35,
+          "chassis_code": "WLF",
+          "variants": [
+            "WLF-C",
+            "WLF-C(L)"
+          ]
+        },
+        "Commando Iic": {
+          "chassis_name": "Commando Iic",
+          "tonnage": 25,
+          "chassis_code": "COM",
+          "variants": [
+            "COM-IIC",
+            "COM-IIC(L)"
+          ]
+        },
+        "Cougar": {
+          "chassis_name": "Cougar",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "BLOOD ADDER",
+            "COU-C",
+            "COU-D",
+            "COU-E",
+            "COU-F",
+            "COU-F(L)",
+            "COU-H",
+            "COU-H(P)",
+            "COU-PRIME",
+            "COU-PRIME(S)"
+          ]
+        },
+        "Firemoth": {
+          "chassis_name": "Firemoth",
+          "tonnage": 20,
+          "chassis_code": "",
+          "variants": [
+            "ALETHA",
+            "FMT-B",
+            "FMT-C",
+            "FMT-D",
+            "FMT-H",
+            "FMT-H(P)",
+            "FMT-K",
+            "FMT-PRIME",
+            "FMT-PRIME(S)"
+          ]
+        },
+        "Incubus": {
+          "chassis_name": "Incubus",
+          "tonnage": 30,
+          "chassis_code": "INC",
+          "variants": [
+            "INC-1",
+            "INC-1(S)",
+            "INC-1T",
+            "INC-2",
+            "INC-2(S)",
+            "INC-3",
+            "INC-4",
+            "INC-4(P)",
+            "INC-5",
+            "INC-5(C)",
+            "INC-Z0(LGD)",
+            "SABRE"
+          ]
+        },
+        "Jenner Iic": {
+          "chassis_name": "Jenner Iic",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "FURY",
+            "JR7-IIC",
+            "JR7-IIC-2",
+            "JR7-IIC-3",
+            "JR7-IIC-A",
+            "JR7-IIC-A(P)",
+            "JR7-IIC(C)",
+            "JR7-IIC(O)"
+          ]
+        },
+        "Kit Fox": {
+          "chassis_name": "Kit Fox",
+          "tonnage": 30,
+          "chassis_code": "KFX",
+          "variants": [
+            "KFX-C",
+            "KFX-D",
+            "KFX-D(C)",
+            "KFX-D(P)",
+            "KFX-G",
+            "KFX-G(L)",
+            "KFX-P",
+            "KFX-P(S)",
+            "KFX-PRIME",
+            "KFX-PRIME(G)",
+            "KFX-PRIME(I)",
+            "KFX-S",
+            "PURIFIER"
+          ]
+        },
+        "Mist Lynx": {
+          "chassis_name": "Mist Lynx",
+          "tonnage": 25,
+          "chassis_code": "",
+          "variants": [
+            "EBON DRAGOON",
+            "MLX-A",
+            "MLX-B",
+            "MLX-C",
+            "MLX-D",
+            "MLX-G",
+            "MLX-G(P)",
+            "MLX-GT",
+            "MLX-PRIME",
+            "MLX-PRIME(C)",
+            "MLX-PRIME(I)",
+            "MLX-PRIME(S)"
+          ]
+        },
+        "Piranha": {
+          "chassis_name": "Piranha",
+          "tonnage": 20,
+          "chassis_code": "",
+          "variants": [
+            "CIPHER",
+            "PIR-1",
+            "PIR-1(S)",
+            "PIR-2",
+            "PIR-2(P)",
+            "PIR-3",
+            "PIR-A",
+            "PIR-B",
+            "PIR-D",
+            "PIR-D(L)"
+          ]
+        },
+        "Urbanmech Iic": {
+          "chassis_name": "Urbanmech Iic",
+          "tonnage": 30,
+          "chassis_code": "",
+          "variants": [
+            "ABADDON",
+            "HASHKÉ",
+            "UM-IIC",
+            "UM-IIC-2",
+            "UM-IIC-M",
+            "UM-IIC-MTS(P)"
+          ]
+        }
+      },
+      "MEDIUM": {
+        "Arctic Wolf": {
+          "chassis_name": "Arctic Wolf",
+          "tonnage": 40,
+          "chassis_code": "ACW",
+          "variants": [
+            "ACW-1",
+            "ACW-1(S)",
+            "ACW-2",
+            "ACW-A",
+            "ACW-A(P)",
+            "ACW-P",
+            "ACW-PRIME",
+            "ACW-PRIME(S)",
+            "BLOOD KIT"
+          ]
+        },
+        "Black Lanner": {
+          "chassis_name": "Black Lanner",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "BELLONARIUS",
+            "BKL-A",
+            "BKL-C",
+            "BKL-D",
+            "BKL-D(P)",
+            "BKL-E",
+            "BKL-M",
+            "BKL-MTS(P)",
+            "BKL-PRIME",
+            "BKL-PRIME(S)"
+          ]
+        },
+        "Hunchback Iic": {
+          "chassis_name": "Hunchback Iic",
+          "tonnage": 50,
+          "chassis_code": "",
+          "variants": [
+            "DEATHWISH",
+            "HBK-IIC",
+            "HBK-IIC-A",
+            "HBK-IIC-AT",
+            "HBK-IIC-B",
+            "HBK-IIC-B(P)",
+            "HBK-IIC-C",
+            "HBK-IIC(C)",
+            "HBK-IIC(O)"
+          ]
+        },
+        "Huntsman": {
+          "chassis_name": "Huntsman",
+          "tonnage": 50,
+          "chassis_code": "HMN",
+          "variants": [
+            "HMN-A",
+            "HMN-B",
+            "HMN-BT",
+            "HMN-C",
+            "HMN-H",
+            "HMN-H(L)",
+            "HMN-P",
+            "HMN-P(P)",
+            "HMN-PRIME",
+            "HMN-PRIME(C)",
+            "HMN-PRIME(S)",
+            "PAKHET"
+          ]
+        },
+        "Ice Ferret": {
+          "chassis_name": "Ice Ferret",
+          "tonnage": 45,
+          "chassis_code": "IFR",
+          "variants": [
+            "IFR-A",
+            "IFR-B",
+            "IFR-C",
+            "IFR-D",
+            "IFR-J",
+            "IFR-J(L)",
+            "IFR-J(S)",
+            "IFR-P",
+            "IFR-P(P)",
+            "IFR-PRIME",
+            "IFR-PRIME(I)",
+            "RAINBOW CROW"
+          ]
+        },
+        "Nova": {
+          "chassis_name": "Nova",
+          "tonnage": 50,
+          "chassis_code": "",
+          "variants": [
+            "BREAKER",
+            "NVA-A",
+            "NVA-A(P)",
+            "NVA-B",
+            "NVA-C",
+            "NVA-D",
+            "NVA-D(L)",
+            "NVA-PRIME",
+            "NVA-PRIME(G)",
+            "NVA-PRIME(I)",
+            "NVA-S",
+            "NVA-S(C)"
+          ]
+        },
+        "Shadow Cat": {
+          "chassis_name": "Shadow Cat",
+          "tonnage": 45,
+          "chassis_code": "",
+          "variants": [
+            "MISHIPESHU",
+            "NOBLE",
+            "SHC-A",
+            "SHC-B",
+            "SHC-B(P)",
+            "SHC-D",
+            "SHC-D(S)",
+            "SHC-H",
+            "SHC-NO",
+            "SHC-P",
+            "SHC-PRIME",
+            "SHC-PRIME(C)",
+            "SHC-PRIME(I)",
+            "SHC-PRIME(S)"
+          ]
+        },
+        "Shadowhawk Iic": {
+          "chassis_name": "Shadowhawk Iic",
+          "tonnage": 45,
+          "chassis_code": "SHD",
+          "variants": [
+            "SHD-IIC",
+            "SHD-IIC-2",
+            "SHD-IIC-2(P)",
+            "SHD-IIC-4",
+            "SHD-IIC-5",
+            "SHD-IIC-6",
+            "SHD-IIC-A",
+            "SHD-IIC-B",
+            "SHD-IIC-DT",
+            "SHD-IIC(S)"
+          ]
+        },
+        "Stormcrow": {
+          "chassis_name": "Stormcrow",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "LACERATOR",
+            "SCR-A",
+            "SCR-B",
+            "SCR-B(P)",
+            "SCR-C",
+            "SCR-D",
+            "SCR-PRIME",
+            "SCR-PRIME(C)",
+            "SCR-PRIME(G)",
+            "SCR-PRIME(I)",
+            "SCR-PRIME(S)"
+          ]
+        },
+        "Vapor Eagle": {
+          "chassis_name": "Vapor Eagle",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "GOREWING",
+            "RIVAL",
+            "VGL-1",
+            "VGL-1(S)",
+            "VGL-2",
+            "VGL-2(C)",
+            "VGL-3",
+            "VGL-3(P)",
+            "VGL-4",
+            "VGL-A",
+            "VGL-GW"
+          ]
+        },
+        "Viper": {
+          "chassis_name": "Viper",
+          "tonnage": 40,
+          "chassis_code": "",
+          "variants": [
+            "MEDUSA",
+            "SCALESHOT",
+            "VPR-A",
+            "VPR-B",
+            "VPR-B(P)",
+            "VPR-C",
+            "VPR-D",
+            "VPR-F",
+            "VPR-F(L)",
+            "VPR-PRIME",
+            "VPR-PRIME(I)",
+            "VPR-PRIME(S)",
+            "VPR-SC"
+          ]
+        }
+      },
+      "HEAVY": {
+        "Clan Archer": {
+          "chassis_name": "Clan Archer",
+          "tonnage": 70,
+          "chassis_code": "ARC-2W",
+          "variants": [
+            "ARC-2W-C",
+            "ARC-2W-CS"
+          ]
+        },
+        "Ebon Jaguar": {
+          "chassis_name": "Ebon Jaguar",
+          "tonnage": 65,
+          "chassis_code": "EBJ",
+          "variants": [
+            "EBJ-A",
+            "EBJ-A(P)",
+            "EBJ-B",
+            "EBJ-B(S)",
+            "EBJ-C",
+            "EBJ-D",
+            "EBJ-PRIME",
+            "EBJ-PRIME(C)",
+            "EBJ-PRIME(I)",
+            "EBJ-PRIME(S)",
+            "EBJ-S(S)",
+            "ESPRIT DE CORPS"
+          ]
+        },
+        "Grand Summoner": {
+          "chassis_name": "Grand Summoner",
+          "tonnage": 70,
+          "chassis_code": "SMN-II",
+          "variants": [
+            "SMN-II-B",
+            "SMN-II-C",
+            "SMN-II-P",
+            "SMN-II-P(S)",
+            "TALON"
+          ]
+        },
+        "Hellbringer": {
+          "chassis_name": "Hellbringer",
+          "tonnage": 65,
+          "chassis_code": "HBR",
+          "variants": [
+            "HBR-A",
+            "HBR-AH",
+            "HBR-AH(S)",
+            "HBR-B",
+            "HBR-B(P)",
+            "HBR-F",
+            "HBR-F(C)",
+            "HBR-F(L)",
+            "HBR-P",
+            "HBR-PRIME",
+            "HBR-PRIME(I)",
+            "VIRAGO"
+          ]
+        },
+        "Hellfire": {
+          "chassis_name": "Hellfire",
+          "tonnage": 60,
+          "chassis_code": "HLF",
+          "variants": [
+            "HLF-1",
+            "HLF-1(S)",
+            "HLF-2",
+            "HLF-A",
+            "HLF-A(P)",
+            "HLF-B",
+            "HLF-C",
+            "VOID"
+          ]
+        },
+        "Linebacker": {
+          "chassis_name": "Linebacker",
+          "tonnage": 65,
+          "chassis_code": "LBK",
+          "variants": [
+            "LBK-A",
+            "LBK-B",
+            "LBK-C",
+            "LBK-D",
+            "LBK-D(P)",
+            "LBK-H",
+            "LBK-H(C)",
+            "LBK-H(L)",
+            "LBK-PRIME",
+            "LBK-PRIME(S)",
+            "REDLINE"
+          ]
+        },
+        "Mad Dog": {
+          "chassis_name": "Mad Dog",
+          "tonnage": 60,
+          "chassis_code": "",
+          "variants": [
+            "BANDIT",
+            "MDD-A",
+            "MDD-B",
+            "MDD-C",
+            "MDD-C(C)",
+            "MDD-C(P)",
+            "MDD-H",
+            "MDD-PRIME",
+            "MDD-PRIME(I)",
+            "MDD-SI",
+            "MDD-V(S)",
+            "REVENANT",
+            "SIGMA"
+          ]
+        },
+        "Night Gyr": {
+          "chassis_name": "Night Gyr",
+          "tonnage": 75,
+          "chassis_code": "",
+          "variants": [
+            "JADE KITE",
+            "NTG-A",
+            "NTG-B",
+            "NTG-C",
+            "NTG-C(P)",
+            "NTG-D",
+            "NTG-D(CS)",
+            "NTG-H",
+            "NTG-H(L)",
+            "NTG-HT",
+            "NTG-PRIME",
+            "NTG-PRIME(S)"
+          ]
+        },
+        "Nova Cat": {
+          "chassis_name": "Nova Cat",
+          "tonnage": 70,
+          "chassis_code": "",
+          "variants": [
+            "COBRA CAT",
+            "NCT-A",
+            "NCT-B",
+            "NCT-B(P)",
+            "NCT-C",
+            "NCT-D",
+            "NCT-P",
+            "NCT-P(L)",
+            "NCT-PRIME",
+            "NCT-PRIME(S)"
+          ]
+        },
+        "Orion Iic": {
+          "chassis_name": "Orion Iic",
+          "tonnage": 75,
+          "chassis_code": "ON1",
+          "variants": [
+            "ON1-IIC",
+            "ON1-IIC-A",
+            "ON1-IIC-A(C)",
+            "ON1-IIC-A(P)",
+            "ON1-IIC-B",
+            "ON1-IIC-C",
+            "ON1-IIC-C(S)",
+            "ON1-IIC(O)",
+            "SKÖLL"
+          ]
+        },
+        "Rifleman Iic": {
+          "chassis_name": "Rifleman Iic",
+          "tonnage": 65,
+          "chassis_code": "",
+          "variants": [
+            "CHIRONEX",
+            "RFL-IIC",
+            "RFL-IIC-2",
+            "RFL-IIC-2(P)",
+            "RFL-IIC-2T",
+            "RFL-IIC-3",
+            "RFL-IIC-4",
+            "RFL-IIC-A",
+            "RFL-IIC(S)"
+          ]
+        },
+        "Summoner": {
+          "chassis_name": "Summoner",
+          "tonnage": 70,
+          "chassis_code": "",
+          "variants": [
+            "PRIDE",
+            "SMN-B",
+            "SMN-B(P)",
+            "SMN-BC(S)",
+            "SMN-C",
+            "SMN-D",
+            "SMN-D(C)",
+            "SMN-F",
+            "SMN-F(L)",
+            "SMN-G",
+            "SMN-G(S)",
+            "SMN-M",
+            "SMN-M(L)",
+            "SMN-P",
+            "SMN-PRIME",
+            "SMN-PRIME(G)",
+            "SMN-PRIME(I)",
+            "SMN-PTS(P)"
+          ]
+        },
+        "Sunspider": {
+          "chassis_name": "Sunspider",
+          "tonnage": 70,
+          "chassis_code": "",
+          "variants": [
+            "MANUL",
+            "SNS-A",
+            "SNS-AMB",
+            "SNS-B",
+            "SNS-C",
+            "SNS-D",
+            "SNS-D(P)",
+            "SNS-PRIME",
+            "SNS-PRIME(S)",
+            "VANGUARD"
+          ]
+        },
+        "Timber Wolf": {
+          "chassis_name": "Timber Wolf",
+          "tonnage": 75,
+          "chassis_code": "",
+          "variants": [
+            "HOWL",
+            "TBR-A",
+            "TBR-A(S)",
+            "TBR-BH",
+            "TBR-BH(S)",
+            "TBR-BH2",
+            "TBR-BH2(S)",
+            "TBR-C",
+            "TBR-C(C)",
+            "TBR-C(S)",
+            "TBR-D",
+            "TBR-H",
+            "TBR-MTS(P)",
+            "TBR-N",
+            "TBR-N(L)",
+            "TBR-PRIME",
+            "TBR-PRIME(G)",
+            "TBR-PRIME(I)",
+            "TBR-S",
+            "TBR-S(CS)",
+            "TBR-S(P)",
+            "WARRANT"
+          ]
+        }
+      },
+      "ASSAULT": {
+        "Bane": {
+          "chassis_name": "Bane",
+          "tonnage": 100,
+          "chassis_code": "BANE",
+          "variants": [
+            "BANE-1",
+            "BANE-1(S)",
+            "BANE-2",
+            "BANE-3",
+            "BANE-3(P)",
+            "BANE-4",
+            "BANE-6",
+            "BANE-7",
+            "LEVIATHAN"
+          ]
+        },
+        "Blood Asp": {
+          "chassis_name": "Blood Asp",
+          "tonnage": 90,
+          "chassis_code": "BAS",
+          "variants": [
+            "BAS-A",
+            "BAS-A(C)",
+            "BAS-B",
+            "BAS-B(P)",
+            "BAS-C",
+            "BAS-D",
+            "BAS-E",
+            "BAS-E(S)",
+            "BAS-PRIME",
+            "BAS-PRIME(S)",
+            "RANCOR"
+          ]
+        },
+        "Clan Annihilator": {
+          "chassis_name": "Clan Annihilator",
+          "tonnage": 100,
+          "chassis_code": "ANH",
+          "variants": [
+            "ANH-GZ",
+            "GAUSSZILLA"
+          ]
+        },
+        "Clan Bullshark": {
+          "chassis_name": "Clan Bullshark",
+          "tonnage": 95,
+          "chassis_code": "BSK",
+          "variants": [
+            "BSK-4",
+            "BSK-VK",
+            "MAKO",
+            "VOID KILLER"
+          ]
+        },
+        "Clan Nightstar": {
+          "chassis_name": "Clan Nightstar",
+          "tonnage": 95,
+          "chassis_code": "NSR-9J",
+          "variants": [
+            "NSR-9J-C",
+            "NSR-9J-CS"
+          ]
+        },
+        "Clan Stalker": {
+          "chassis_name": "Clan Stalker",
+          "tonnage": 85,
+          "chassis_code": "STK-3F",
+          "variants": [
+            "STK-3F-C",
+            "STK-3F-CS"
+          ]
+        },
+        "Clanatlas": {
+          "chassis_name": "Clanatlas",
+          "tonnage": 100,
+          "chassis_code": "AS7-D",
+          "variants": [
+            "AS7-D-H(S)"
+          ]
+        },
+        "Clanawesome": {
+          "chassis_name": "Clanawesome",
+          "tonnage": 80,
+          "chassis_code": "AWS",
+          "variants": [
+            "AWS-8QS(S)"
+          ]
+        },
+        "Clanbattlemaster": {
+          "chassis_name": "Clanbattlemaster",
+          "tonnage": 85,
+          "chassis_code": "BLR",
+          "variants": [
+            "BLR-1GBC(S)"
+          ]
+        },
+        "Dire Wolf": {
+          "chassis_name": "Dire Wolf",
+          "tonnage": 100,
+          "chassis_code": "DWF",
+          "variants": [
+            "DWF-A",
+            "DWF-A(P)",
+            "DWF-B",
+            "DWF-B(S)",
+            "DWF-BT",
+            "DWF-C",
+            "DWF-C(S)",
+            "DWF-PRIME",
+            "DWF-PRIME(G)",
+            "DWF-PRIME(I)",
+            "DWF-S",
+            "DWF-W",
+            "DWF-W(C)",
+            "DWF-W(S)",
+            "DWF-WM",
+            "DWF-WM(S)",
+            "ULTRAVIOLET"
+          ]
+        },
+        "Executioner": {
+          "chassis_name": "Executioner",
+          "tonnage": 95,
+          "chassis_code": "",
+          "variants": [
+            "CHERBI",
+            "EXE-A",
+            "EXE-A(P)",
+            "EXE-B",
+            "EXE-B-C",
+            "EXE-B-C(LGD)",
+            "EXE-C",
+            "EXE-C(L)",
+            "EXE-D",
+            "EXE-E",
+            "EXE-M",
+            "EXE-M(TSP)",
+            "EXE-PRIME",
+            "EXE-PRIME(I)"
+          ]
+        },
+        "Gargoyle": {
+          "chassis_name": "Gargoyle",
+          "tonnage": 80,
+          "chassis_code": "GAR",
+          "variants": [
+            "GAR-A",
+            "GAR-B",
+            "GAR-C",
+            "GAR-D",
+            "GAR-E",
+            "GAR-E(P)",
+            "GAR-M",
+            "GAR-MTS(P)",
+            "GAR-PRIME",
+            "GAR-PRIME(I)",
+            "KIN WOLF"
+          ]
+        },
+        "Highlander Iic": {
+          "chassis_name": "Highlander Iic",
+          "tonnage": 90,
+          "chassis_code": "HGN",
+          "variants": [
+            "HGN-IIC",
+            "HGN-IIC-A",
+            "HGN-IIC-B",
+            "HGN-IIC-B(P)",
+            "HGN-IIC-C",
+            "HGN-IIC-C(C)",
+            "HGN-IIC(O)",
+            "KEEPER"
+          ]
+        },
+        "Kodiak": {
+          "chassis_name": "Kodiak",
+          "tonnage": 100,
+          "chassis_code": "KDK",
+          "variants": [
+            "KDK-1",
+            "KDK-1(S)",
+            "KDK-2",
+            "KDK-3",
+            "KDK-3(C)",
+            "KDK-3(P)",
+            "KDK-4",
+            "KDK-5",
+            "KDK-MTS(P)",
+            "SPIRIT BEAR"
+          ]
+        },
+        "Madcat Mk Ii": {
+          "chassis_name": "Madcat Mk Ii",
+          "tonnage": 90,
+          "chassis_code": "",
+          "variants": [
+            "DEATHSTRIKE",
+            "MCII-1",
+            "MCII-1(S)",
+            "MCII-2",
+            "MCII-2T",
+            "MCII-4",
+            "MCII-A",
+            "MCII-B",
+            "MCII-B(P)",
+            "MCII-MWK",
+            "MOONWALKER"
+          ]
+        },
+        "Marauder Iic": {
+          "chassis_name": "Marauder Iic",
+          "tonnage": 85,
+          "chassis_code": "",
+          "variants": [
+            "DREADNOUGHT",
+            "MAD-IIC",
+            "MAD-IIC-2",
+            "MAD-IIC-2(L)",
+            "MAD-IIC-8",
+            "MAD-IIC-A",
+            "MAD-IIC-A(S)",
+            "MAD-IIC-B",
+            "MAD-IIC-C",
+            "MAD-IIC-D",
+            "MAD-IIC-D(P)",
+            "MAD-IIC-DN",
+            "MAD-IIC(C)",
+            "MAD-IIC(S)",
+            "SCORCH"
+          ]
+        },
+        "Naga": {
+          "chassis_name": "Naga",
+          "tonnage": 80,
+          "chassis_code": "NGA",
+          "variants": [
+            "NGA-AM",
+            "NGA-B",
+            "NGA-II-A",
+            "NGA-II-B",
+            "NGA-II-C",
+            "NGA-II-H",
+            "NGA-II-PRIME",
+            "NGA-PRIME",
+            "NGA-PRIME(S)"
+          ]
+        },
+        "Stone Rhino": {
+          "chassis_name": "Stone Rhino",
+          "tonnage": 100,
+          "chassis_code": "",
+          "variants": [
+            "KOLOSS",
+            "SR-1",
+            "SR-1(P)",
+            "SR-2",
+            "SR-3",
+            "SR-4",
+            "SR-4(S)",
+            "SR-6",
+            "SR-6(S)",
+            "SR-7",
+            "SR-AK",
+            "SR-AKLGD",
+            "SR-X(S)"
+          ]
+        },
+        "Supernova": {
+          "chassis_name": "Supernova",
+          "tonnage": 90,
+          "chassis_code": "",
+          "variants": [
+            "BOILER",
+            "SERAPH",
+            "SNV-1",
+            "SNV-1(S)",
+            "SNV-3",
+            "SNV-A",
+            "SNV-B",
+            "SNV-B(P)",
+            "SNV-C",
+            "SNV-SR"
+          ]
+        },
+        "Warhammer Iic": {
+          "chassis_name": "Warhammer Iic",
+          "tonnage": 80,
+          "chassis_code": "",
+          "variants": [
+            "BLUDGEON",
+            "MAUL",
+            "WHM-IIC",
+            "WHM-IIC-10",
+            "WHM-IIC-2",
+            "WHM-IIC-3",
+            "WHM-IIC-4",
+            "WHM-IIC-A",
+            "WHM-IIC-A(P)",
+            "WHM-IIC(S)"
+          ]
+        },
+        "Warhawk": {
+          "chassis_name": "Warhawk",
+          "tonnage": 85,
+          "chassis_code": "",
+          "variants": [
+            "KASAI",
+            "NANUQ",
+            "WHK-A",
+            "WHK-B",
+            "WHK-B(P)",
+            "WHK-C",
+            "WHK-C(C)",
+            "WHK-C(S)",
+            "WHK-K",
+            "WHK-PRIME",
+            "WHK-PRIME(G)",
+            "WHK-PRIME(I)"
+          ]
+        }
+      }
+    },
+    "IS": {
+      "LIGHT": {
+        "Commando": {
+          "chassis_name": "Commando",
+          "tonnage": 25,
+          "chassis_code": "COM",
+          "variants": [
+            "COM-1B",
+            "COM-1B(P)",
+            "COM-1D",
+            "COM-1D(C)",
+            "COM-2D",
+            "COM-3A",
+            "COM-D03",
+            "COM-D03H",
+            "THE DEATH'S KNELL"
+          ]
+        },
+        "Firestarter": {
+          "chassis_name": "Firestarter",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "EMBER",
+            "FIRESTORM",
+            "FS9-A",
+            "FS9-A(P)",
+            "FS9-AT",
+            "FS9-C",
+            "FS9-C(L)",
+            "FS9-H",
+            "FS9-K",
+            "FS9-S",
+            "FS9-S(C)"
+          ]
+        },
+        "Flea": {
+          "chassis_name": "Flea",
+          "tonnage": 20,
+          "chassis_code": "FLE",
+          "variants": [
+            "FLE-15",
+            "FLE-17",
+            "FLE-17(C)",
+            "FLE-17(S)",
+            "FLE-19",
+            "FLE-20",
+            "FLE-20(P)",
+            "FLE-FA",
+            "ROMEO 5000"
+          ]
+        },
+        "Javelin": {
+          "chassis_name": "Javelin",
+          "tonnage": 30,
+          "chassis_code": "",
+          "variants": [
+            "HI THERE!",
+            "JVN-10F",
+            "JVN-10N",
+            "JVN-10N(S)",
+            "JVN-10P",
+            "JVN-10P(P)",
+            "JVN-10PT",
+            "JVN-11A",
+            "JVN-11A(C)",
+            "JVN-11B",
+            "JVN-11F",
+            "JVN-11F(L)"
+          ]
+        },
+        "Jenner": {
+          "chassis_name": "Jenner",
+          "tonnage": 35,
+          "chassis_code": "JR7",
+          "variants": [
+            "JR7-A",
+            "JR7-A(L)",
+            "JR7-D",
+            "JR7-D(F)",
+            "JR7-F",
+            "JR7-F(C)",
+            "JR7-F(P)",
+            "JR7-K",
+            "OXIDE",
+            "SARAH'S JENNER"
+          ]
+        },
+        "Locust": {
+          "chassis_name": "Locust",
+          "tonnage": 20,
+          "chassis_code": "LCT",
+          "variants": [
+            "LCT-1E",
+            "LCT-1E(C)",
+            "LCT-1M",
+            "LCT-1V",
+            "LCT-1V(P)",
+            "LCT-1V(S)",
+            "LCT-3M",
+            "LCT-3S",
+            "LCT-3S(P)",
+            "LCT-3V",
+            "LCT-MTS(P)",
+            "PIRATE'S BANE"
+          ]
+        },
+        "Osiris": {
+          "chassis_name": "Osiris",
+          "tonnage": 30,
+          "chassis_code": "OSR",
+          "variants": [
+            "OSR-1P",
+            "OSR-1V",
+            "OSR-1V(C)",
+            "OSR-2V",
+            "OSR-3D",
+            "OSR-3D(S)",
+            "OSR-4D",
+            "OSR-4D(P)",
+            "SEKHMET"
+          ]
+        },
+        "Panther": {
+          "chassis_name": "Panther",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "KATANA KAT",
+            "PNT-10K",
+            "PNT-10K(C)",
+            "PNT-10K(R)",
+            "PNT-10K(S)",
+            "PNT-10P",
+            "PNT-8Z",
+            "PNT-9R",
+            "PNT-9R(P)"
+          ]
+        },
+        "Raven": {
+          "chassis_name": "Raven",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "HUGINN",
+            "RVN-2X",
+            "RVN-2X(P)",
+            "RVN-3L",
+            "RVN-3L(C)",
+            "RVN-3L(S)",
+            "RVN-4X",
+            "RVN-MN",
+            "RVN-MN(L)"
+          ]
+        },
+        "Spider": {
+          "chassis_name": "Spider",
+          "tonnage": 30,
+          "chassis_code": "",
+          "variants": [
+            "ANANSI",
+            "SDR-5D",
+            "SDR-5D(P)",
+            "SDR-5K",
+            "SDR-5K(C)",
+            "SDR-5V"
+          ]
+        },
+        "Urbanmech": {
+          "chassis_name": "Urbanmech",
+          "tonnage": 30,
+          "chassis_code": "K",
+          "variants": [
+            "K-9",
+            "STREET CLEANER",
+            "UM-AIV(S)",
+            "UM-R",
+            "UM-R(L)",
+            "UM-R60",
+            "UM-R60(P)",
+            "UM-R60L",
+            "UM-R60L(S)",
+            "UM-R63",
+            "UM-R63(S)",
+            "UM-R68",
+            "UM-R68(L)",
+            "UM-R80",
+            "UM-R80(L)"
+          ]
+        },
+        "Wolfhound": {
+          "chassis_name": "Wolfhound",
+          "tonnage": 35,
+          "chassis_code": "",
+          "variants": [
+            "GRINNER",
+            "WLF-1",
+            "WLF-1(C)",
+            "WLF-1A",
+            "WLF-1A(P)",
+            "WLF-1B",
+            "WLF-2",
+            "WLF-2(R)"
+          ]
+        }
+      },
+      "MEDIUM": {
+        "Assassin": {
+          "chassis_name": "Assassin",
+          "tonnage": 40,
+          "chassis_code": "ASN",
+          "variants": [
+            "ASN-101",
+            "ASN-101(C)",
+            "ASN-21",
+            "ASN-21(S)",
+            "ASN-23",
+            "ASN-26",
+            "ASN-27",
+            "ASN-27(P)",
+            "DARKDEATH"
+          ]
+        },
+        "Blackjack": {
+          "chassis_name": "Blackjack",
+          "tonnage": 45,
+          "chassis_code": "BJ",
+          "variants": [
+            "BJ-1",
+            "BJ-1(C)",
+            "BJ-1DC",
+            "BJ-1X",
+            "BJ-2",
+            "BJ-2(L)",
+            "BJ-3",
+            "BJ-3(P)",
+            "THE ARROW"
+          ]
+        },
+        "Bushwacker": {
+          "chassis_name": "Bushwacker",
+          "tonnage": 55,
+          "chassis_code": "BSW",
+          "variants": [
+            "BSW-P1",
+            "BSW-P2",
+            "BSW-P2T",
+            "BSW-S2",
+            "BSW-S2(C)",
+            "BSW-X1",
+            "BSW-X1(S)",
+            "BSW-X2",
+            "BSW-X2(P)",
+            "HIGH ROLLER"
+          ]
+        },
+        "Centurion": {
+          "chassis_name": "Centurion",
+          "tonnage": 50,
+          "chassis_code": "CN9",
+          "variants": [
+            "CN9-A",
+            "CN9-A(C)",
+            "CN9-A(NCIX)",
+            "CN9-AH",
+            "CN9-AH(L)",
+            "CN9-AL",
+            "CN9-D",
+            "CN9-D(P)",
+            "CN9-ON",
+            "ONYX",
+            "YEN-LO-WANG"
+          ]
+        },
+        "Cicada": {
+          "chassis_name": "Cicada",
+          "tonnage": 40,
+          "chassis_code": "CDA",
+          "variants": [
+            "CDA-2A",
+            "CDA-2A(C)",
+            "CDA-2B",
+            "CDA-3C",
+            "CDA-3F",
+            "CDA-3F(L)",
+            "CDA-3M",
+            "CDA-3M(P)",
+            "CDA-M",
+            "CDA-MTS(P)",
+            "THE X-5"
+          ]
+        },
+        "Crab": {
+          "chassis_name": "Crab",
+          "tonnage": 50,
+          "chassis_code": "CRB",
+          "variants": [
+            "CRB-20",
+            "CRB-27",
+            "CRB-27(R)",
+            "CRB-27B",
+            "CRB-27B(C)",
+            "CRB-27B(S)",
+            "CRB-27SL",
+            "CRB-27SL(P)",
+            "CRB-MTS(P)",
+            "FLORENTINE"
+          ]
+        },
+        "Dervish": {
+          "chassis_name": "Dervish",
+          "tonnage": 55,
+          "chassis_code": "DV",
+          "variants": [
+            "DV-6M",
+            "DV-6M(S)",
+            "DV-6MR",
+            "DV-6MR(P)",
+            "DV-7D",
+            "DV-7D(C)",
+            "DV-7P",
+            "DV-8D",
+            "FRENZY"
+          ]
+        },
+        "Enforcer": {
+          "chassis_name": "Enforcer",
+          "tonnage": 50,
+          "chassis_code": "ENF",
+          "variants": [
+            "ENF-4P",
+            "ENF-4P(P)",
+            "ENF-4R",
+            "ENF-4R(C)",
+            "ENF-5D",
+            "ENF-5D(R)",
+            "ENF-5P",
+            "GHILLIE"
+          ]
+        },
+        "Gauntlet": {
+          "chassis_name": "Gauntlet",
+          "tonnage": 55,
+          "chassis_code": "GTL",
+          "variants": [
+            "GTL-1O",
+            "GTL-1O(S)",
+            "GTL-1OA",
+            "GTL-1OB",
+            "GTL-1OC"
+          ]
+        },
+        "Griffin": {
+          "chassis_name": "Griffin",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "ARES",
+            "GRF-1N",
+            "GRF-1N(P)",
+            "GRF-1N(S)",
+            "GRF-1S",
+            "GRF-1S(C)",
+            "GRF-2N",
+            "GRF-2N(P)",
+            "GRF-3M",
+            "GRF-5M",
+            "GRF-5M(L)",
+            "SPARKY"
+          ]
+        },
+        "Hatchetman": {
+          "chassis_name": "Hatchetman",
+          "tonnage": 45,
+          "chassis_code": "HCT",
+          "variants": [
+            "HCT-3F",
+            "HCT-5K",
+            "HCT-5S",
+            "HCT-6D",
+            "HCT-7R",
+            "HCT-7R(P)",
+            "HCT-TM"
+          ]
+        },
+        "Hellspawn": {
+          "chassis_name": "Hellspawn",
+          "tonnage": 45,
+          "chassis_code": "HSN",
+          "variants": [
+            "HSN-7D",
+            "HSN-7D(S)",
+            "HSN-7P",
+            "HSN-8E",
+            "HSN-8P",
+            "HSN-8P(P)",
+            "HSN-9F",
+            "PARALYZER"
+          ]
+        },
+        "Hunchback": {
+          "chassis_name": "Hunchback",
+          "tonnage": 50,
+          "chassis_code": "",
+          "variants": [
+            "GRID IRON",
+            "GRID IRON LTD",
+            "HBK-4G",
+            "HBK-4G(F)",
+            "HBK-4H",
+            "HBK-4J",
+            "HBK-4P",
+            "HBK-4P(C)",
+            "HBK-4P(P)",
+            "HBK-4P(S)",
+            "HBK-4SP",
+            "HBK-A(Z)"
+          ]
+        },
+        "Kintaro": {
+          "chassis_name": "Kintaro",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "GOLDEN BOY",
+            "KTO-18",
+            "KTO-18(C)",
+            "KTO-19",
+            "KTO-19(P)",
+            "KTO-20"
+          ]
+        },
+        "Phoenix Hawk": {
+          "chassis_name": "Phoenix Hawk",
+          "tonnage": 45,
+          "chassis_code": "",
+          "variants": [
+            "KUROI KIRI",
+            "PXH-1",
+            "PXH-1(S)",
+            "PXH-1B",
+            "PXH-1B(P)",
+            "PXH-1K",
+            "PXH-1K(S)",
+            "PXH-2",
+            "PXH-2(C)",
+            "PXH-3S",
+            "PXH-7S",
+            "PXH-7S(S)",
+            "PXH-S",
+            "PXH-S(LGD)",
+            "ROC"
+          ]
+        },
+        "Shadowhawk": {
+          "chassis_name": "Shadowhawk",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "SCATTERSHOT",
+            "SHD-2D",
+            "SHD-2D2",
+            "SHD-2H",
+            "SHD-2H(C)",
+            "SHD-2H(P)",
+            "SHD-2H(S)",
+            "SHD-2K",
+            "SHD-2K(P)",
+            "SHD-5DS",
+            "SHD-5DS(S)",
+            "SHD-5M",
+            "SHD-S",
+            "THE GRAY DEATH"
+          ]
+        },
+        "Trebuchet": {
+          "chassis_name": "Trebuchet",
+          "tonnage": 50,
+          "chassis_code": "",
+          "variants": [
+            "LOUP DE GUERRE",
+            "TBT-3C",
+            "TBT-5J",
+            "TBT-5N",
+            "TBT-7K",
+            "TBT-7K(P)",
+            "TBT-7M",
+            "TBT-7M(C)"
+          ]
+        },
+        "Uziel": {
+          "chassis_name": "Uziel",
+          "tonnage": 50,
+          "chassis_code": "",
+          "variants": [
+            "BELIAL",
+            "UZL-2S",
+            "UZL-3P",
+            "UZL-3P(C)",
+            "UZL-3S",
+            "UZL-3S(S)",
+            "UZL-5P",
+            "UZL-6P",
+            "UZL-6P(P)"
+          ]
+        },
+        "Vindicator": {
+          "chassis_name": "Vindicator",
+          "tonnage": 45,
+          "chassis_code": "",
+          "variants": [
+            "ST.IVES' BLUES",
+            "VND-1AA",
+            "VND-1AA(C)",
+            "VND-1R",
+            "VND-1X",
+            "VND-1X(P)",
+            "VND-5L",
+            "VND-5LL"
+          ]
+        },
+        "Vulcan": {
+          "chassis_name": "Vulcan",
+          "tonnage": 40,
+          "chassis_code": "",
+          "variants": [
+            "BLOODLUST",
+            "VL-2T",
+            "VL-2T(S)",
+            "VL-5T",
+            "VL-5T(C)",
+            "VT-5M",
+            "VT-5S",
+            "VT-5S(P)",
+            "VT-6M"
+          ]
+        },
+        "Wolverine": {
+          "chassis_name": "Wolverine",
+          "tonnage": 55,
+          "chassis_code": "",
+          "variants": [
+            "QUARANTINE",
+            "STARSHOT",
+            "WVR-6K",
+            "WVR-6K(C)",
+            "WVR-6R",
+            "WVR-6R(P)",
+            "WVR-6R(S)",
+            "WVR-7D",
+            "WVR-7D(L)",
+            "WVR-7DT",
+            "WVR-7K",
+            "WVR-7K(P)",
+            "WVR-S"
+          ]
+        }
+      },
+      "HEAVY": {
+        "Archer": {
+          "chassis_name": "Archer",
+          "tonnage": 70,
+          "chassis_code": "ARC",
+          "variants": [
+            "ARC-2R",
+            "ARC-2R(C)",
+            "ARC-2R(S)",
+            "ARC-5S",
+            "ARC-5W",
+            "ARC-5W(P)",
+            "TEMPEST"
+          ]
+        },
+        "Black Hawk Ku": {
+          "chassis_name": "Black Hawk Ku",
+          "tonnage": 60,
+          "chassis_code": "BHKU",
+          "variants": [
+            "BHKU-O",
+            "BHKU-O(S)",
+            "BHKU-OX",
+            "BHKU-OXS"
+          ]
+        },
+        "Black Knight": {
+          "chassis_name": "Black Knight",
+          "tonnage": 75,
+          "chassis_code": "BL-6",
+          "variants": [
+            "BL-6-KNT",
+            "BL-6-KNT(R)",
+            "BL-6B-KNT",
+            "BL-6B-KNT(P)",
+            "BL-7-KNT",
+            "BL-7-KNT-L",
+            "BL-X-KNT-2",
+            "PARTISAN",
+            "RED REAPER II"
+          ]
+        },
+        "Cataphract": {
+          "chassis_name": "Cataphract",
+          "tonnage": 70,
+          "chassis_code": "CTF",
+          "variants": [
+            "CTF-0XP",
+            "CTF-1X",
+            "CTF-2X",
+            "CTF-3D",
+            "CTF-3D(C)",
+            "CTF-3L",
+            "CTF-3L(L)",
+            "CTF-4X",
+            "CTF-4X(P)",
+            "CTF-5MOC",
+            "ILYA MUROMETS",
+            "NAOMI"
+          ]
+        },
+        "Catapult": {
+          "chassis_name": "Catapult",
+          "tonnage": 65,
+          "chassis_code": "",
+          "variants": [
+            "BUTTERBEE",
+            "CPLT-A1",
+            "CPLT-A1(C)",
+            "CPLT-C1",
+            "CPLT-C1(F)",
+            "CPLT-C2",
+            "CPLT-C2(S)",
+            "CPLT-C3S",
+            "CPLT-C4",
+            "CPLT-FB",
+            "CPLT-K2",
+            "CPLT-K2(O)",
+            "CPLT-K2(P)",
+            "FERROBLAST",
+            "JESTER"
+          ]
+        },
+        "Champion": {
+          "chassis_name": "Champion",
+          "tonnage": 60,
+          "chassis_code": "CHP",
+          "variants": [
+            "CHP-1N",
+            "CHP-1N(S)",
+            "CHP-1N2",
+            "CHP-1NB",
+            "CHP-2N",
+            "CHP-3N",
+            "CHP-3N(P)",
+            "CHP-AP",
+            "CHP-AP(LGD)",
+            "INVICTUS"
+          ]
+        },
+        "Crusader": {
+          "chassis_name": "Crusader",
+          "tonnage": 65,
+          "chassis_code": "",
+          "variants": [
+            "CRAEL",
+            "CRD-3R",
+            "CRD-3R(S)",
+            "CRD-5K",
+            "CRD-5M",
+            "CRD-6T",
+            "CRD-6T(P)",
+            "CRD-7L"
+          ]
+        },
+        "Dragon": {
+          "chassis_name": "Dragon",
+          "tonnage": 60,
+          "chassis_code": "DRG",
+          "variants": [
+            "DRG-1C",
+            "DRG-1C(P)",
+            "DRG-1G",
+            "DRG-1G(S)",
+            "DRG-1N",
+            "DRG-1N(O)",
+            "DRG-5N",
+            "DRG-5N(C)",
+            "FANG",
+            "FLAME"
+          ]
+        },
+        "Grasshopper": {
+          "chassis_name": "Grasshopper",
+          "tonnage": 70,
+          "chassis_code": "GHR",
+          "variants": [
+            "GHR-5H",
+            "GHR-5H(C)",
+            "GHR-5H(S)",
+            "GHR-5J",
+            "GHR-5J(R)",
+            "GHR-5N",
+            "GHR-5P",
+            "GHR-5P(P)",
+            "MJÖLNIR"
+          ]
+        },
+        "Heavy Stalker": {
+          "chassis_name": "Heavy Stalker",
+          "tonnage": 75,
+          "chassis_code": "STK",
+          "variants": [
+            "STK-4P",
+            "STK-4P(L)"
+          ]
+        },
+        "Jagermech": {
+          "chassis_name": "Jagermech",
+          "tonnage": 65,
+          "chassis_code": "",
+          "variants": [
+            "FIREBRAND",
+            "JM6-A",
+            "JM6-A(C)",
+            "JM6-DD",
+            "JM6-DD(P)",
+            "JM6-DE",
+            "JM6-DE(L)",
+            "JM6-S"
+          ]
+        },
+        "Marauder": {
+          "chassis_name": "Marauder",
+          "tonnage": 75,
+          "chassis_code": "",
+          "variants": [
+            "BLIGHT",
+            "BOUNTY HUNTER II",
+            "MAD-3R",
+            "MAD-3R(S)",
+            "MAD-3RC(S)",
+            "MAD-5D",
+            "MAD-5M",
+            "MAD-5M(P)",
+            "MAD-9M",
+            "MAD-9M(C)",
+            "MAD-9M(S)",
+            "MAD-B",
+            "MAD-MTS(P)"
+          ]
+        },
+        "Orion": {
+          "chassis_name": "Orion",
+          "tonnage": 75,
+          "chassis_code": "ON1",
+          "variants": [
+            "ON1-K",
+            "ON1-K(C)",
+            "ON1-K(P)",
+            "ON1-M",
+            "ON1-V",
+            "ON1-VA",
+            "PROTECTOR"
+          ]
+        },
+        "Quickdraw": {
+          "chassis_name": "Quickdraw",
+          "tonnage": 60,
+          "chassis_code": "",
+          "variants": [
+            "DESPARADA",
+            "IV-FOUR",
+            "QKD-4G",
+            "QKD-4G(C)",
+            "QKD-4H",
+            "QKD-5K",
+            "QKD-5K(P)",
+            "QKD-D"
+          ]
+        },
+        "Rifleman": {
+          "chassis_name": "Rifleman",
+          "tonnage": 60,
+          "chassis_code": "",
+          "variants": [
+            "DAO BREAKER",
+            "LEGEND-KILLER",
+            "RFL-3C",
+            "RFL-3N",
+            "RFL-3N(S)",
+            "RFL-5D",
+            "RFL-5D(P)",
+            "RFL-8D",
+            "RFL-8D(L)"
+          ]
+        },
+        "Roughneck": {
+          "chassis_name": "Roughneck",
+          "tonnage": 65,
+          "chassis_code": "",
+          "variants": [
+            "POWERHOUSE",
+            "REAVER",
+            "RGH-1A",
+            "RGH-1A(C)",
+            "RGH-1A(S)",
+            "RGH-1B",
+            "RGH-1C",
+            "RGH-2A",
+            "RGH-3A",
+            "RGH-3A(P)",
+            "RGH-BLT"
+          ]
+        },
+        "Thanatos": {
+          "chassis_name": "Thanatos",
+          "tonnage": 75,
+          "chassis_code": "",
+          "variants": [
+            "HANGOVER",
+            "TNS-4P",
+            "TNS-4S",
+            "TNS-4S(S)",
+            "TNS-5P",
+            "TNS-5S",
+            "TNS-5S(P)",
+            "TNS-5T"
+          ]
+        },
+        "Thunderbolt": {
+          "chassis_name": "Thunderbolt",
+          "tonnage": 65,
+          "chassis_code": "TDR",
+          "variants": [
+            "TDR-10SE",
+            "TDR-10SE(S)",
+            "TDR-5S",
+            "TDR-5S(P)",
+            "TDR-5SS",
+            "TDR-5SSPE(C)",
+            "TDR-9S",
+            "TDR-9S(P)",
+            "TDR-9S(S)",
+            "TDR-9SE",
+            "TDR-9SE(C)",
+            "TDR-9SE(S)",
+            "TDR-9ST",
+            "TOP DOG"
+          ]
+        },
+        "Warhammer": {
+          "chassis_name": "Warhammer",
+          "tonnage": 70,
+          "chassis_code": "",
+          "variants": [
+            "BLACK WIDOW",
+            "WHM-4L",
+            "WHM-4L(L)",
+            "WHM-6D",
+            "WHM-6D(C)",
+            "WHM-6R",
+            "WHM-6R(H)",
+            "WHM-6R(S)",
+            "WHM-7S",
+            "WHM-7S(P)",
+            "WHM-7ST",
+            "WHM-9D",
+            "WHM-9D(S)"
+          ]
+        }
+      },
+      "ASSAULT": {
+        "Annihilator": {
+          "chassis_name": "Annihilator",
+          "tonnage": 100,
+          "chassis_code": "ANH",
+          "variants": [
+            "ANH-1A",
+            "ANH-1A(C)",
+            "ANH-1E",
+            "ANH-1P",
+            "ANH-1X",
+            "ANH-1X(P)",
+            "ANH-2A",
+            "ANH-2A(S)",
+            "ANH-SC",
+            "MEAN BABY",
+            "STONE CRUSHER"
+          ]
+        },
+        "Atlas": {
+          "chassis_name": "Atlas",
+          "tonnage": 100,
+          "chassis_code": "AS7",
+          "variants": [
+            "AS7-D",
+            "AS7-D-DC",
+            "AS7-D-DC-ESCORT",
+            "AS7-D-DC(P)",
+            "AS7-D(F)",
+            "AS7-K",
+            "AS7-K3",
+            "AS7-K3(L)",
+            "AS7-M",
+            "AS7-MTS(P)",
+            "AS7-RS",
+            "AS7-RS(C)",
+            "AS7-S",
+            "AS7-S(L)",
+            "AS7-W",
+            "KRAKEN",
+            "THE BOAR'S HEAD",
+            "WARLORD"
+          ]
+        },
+        "Awesome": {
+          "chassis_name": "Awesome",
+          "tonnage": 80,
+          "chassis_code": "AWS",
+          "variants": [
+            "AWS-8Q",
+            "AWS-8Q(P)",
+            "AWS-8R",
+            "AWS-8T",
+            "AWS-8V",
+            "AWS-9M",
+            "AWS-9M(C)",
+            "PRETTY BABY"
+          ]
+        },
+        "Banshee": {
+          "chassis_name": "Banshee",
+          "tonnage": 95,
+          "chassis_code": "BNC",
+          "variants": [
+            "BNC-3E",
+            "BNC-3E(S)",
+            "BNC-3M",
+            "BNC-3M(C)",
+            "BNC-3S",
+            "BNC-3S(P)",
+            "LA MALINCHE",
+            "SIREN"
+          ]
+        },
+        "Battlemaster": {
+          "chassis_name": "Battlemaster",
+          "tonnage": 85,
+          "chassis_code": "BLR",
+          "variants": [
+            "BLR-1D",
+            "BLR-1G",
+            "BLR-1G(P)",
+            "BLR-1G(S)",
+            "BLR-1S",
+            "BLR-2C",
+            "BLR-2C(C)",
+            "BLR-2C(O)",
+            "BLR-3M",
+            "BLR-3M(P)",
+            "BLR-3S",
+            "BLR-6C",
+            "BLR-6C(L)",
+            "HELLSLINGER"
+          ]
+        },
+        "Behemoth": {
+          "chassis_name": "Behemoth",
+          "tonnage": 100,
+          "chassis_code": "",
+          "variants": [
+            "BEHEMOTH",
+            "BHN-6H"
+          ]
+        },
+        "Bullshark": {
+          "chassis_name": "Bullshark",
+          "tonnage": 95,
+          "chassis_code": "BSK",
+          "variants": [
+            "BSK-1",
+            "BSK-2",
+            "BSK-2(S)",
+            "BSK-3",
+            "BSK-5",
+            "BSK-6",
+            "BSK-6C(S)",
+            "BSK-6P",
+            "BSK-WG",
+            "WAR GHOUL"
+          ]
+        },
+        "Charger": {
+          "chassis_name": "Charger",
+          "tonnage": 80,
+          "chassis_code": "CGR",
+          "variants": [
+            "CGR-1A1",
+            "CGR-1A1(S)",
+            "CGR-1A1CS",
+            "CGR-1A5",
+            "CGR-3K",
+            "CGR-3K(O)",
+            "CGR-3K(P)",
+            "NUMBER SEVEN"
+          ]
+        },
+        "Corsair": {
+          "chassis_name": "Corsair",
+          "tonnage": 95,
+          "chassis_code": "",
+          "variants": [
+            "BROADSIDE",
+            "COR-5R",
+            "COR-5R(S)",
+            "COR-5T",
+            "COR-6R",
+            "COR-7A",
+            "COR-7A(P)",
+            "COR-7R",
+            "RAVAGER"
+          ]
+        },
+        "Cyclops": {
+          "chassis_name": "Cyclops",
+          "tonnage": 90,
+          "chassis_code": "",
+          "variants": [
+            "ARGES",
+            "CP-10-Q",
+            "CP-10-Q(C)",
+            "CP-10-Z",
+            "CP-11-A",
+            "CP-11-A-DC",
+            "CP-11-A(S)",
+            "CP-11-P",
+            "CP-11-P(P)",
+            "CP-AR",
+            "SLEIPNIR"
+          ]
+        },
+        "Fafnir": {
+          "chassis_name": "Fafnir",
+          "tonnage": 100,
+          "chassis_code": "FNR",
+          "variants": [
+            "FNR-5",
+            "FNR-5(S)",
+            "FNR-5B",
+            "FNR-5B(P)",
+            "FNR-5E",
+            "FNR-5T",
+            "FNR-6R",
+            "FNR-6U",
+            "FNR-J",
+            "JUGGERNAUT",
+            "WRATH"
+          ]
+        },
+        "Hatamoto-chi": {
+          "chassis_name": "Hatamoto-chi",
+          "tonnage": 80,
+          "chassis_code": "HTM",
+          "variants": [
+            "HTM-27T",
+            "HTM-27T(S)",
+            "HTM-27W",
+            "HTM-27W(P)",
+            "HTM-28TR",
+            "HTM-28TR(O)",
+            "SHUGO"
+          ]
+        },
+        "Highlander": {
+          "chassis_name": "Highlander",
+          "tonnage": 90,
+          "chassis_code": "",
+          "variants": [
+            "HEAVY METAL",
+            "HGN-732",
+            "HGN-732B",
+            "HGN-732B(P)",
+            "HGN-733",
+            "HGN-733C",
+            "HGN-733C(C)",
+            "HGN-733P"
+          ]
+        },
+        "King Crab": {
+          "chassis_name": "King Crab",
+          "tonnage": 100,
+          "chassis_code": "",
+          "variants": [
+            "ARGENT",
+            "KAIJU",
+            "KGC-000",
+            "KGC-000(L)",
+            "KGC-000(P)",
+            "KGC-0000",
+            "KGC-000B",
+            "KGC-000B(C)",
+            "KGC-000B(S)",
+            "KGC-001",
+            "KGC-001(S)",
+            "KGC-A"
+          ]
+        },
+        "Longbow": {
+          "chassis_name": "Longbow",
+          "tonnage": 85,
+          "chassis_code": "LGB",
+          "variants": [
+            "LGB-10C",
+            "LGB-10K",
+            "LGB-12C",
+            "LGB-12CP",
+            "LGB-12R",
+            "LGB-12R(S)",
+            "LGB-13NAIS",
+            "LGB-7V",
+            "LGB-8V(S)",
+            "LGB-OH",
+            "LGB-OH(LGD)",
+            "OVERCHARGE"
+          ]
+        },
+        "Marauder Ii": {
+          "chassis_name": "Marauder Ii",
+          "tonnage": 100,
+          "chassis_code": "",
+          "variants": [
+            "ALPHA",
+            "MAD-4A",
+            "MAD-4A(S)",
+            "MAD-4HP",
+            "MAD-4L",
+            "MAD-5A",
+            "MAD-6S",
+            "MAD-6S(P)",
+            "MAD-X(S)"
+          ]
+        },
+        "Mauler": {
+          "chassis_name": "Mauler",
+          "tonnage": 90,
+          "chassis_code": "",
+          "variants": [
+            "KNOCKOUT",
+            "MAL-1P",
+            "MAL-1P(O)",
+            "MAL-1R",
+            "MAL-1R(R)",
+            "MAL-2P",
+            "MAL-2P(S)",
+            "MAL-MX90",
+            "MAL-MX90(C)",
+            "MAL-MX90(P)"
+          ]
+        },
+        "Nightstar": {
+          "chassis_name": "Nightstar",
+          "tonnage": 95,
+          "chassis_code": "NSR",
+          "variants": [
+            "NSR-10P",
+            "NSR-10P(P)",
+            "NSR-9FC",
+            "NSR-9J",
+            "NSR-9J(S)",
+            "NSR-9P",
+            "NSR-9P(C)",
+            "NSR-9S",
+            "WOLF PHOENIX"
+          ]
+        },
+        "Stalker": {
+          "chassis_name": "Stalker",
+          "tonnage": 85,
+          "chassis_code": "",
+          "variants": [
+            "MISERY",
+            "STK-3F",
+            "STK-3F(C)",
+            "STK-3FB",
+            "STK-3FB(L)",
+            "STK-3H",
+            "STK-4N",
+            "STK-4NT",
+            "STK-5M",
+            "STK-5M(P)",
+            "STK-5S",
+            "STK-5S(CS)",
+            "STK-7D",
+            "STK-7D(S)",
+            "STK-WU",
+            "WAR EMU"
+          ]
+        },
+        "Victor": {
+          "chassis_name": "Victor",
+          "tonnage": 80,
+          "chassis_code": "",
+          "variants": [
+            "DRAGON SLAYER",
+            "VTR-9A1",
+            "VTR-9A1(L)",
+            "VTR-9B",
+            "VTR-9B-LI",
+            "VTR-9B-LI(LGD)",
+            "VTR-9B(P)",
+            "VTR-9K",
+            "VTR-9S",
+            "VTR-9S(C)"
+          ]
+        },
+        "Zeus": {
+          "chassis_name": "Zeus",
+          "tonnage": 80,
+          "chassis_code": "",
+          "variants": [
+            "SKOKOMISH",
+            "ZEU-5S",
+            "ZEU-6S",
+            "ZEU-6S(R)",
+            "ZEU-6T",
+            "ZEU-6T(C)",
+            "ZEU-6T(S)",
+            "ZEU-9S",
+            "ZEU-9S(P)",
+            "ZEU-9S2",
+            "ZEU-9S2(L)",
+            "ZEU-M",
+            "ZEU-MTS(P)"
+          ]
+        }
+      }
+    }
+  }
+}
