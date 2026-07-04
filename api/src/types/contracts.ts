@@ -9,6 +9,9 @@ export type DeckMap = z.infer<typeof deckMapSchema>;
 export const deckSideSchema = z.enum(["1", "2", "either"]);
 export type DeckSide = z.infer<typeof deckSideSchema>;
 
+export const quickslotKeySchema = z.enum(["A", "B", "C", "D", "E"]);
+export type QuickslotKey = z.infer<typeof quickslotKeySchema>;
+
 export const mechTechSchema = z.enum(["IS", "Clan"]);
 export type MechTech = z.infer<typeof mechTechSchema>;
 
@@ -125,6 +128,26 @@ export const dropDeckUpsertInputSchema = z.object({
   description: z.string().default(""),
   name: z.string().min(1),
   deck: z.array(deckSlotSchema).min(1),
+});
+
+export const quickslotEntrySchema = z.object({
+  map: deckMapSchema,
+  slot: quickslotKeySchema,
+  deckId: z.string().uuid().optional(),
+});
+
+export const quickslotDocSchema = z.object({
+  id: z.string().min(1),
+  slots: z.array(quickslotEntrySchema).max(5),
+  updatedAt: z.string().datetime(),
+  updatedBy: z.string().min(1),
+  schemaVersion: z.literal("1.0.0"),
+  docType: z.literal("quickslot"),
+}).extend(cosmosSystemFieldsSchema.shape);
+
+export const quickslotUpsertInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  slots: z.array(quickslotEntrySchema).max(5),
 });
 
 export const mapConfigDocSchema = z.object({
@@ -260,6 +283,8 @@ export type Drop = z.infer<typeof dropSchema>;
 export type DeckSlot = z.infer<typeof deckSlotSchema>;
 export type DropDeckDoc = z.infer<typeof dropDeckDocSchema>;
 export type DropDeckUpsertInput = z.infer<typeof dropDeckUpsertInputSchema>;
+export type QuickslotDoc = z.infer<typeof quickslotDocSchema>;
+export type QuickslotUpsertInput = z.infer<typeof quickslotUpsertInputSchema>;
 export type MapConfigDoc = z.infer<typeof mapConfigDocSchema>;
 export type MatchNightCreateInput = z.infer<typeof matchNightCreateInputSchema>;
 export type MatchNightDoc = z.infer<typeof matchNightDocSchema>;

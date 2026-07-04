@@ -1,6 +1,10 @@
 import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
 import { useMemo, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DeckBoard } from "./components/DeckBoard";
+import { RepositoryView } from "./components/RepositoryView";
+import { AuthSplash } from "./components/AuthSplash";
+import { useDiscordAuth } from "./hooks/useDiscordAuth";
 import "./App.css";
 
 type ThemeMode = "light" | "dark";
@@ -36,13 +40,36 @@ function buildTheme(mode: ThemeMode) {
   });
 }
 
-function App() {
+function AppContent() {
   const [mode, setMode] = useState<ThemeMode>(() => {
     const stored = localStorage.getItem("ui-theme-mode");
     return stored === "light" || stored === "dark" ? stored : "dark";
   });
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
+  const auth = useDiscordAuth();
+  const bypassDiscordAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
+
+  const effectiveAuth = bypassDiscordAuth
+    ? {
+        isLoading: false,
+        isAuthed: true,
+        user: {
+          id: "local-dev",
+          username: "Local Dev",
+          roles: ["local-dev"],
+          appRole: "TL" as const,
+        },
+        error: null,
+        login: () => {
+          // noop in local auth bypass mode
+        },
+        logout: () => {
+          // noop in local auth bypass mode
+        },
+        hasRole: (_roleId: string) => true,
+      }
+    : auth;
 
   const toggleMode = () => {
     setMode((previous) => {
@@ -55,9 +82,46 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <DeckBoard mode={mode} onToggleMode={toggleMode} />
+      {!bypassDiscordAuth && <AuthSplash state={effectiveAuth} onLogin={effectiveAuth.login} />}
+      {effectiveAuth.isAuthed && (
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <DeckBoard
+                mode={mode}
+                onToggleMode={toggleMode}
+                user={effectiveAuth.user}
+                onLogout={effectiveAuth.logout}
+                hasRole={effectiveAuth.hasRole}
+              />
+            }
+          />
+          <Route
+            path="/repository"
+            element={
+              <RepositoryView
+                mode={mode}
+                onToggleMode={toggleMode}
+                user={effectiveAuth.user}
+                onLogout={effectiveAuth.logout}
+                hasRole={effectiveAuth.hasRole}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      )}
     </ThemeProvider>
-  )
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
 }
 
 export default App

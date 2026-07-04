@@ -4,6 +4,8 @@ import type {
   CreateMechInput,
   DropDeckDoc,
   DropDeckUpsertInput,
+  QuickslotDoc,
+  QuickslotUpsertInput,
   MatchNightCreateInput,
   MatchNightDoc,
   MapConfigDoc,
@@ -13,6 +15,49 @@ import type {
 } from "../types/contracts";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+
+type StoredDiscordUser = {
+  id: string;
+  appRole?: "TL" | "Pilot";
+};
+
+function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
+  const fallbackUser = "ui-local-user";
+  const fallbackRole = "Pilot";
+  const disableAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
+
+  if (disableAuth) {
+    return {
+      "x-team-id": teamId,
+      "x-user-role": "TL",
+      "x-user-id": fallbackUser,
+    };
+  }
+
+  const rawUser = localStorage.getItem("discord_user");
+  if (!rawUser) {
+    return {
+      "x-team-id": teamId,
+      "x-user-role": fallbackRole,
+      "x-user-id": fallbackUser,
+    };
+  }
+
+  try {
+    const user = JSON.parse(rawUser) as StoredDiscordUser;
+    return {
+      "x-team-id": teamId,
+      "x-user-role": user.appRole ?? fallbackRole,
+      "x-user-id": user.id ?? fallbackUser,
+    };
+  } catch {
+    return {
+      "x-team-id": teamId,
+      "x-user-role": fallbackRole,
+      "x-user-id": fallbackUser,
+    };
+  }
+}
 
 async function parseResponse<T>(response: Response): Promise<ApiSuccess<T>> {
   const rawBody = await response.text();
@@ -51,9 +96,7 @@ export async function createMatchNight(input: MatchNightCreateInput): Promise<Ma
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-team-id": input.teamId,
-      "x-user-role": "TL",
-      "x-user-id": "ui-local-user",
+      ...getAuthHeaders(input.teamId),
     },
     body: JSON.stringify(input),
   });
@@ -64,11 +107,7 @@ export async function createMatchNight(input: MatchNightCreateInput): Promise<Ma
 
 export async function getMatchNightById(id: string, teamId: string): Promise<MatchNightDoc> {
   const response = await fetch(`${API_BASE}/matchNights/${encodeURIComponent(id)}?teamId=${encodeURIComponent(teamId)}`, {
-    headers: {
-      "x-team-id": teamId,
-      "x-user-role": "TL",
-      "x-user-id": "ui-local-user",
-    },
+    headers: getAuthHeaders(teamId),
   });
 
   const parsed = await parseResponse<MatchNightDoc>(response);
@@ -108,7 +147,7 @@ export async function saveDropDeck(input: DropDeckUpsertInput): Promise<DropDeck
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-user-id": "deckboard-ui",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(input),
   });
@@ -117,19 +156,57 @@ export async function saveDropDeck(input: DropDeckUpsertInput): Promise<DropDeck
   return parsed.data;
 }
 
+export async function deleteDropDeck(id: string): Promise<{ id: string; deleted: true }> {
+  const response = await fetch(`${API_BASE}/decks/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
+  const parsed = await parseResponse<{ id: string; deleted: true }>(response);
+  return parsed.data;
+}
+
+export async function getQuickslots(id = "quickslots-default"): Promise<QuickslotDoc> {
+  const response = await fetch(`${API_BASE}/quickslots?id=${encodeURIComponent(id)}`);
+  const parsed = await parseResponse<QuickslotDoc>(response);
+  return parsed.data;
+}
+
+export async function saveQuickslots(input: QuickslotUpsertInput): Promise<QuickslotDoc> {
+  const response = await fetch(`${API_BASE}/quickslots`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<QuickslotDoc>(response);
+  return parsed.data;
+}
+
 export async function createMech(input: CreateMechInput): Promise<MechDoc> {
   const response = await fetch(`${API_BASE}/mechs`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-team-id": "EXD8",
-      "x-user-role": "TL",
-      "x-user-id": "ui-local-user",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify(input),
   });
 
   const parsed = await parseResponse<MechDoc>(response);
+  return parsed.data;
+}
+
+export async function deleteMech(id: string): Promise<{ id: string; deleted: true }> {
+  const response = await fetch(`${API_BASE}/mechs/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
+  const parsed = await parseResponse<{ id: string; deleted: true }>(response);
   return parsed.data;
 }
 

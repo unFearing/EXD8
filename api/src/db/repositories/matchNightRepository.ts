@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type { DropDeckDoc, DropDeckUpsertInput, MatchNightCreateInput, MatchNightDoc } from "../../types/contracts.js";
+import type {
+  DropDeckDoc,
+  DropDeckUpsertInput,
+  MatchNightCreateInput,
+  MatchNightDoc,
+  QuickslotDoc,
+  QuickslotUpsertInput,
+} from "../../types/contracts.js";
 import { getMatchNightsContainer } from "../cosmos.js";
 
 type DropDeckEditable = Pick<DropDeckDoc, "map" | "side" | "name" | "description" | "deck">;
@@ -268,6 +275,49 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
     updatedBy,
     schemaVersion: "1.0.0",
     docType: "dropDeck",
+  };
+
+  const container = getMatchNightsContainer();
+  await container.items.upsert(doc);
+  return doc;
+}
+
+export async function deleteDropDeckById(id: string): Promise<boolean> {
+  const existing = await getDropDeckById(id);
+  if (!existing) {
+    return false;
+  }
+
+  const container = getMatchNightsContainer();
+  await container.item(existing.id, existing.id).delete();
+  return true;
+}
+
+export async function getQuickslotById(id: string): Promise<QuickslotDoc | null> {
+  const container = getMatchNightsContainer();
+  const { resources } = await container.items
+    .query<QuickslotDoc>({
+      query: "SELECT * FROM c WHERE c.id = @id AND c.docType = @docType",
+      parameters: [
+        { name: "@id", value: id },
+        { name: "@docType", value: "quickslot" },
+      ],
+    })
+    .fetchAll();
+
+  return resources[0] ?? null;
+}
+
+export async function upsertQuickslot(input: QuickslotUpsertInput, updatedBy: string): Promise<QuickslotDoc> {
+  const now = new Date().toISOString();
+  const id = input.id ?? "quickslots-default";
+  const doc: QuickslotDoc = {
+    id,
+    slots: input.slots,
+    updatedAt: now,
+    updatedBy,
+    schemaVersion: "1.0.0",
+    docType: "quickslot",
   };
 
   const container = getMatchNightsContainer();

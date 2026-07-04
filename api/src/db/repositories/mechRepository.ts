@@ -54,9 +54,15 @@ function toBuildMarkdown(doc: MechDoc): string {
   const tech = doc.tech ?? "Unknown";
   const tonnage = doc.tonnage ?? 0;
   const buildLink = doc.link || doc.buildUrl || "";
+  const chassis = (doc.chassis ?? "").trim();
+  const variant = (doc.variant ?? "").trim();
+  const title =
+    variant.toUpperCase().startsWith(`${chassis.toUpperCase()}-`) || variant.toUpperCase() === chassis.toUpperCase()
+      ? variant
+      : `${chassis}-${variant}`;
 
   return [
-    `## ${doc.chassis}-${doc.variant}`,
+    `## ${title}`,
     "",
     doc.description || "No description provided.",
     "",
@@ -86,7 +92,73 @@ function inferWeightClass(tonnage?: number): WeightClass {
   return "Assault";
 }
 
+function canonicalizeBuildLink(raw?: string): string {
+  const value = (raw ?? "").trim();
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    url.hash = "";
+
+    const token = (url.searchParams.get("b") ?? url.searchParams.get("build") ?? "").trim();
+    if (token) {
+      return `${url.origin}${url.pathname}?b=${token}`.toLowerCase();
+    }
+
+    const params = new URLSearchParams(url.searchParams);
+    const sorted = Array.from(params.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    const normalizedParams = new URLSearchParams(sorted);
+    const query = normalizedParams.toString();
+    return `${url.origin}${url.pathname}${query ? `?${query}` : ""}`.toLowerCase();
+  } catch {
+    return value.toLowerCase();
+  }
+}
+
+function normalizeForHierarchy(doc: MechDoc): { className: WeightClass; chassisName: string; variantName: string } {
+  const rawChassis = (doc.chassis ?? "").trim();
+  const rawVariant = (doc.variant ?? "").trim();
+  const upperChassis = rawChassis.toUpperCase();
+  const upperVariant = rawVariant.toUpperCase();
+
+  // Common NAV-Alpha imports may store ACH as Medium because fallback tonnage defaults to 50.
+  if (upperChassis === "ACH" || upperVariant.startsWith("ACH-")) {
+    return {
+      className: "Light",
+      chassisName: "ACH",
+      variantName: rawVariant,
+    };
+  }
+
+  // UM-IIC variants can be split as chassis "UM"; keep them grouped under Clan UrbanMech UM-IIC.
+  if (upperVariant.startsWith("UM-IIC-") || upperChassis === "UM-IIC" || (upperChassis === "UM" && upperVariant.startsWith("UM-IIC-"))) {
+    return {
+      className: "Light",
+      chassisName: "Clan UrbanMech UM-IIC",
+      variantName: upperVariant === "UM-IIC-MTSP" ? "UM-IIC-M" : rawVariant,
+    };
+  }
+
+  return {
+    className: doc.class ?? inferWeightClass(doc.tonnage),
+    chassisName: rawChassis,
+    variantName: rawVariant,
+  };
+}
+
 export async function createMech(input: CreateMechInput): Promise<MechDoc> {
+  const candidateLink = canonicalizeBuildLink(input.link || input.buildUrl || "");
+  if (candidateLink) {
+    const existingDocs = await listMechs();
+    const duplicate = existingDocs.find((doc) => {
+      const docLink = canonicalizeBuildLink(doc.link || doc.buildUrl || "");
+      return docLink && docLink === candidateLink;
+    });
+    if (duplicate) {
+      throw new Error("DUPLICATE_BUILD_LINK");
+    }
+  }
+
   const tonnage = input.tonnage ?? 50;
   const primaryRange = input.primaryRangeBracket ?? [input.metadata.ranges.idealMin, input.metadata.ranges.idealMax];
   const doc: MechDoc = {
@@ -121,6 +193,17 @@ export async function getMechById(id: string): Promise<MechDoc | null> {
     .fetchAll();
 
   return resources[0] ?? null;
+}
+
+export async function deleteMechById(id: string): Promise<boolean> {
+  const existing = await getMechById(id);
+  if (!existing) {
+    return false;
+  }
+
+  const container = getMechsContainer();
+  await container.item(existing.id, existing.id).delete();
+  return true;
 }
 
 export async function upsertMechWithId(id: string, input: CreateMechInput): Promise<MechDoc> {
@@ -160,7 +243,22 @@ export async function listMechs(): Promise<MechDoc[]> {
     })
     .fetchAll();
 
-  return resources;
+  const byId = new Map<string, MechDoc>();
+  for (const doc of resources) {
+    const existing = byId.get(doc.id);
+    if (!existing) {
+      byId.set(doc.id, doc);
+      continue;
+    }
+
+    const existingTs = existing._ts ?? 0;
+    const nextTs = doc._ts ?? 0;
+    if (nextTs >= existingTs) {
+      byId.set(doc.id, doc);
+    }
+  }
+
+  return Array.from(byId.values());
 }
 
 export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
@@ -168,22 +266,24 @@ export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
   const classes: WeightClass[] = ["Light", "Medium", "Heavy", "Assault"];
 
   return classes.map((weightClass) => {
-    const classDocs = docs.filter((doc) => (doc.class ?? inferWeightClass(doc.tonnage)) === weightClass);
+    const classDocs = docs.filter((doc) => normalizeForHierarchy(doc).className === weightClass);
     const chassisMap = new Map<string, MechDoc[]>();
 
     for (const doc of classDocs) {
-      const bucket = chassisMap.get(doc.chassis) ?? [];
+      const chassisName = normalizeForHierarchy(doc).chassisName;
+      const bucket = chassisMap.get(chassisName) ?? [];
       bucket.push(doc);
-      chassisMap.set(doc.chassis, bucket);
+      chassisMap.set(chassisName, bucket);
     }
 
     const chassis = Array.from(chassisMap.entries())
       .map(([chassisCode, chassisDocs]) => {
         const variantMap = new Map<string, MechDoc[]>();
         for (const doc of chassisDocs) {
-          const bucket = variantMap.get(doc.variant) ?? [];
+          const variantName = normalizeForHierarchy(doc).variantName;
+          const bucket = variantMap.get(variantName) ?? [];
           bucket.push(doc);
-          variantMap.set(doc.variant, bucket);
+          variantMap.set(variantName, bucket);
         }
 
         const variants = Array.from(variantMap.entries())

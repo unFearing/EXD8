@@ -22,6 +22,8 @@ type NavAlphaApiResponse = {
   message?: string;
 };
 
+const MWO_EXPORT_CODE_REGEX = /\bA[0-9A-Za-z:;<=>?@\[\]\\^_`|+\-]{20,}\b/g;
+
 function inferWeightClass(tonnage: number): WeightClass {
   if (tonnage <= 35) return "Light";
   if (tonnage <= 55) return "Medium";
@@ -47,6 +49,22 @@ function parseBuildTokenFromUrl(url: URL): string | null {
   return trimmed ? trimmed : null;
 }
 
+function resolveChassisCodeFromVariant(variantCode: string): string {
+  const upperVariantCode = variantCode.toUpperCase();
+  const knownCodes = Object.keys(navAlphaChassisCatalog)
+    .slice()
+    .sort((a, b) => b.length - a.length);
+
+  for (const code of knownCodes) {
+    const upperCode = code.toUpperCase();
+    if (upperVariantCode === upperCode || upperVariantCode.startsWith(`${upperCode}-`)) {
+      return code;
+    }
+  }
+
+  return variantCode.split("-")[0];
+}
+
 function parseWeaponsFromHtml(html: string): string[] {
   const lines = html
     .split(/\r?\n/)
@@ -61,6 +79,19 @@ function parseWeaponsFromHtml(html: string): string[] {
     if (result.length >= 20) break;
   }
   return result;
+}
+
+function extractExportCodeCandidates(text: string): string[] {
+  const matches = text.match(MWO_EXPORT_CODE_REGEX) ?? [];
+  return matches
+    .map((value) => value.trim())
+    .filter((value, idx, list) => value.length >= 20 && list.indexOf(value) === idx)
+    .sort((a, b) => b.length - a.length);
+}
+
+function pickBestExportCode(candidates: string[]): string | null {
+  if (!candidates.length) return null;
+  return candidates[0] ?? null;
 }
 
 function sanitizeRenderedLine(rawLine: string): string {
@@ -111,10 +142,12 @@ function isIgnoredRenderedLine(line: string): boolean {
   return ignoredExact.has(line);
 }
 
-function parseBuildFromRenderedText(renderedText: string): { weaponry: string; equipment: string[] } | null {
+function parseBuildFromRenderedText(renderedText: string): { weaponry: string; equipment: string[]; quirks: string[]; exportCode: string | null } | null {
   const weaponCounts = new Map<string, number>();
   const equipmentCounts = new Map<string, number>();
+  const quirks: string[] = [];
   let heatSinksFromStats: number | null = null;
+  let inQuirksSection = false;
 
   const weaponPattern = /(ac\/?\d+|uac|lbx|gauss|ppc|laser|flamer|machine gun|srm|lrm|atm|hag|rifle|narc|tag|snub)/i;
   const equipmentPattern = /(ammo|engine|heat\s*sink|probe|ecm|jump\s*jet|tcomp|targeting computer|sensor|masc|endo|ferro|stealth|dhs)/i;
@@ -123,6 +156,22 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
     const line = sanitizeRenderedLine(rawLine);
     if (isIgnoredRenderedLine(line)) continue;
     if (/^>/i.test(line)) continue;
+
+    if (/^quirks?\b/i.test(line)) {
+      inQuirksSection = true;
+      continue;
+    }
+
+    // Quirks are useful to keep as metadata but should never pollute weapon/equipment parsing.
+    if (inQuirksSection) {
+      quirks.push(line);
+      continue;
+    }
+
+    // Ignore stat modifier rows (commonly table rows from the quirks/stats sidebar).
+    if (/\|/.test(line) && /[+-]\s*\d/.test(line)) {
+      continue;
+    }
 
     const heatSinkMatch = line.match(/heat\s*sinks?\s*:?\s*(\d{1,2})/i);
     if (heatSinkMatch) {
@@ -162,6 +211,7 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
   }
   const weaponLines = Array.from(weaponCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
   const equipmentLines = Array.from(equipmentCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
+  const exportCode = pickBestExportCode(extractExportCodeCandidates(renderedText));
 
   if (!weaponLines.length && !equipmentLines.length) {
     return null;
@@ -170,6 +220,8 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
   return {
     weaponry: weaponLines.join(" | "),
     equipment: equipmentLines,
+    quirks,
+    exportCode,
   };
 }
 
@@ -197,9 +249,10 @@ function numberValue(value: JsonValue): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: string[] } | null {
+function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: string[]; exportCode: string | null } | null {
   const weaponCounts = new Map<string, number>();
   const equipmentCounts = new Map<string, number>();
+  const exportCodeCandidates: string[] = [];
 
   visitJson(data, (obj) => {
     const itemTypeRaw = stringValue(obj.item_type);
@@ -215,6 +268,15 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
 
     const count = numberValue(obj.count) ?? numberValue(obj.qty) ?? numberValue(obj.quantity) ?? 1;
     const safeCount = Math.max(1, Math.floor(count));
+
+    for (const value of Object.values(obj)) {
+      const asString = stringValue(value);
+      if (!asString) continue;
+      const matches = extractExportCodeCandidates(asString);
+      if (matches.length) {
+        exportCodeCandidates.push(...matches);
+      }
+    }
 
     if (itemType === "weapon") {
       weaponCounts.set(baseName, (weaponCounts.get(baseName) ?? 0) + safeCount);
@@ -240,6 +302,7 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
   const toLine = ([name, qty]: [string, number]) => (qty > 1 ? `${qty}x ${name}` : name);
   const weaponLines = Array.from(weaponCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
   const equipmentLines = Array.from(equipmentCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
+  const exportCode = pickBestExportCode(exportCodeCandidates);
 
   if (!weaponLines.length && !equipmentLines.length) {
     return null;
@@ -248,6 +311,7 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
   return {
     weaponry: weaponLines.join(" | "),
     equipment: equipmentLines,
+    exportCode,
   };
 }
 
@@ -326,8 +390,11 @@ async function fetchBuildFromApi(buildToken: string, apiKey: string): Promise<Js
 }
 
 function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: string[]): ParseBuildResponse {
-  const chassisCode = variantCode.split("-")[0];
-  const variantSuffix = variantCode.split("-").slice(1).join("-") || variantCode;
+  const chassisCode = resolveChassisCodeFromVariant(variantCode);
+  const variantSuffix =
+    variantCode.toUpperCase().startsWith(`${chassisCode.toUpperCase()}-`)
+      ? variantCode.slice(chassisCode.length + 1)
+      : variantCode.split("-").slice(1).join("-") || variantCode;
   const catalog = navAlphaChassisCatalog[chassisCode];
 
   const chassis = catalog?.chassis ?? chassisCode;
@@ -432,6 +499,16 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         result.draft.equipment = parsed.equipment;
         result.metadata.extractedEquipmentLines = parsed.equipment.length;
       }
+      if (parsed?.quirks.length) {
+        result.metadata.extractedQuirkLines = parsed.quirks.length;
+      }
+      if (parsed?.exportCode) {
+        result.draft.buildCodes = {
+          ...result.draft.buildCodes,
+          export: parsed.exportCode,
+        };
+        result.metadata.extractedExportCode = true;
+      }
     } catch (error: unknown) {
       warnings.push(
         error instanceof Error ? `Rendered scrape failed: ${error.message}` : "Rendered scrape failed"
@@ -452,6 +529,13 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           result.draft.equipment = parsed.equipment;
           result.metadata.extractedEquipmentLines = parsed.equipment.length;
         }
+        if (parsed?.exportCode) {
+          result.draft.buildCodes = {
+            ...result.draft.buildCodes,
+            export: parsed.exportCode,
+          };
+          result.metadata.extractedExportCode = true;
+        }
         if (!parsed) {
           warnings.push("NAV-Alpha API returned build data but no recognizable weapon/equipment entries were found.");
         }
@@ -464,6 +548,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       try {
         const html = await fetchHtml(parsedUrl.toString());
         const weaponLines = parseWeaponsFromHtml(html);
+        const htmlExportCode = pickBestExportCode(extractExportCodeCandidates(html));
         if (weaponLines.length) {
           result.metadata.extractedWeaponLines = weaponLines.length;
           result.draft.weaponry = weaponLines.join(" | ");
@@ -471,9 +556,20 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         } else {
           warnings.push("Could not extract weapon list from page HTML. Fill weaponry manually.");
         }
+        if (htmlExportCode) {
+          result.draft.buildCodes = {
+            ...result.draft.buildCodes,
+            export: htmlExportCode,
+          };
+          result.metadata.extractedExportCode = true;
+        }
       } catch (error: unknown) {
         warnings.push(error instanceof Error ? `HTML fetch failed: ${error.message}` : "HTML fetch failed");
       }
+    }
+
+    if (!result.draft.buildCodes.export) {
+      warnings.push("Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.");
     }
 
     return ok(result);

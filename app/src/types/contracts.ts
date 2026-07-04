@@ -4,6 +4,7 @@ export type DeckMap = "Alpine Peaks" | "Bear Claw II" | "Crimson Strait" | "Froz
 export type DeckSide = "1" | "2" | "either";
 export type LegacyDeckSide = DeckSide | "Team 1" | "Team 2" | "Agnostic";
 export type Lance = "A" | "B" | "C" | "";
+export type QuickslotKey = "A" | "B" | "C" | "D" | "E";
 
 export type DeckRowDoc = {
   slot: number;
@@ -63,6 +64,26 @@ export type DropDeckUpsertInput = {
   description: string;
   name: string;
   deck: DeckRowDoc[];
+};
+
+export type QuickslotEntry = {
+  map: DeckMap;
+  slot: QuickslotKey;
+  deckId?: string;
+};
+
+export type QuickslotDoc = {
+  id: string;
+  slots: QuickslotEntry[];
+  updatedAt?: string;
+  updatedBy?: string;
+  schemaVersion?: "1.0.0";
+  docType?: "quickslot";
+};
+
+export type QuickslotUpsertInput = {
+  id?: string;
+  slots: QuickslotEntry[];
 };
 
 export type MapConfigDoc = {

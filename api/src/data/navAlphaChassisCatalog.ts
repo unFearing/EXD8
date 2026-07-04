@@ -12,6 +12,16 @@ export type CachedChassis = {
 
 // Local cache for mapping NAV-Alpha build codes to normalized mech metadata.
 export const navAlphaChassisCatalog: Record<string, CachedChassis> = {
+  ACH: {
+    chassis: "ACH",
+    defaultTech: "Clan",
+    tonnage: 30,
+  },
+  "UM-IIC": {
+    chassis: "Clan UrbanMech UM-IIC",
+    defaultTech: "Clan",
+    tonnage: 30,
+  },
   BSK: {
     chassis: "Bullshark",
     defaultTech: "IS",
