@@ -24,6 +24,10 @@ export type WeightClassSummary = {
 };
 
 function toBuildMarkdown(doc: MechDoc): string {
+  if (doc.markdown && doc.markdown.trim()) {
+    return doc.markdown;
+  }
+
   const metadata = doc.metadata ?? {
     equipment: doc.equipment ?? [],
     ranges: {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../db/repositories/matchNightRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   createMatchNight: vi.fn(async (input: { teamId: string; seasonId: string; date: string; round: number; opponent: string; drops: unknown[] }, updatedBy: string) => ({
     ...input,
     id: "match-1",
@@ -11,7 +11,7 @@ vi.mock("../../db/repositories/matchNightRepository.js", () => ({
   })),
 }));
 
-import { createMatchNightHandler } from "./create.js";
+import { createMatchNightHandler } from "../../../../src/functions/matchNights/create.js";
 
 function validPayload() {
   return {

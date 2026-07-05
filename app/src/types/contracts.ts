@@ -90,6 +90,8 @@ export type MapConfigDoc = {
   id: string;
   name: DeckMap;
   imageUrl: string;
+  gridUrl?: string;
+  maproomUrl?: string;
 };
 
 export type KeyFactors = {
@@ -177,6 +179,7 @@ export type MechDoc = {
   primaryRangeBracket?: [number, number];
   optimalRange?: number;
   maxRange?: number;
+  markdown?: string;
   _rid?: string;
   _self?: string;
   _etag?: string;

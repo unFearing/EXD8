@@ -4,11 +4,11 @@ const { getMechByIdMock } = vi.hoisted(() => ({
   getMechByIdMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   getMechById: getMechByIdMock,
 }));
 
-import { getMechByIdHandler } from "./getById.js";
+import { getMechByIdHandler } from "../../../../src/functions/mechs/getById.js";
 
 describe("getMechByIdHandler", () => {
   it("returns 404 when doc is missing", async () => {

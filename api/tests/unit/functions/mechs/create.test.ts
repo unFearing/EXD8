@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   createMech: vi.fn(async (input: {
     chassis: string;
     variant: string;
@@ -33,7 +33,7 @@ vi.mock("../../db/repositories/mechRepository.js", () => ({
   })),
 }));
 
-import { createMechHandler } from "./create.js";
+import { createMechHandler } from "../../../../src/functions/mechs/create.js";
 
 function validPayload() {
   return {

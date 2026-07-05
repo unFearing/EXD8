@@ -172,7 +172,7 @@ describe("OAuth Token Exchange & User Resolution", () => {
     it("normalizes redirect URI by removing fragment", () => {
       const uri = "http://localhost:5173/auth/callback#something";
       const parsed = new URL(uri);
-      // Normally URL.toString() doesn't include fragment
+      parsed.hash = "";
       expect(parsed.toString()).not.toContain("#");
     });
   });

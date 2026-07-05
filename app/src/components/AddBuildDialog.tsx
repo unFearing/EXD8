@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -21,10 +21,8 @@ import {
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { parseMechBuild, createMech } from "../api/client";
+import { parseMechBuild, createMech, getMechRoles } from "../api/client";
 import type { CreateMechInput } from "../types/contracts";
-
-const ROLE_OPTIONS = ["Capper", "Striker", "Skirmisher", "Brawler", "Sniper", "Fire Support", "Juggernaut"];
 
 function defaultBuildDraft(): CreateMechInput {
   return {
@@ -34,7 +32,7 @@ function defaultBuildDraft(): CreateMechInput {
     link: "",
     weaponry: "",
     description: "",
-    role: "Skirmisher",
+    role: "",
     buildCodes: {},
     skillCode: "pending",
     metadata: {
@@ -122,6 +120,7 @@ type BulkReviewState = {
 
 export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuildDialogProps) {
   const isLight = mode === "light";
+  const [roleOptions, setRoleOptions] = useState<string[]>([]);
   
   const [useManual, setUseManual] = useState(false);
   const [useBulk, setUseBulk] = useState(false);
@@ -143,6 +142,30 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
   const [exportCodeText, setExportCodeText] = useState("");
   const [equipmentText, setEquipmentText] = useState("");
   const [buildMeta, setBuildMeta] = useState<Record<string, string | number | boolean | null>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getMechRoles()
+      .then((roles) => {
+        if (!cancelled) setRoleOptions(roles);
+      })
+      .catch(() => {
+        if (!cancelled) setRoleOptions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!roleOptions.length) return;
+    setBuildDraft((prev) => {
+      if (prev.role && roleOptions.includes(prev.role)) return prev;
+      const preferred = roleOptions.includes("Skirmisher") ? "Skirmisher" : roleOptions[0];
+      return { ...prev, role: preferred };
+    });
+  }, [roleOptions]);
 
   const handleParse = async () => {
     if (!urlInput.trim()) return;
@@ -600,7 +623,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                     value={buildDraft.role}
                     onChange={(e) => setBuildDraft((prev) => ({ ...prev, role: e.target.value }))}
                   >
-                    {ROLE_OPTIONS.map((role) => (
+                    {roleOptions.map((role) => (
                       <MenuItem key={role} value={role}>
                         {role}
                       </MenuItem>

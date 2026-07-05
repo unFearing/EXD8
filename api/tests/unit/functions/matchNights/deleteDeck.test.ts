@@ -4,11 +4,11 @@ const { deleteDropDeckByIdMock } = vi.hoisted(() => ({
   deleteDropDeckByIdMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/matchNightRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   deleteDropDeckById: deleteDropDeckByIdMock,
 }));
 
-vi.mock("../../middleware/authGuard.js", () => ({
+vi.mock("../../../../src/middleware/authGuard.js", () => ({
   getRequestContext: (request: { headers: Headers }) => {
     const role = request.headers.get("x-user-role");
     const teamId = request.headers.get("x-team-id");
@@ -35,7 +35,7 @@ vi.mock("../../middleware/authGuard.js", () => ({
   },
 }));
 
-import { deleteDropDeckHandler } from "./deleteDeck.js";
+import { deleteDropDeckHandler } from "../../../../src/functions/matchNights/deleteDeck.js";
 
 describe("deleteDropDeckHandler", () => {
   it("returns 200 when deck is successfully deleted", async () => {
@@ -51,7 +51,10 @@ describe("deleteDropDeckHandler", () => {
     } as never);
 
     expect(response.status).toBe(200);
-    expect(response.jsonBody).toEqual({ id: "deck-123", deleted: true });
+    expect(response.jsonBody).toEqual({
+      ok: true,
+      data: { id: "deck-123", deleted: true },
+    });
   });
 
   it("returns 404 when deck is not found", async () => {

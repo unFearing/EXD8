@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchNightCreateInputSchema, mechDocSchema } from "./contracts.js";
+import { matchNightCreateInputSchema, mechDocSchema } from "../../../src/types/contracts.js";
 
 describe("matchNightCreateInputSchema", () => {
   it("accepts a valid payload", () => {

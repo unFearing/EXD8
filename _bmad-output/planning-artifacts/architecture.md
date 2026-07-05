@@ -1,13 +1,4 @@
 ---
-stepsCompleted: [1]
-inputDocuments: ["prd.md", "domain-mwo-competitive-league-research-2026-05-08.md"]
-workflowType: 'architecture'
-project_name: 'EXD8'
-user_name: 'unF'
-date: '2026-05-08'
----
-
----
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 inputDocuments: ["prd.md", "domain-mwo-competitive-league-research-2026-05-08.md"]
 workflowType: 'architecture'
@@ -44,6 +35,15 @@ date: '2026-05-08'
 ## 1. System Overview
 
 EXD8 is a two-phase web platform for MWO competitive team management.
+
+### Status Snapshot
+
+This document intentionally tracks two lenses:
+
+- Current state (implemented in repository): the React app in `app/` and Azure Functions API in `api/` as of the latest commit.
+- Planned target (phase progression): the broader architecture direction defined by the PRD for future increments.
+
+When details differ, current state is authoritative for run/build behavior.
 
 ### Phased Architecture
 
@@ -93,16 +93,16 @@ EXD8 is a two-phase web platform for MWO competitive team management.
 
 ## 2. Technology Stack
 
-### Confirmed Decisions
+### Current Implementation Snapshot
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| **Frontend** | React 18 + TypeScript | Mature ecosystem, real-time UI patterns, Azure integration |
-| **Styling** | Tailwind CSS | Utility-first, rapid dark theme UI, consistent gaming aesthetic |
-| **State Management** | Zustand | Lightweight, simple API, no boilerplate overhead |
-| **Backend** | Azure Functions (Node.js) | Serverless, Azure credits, minimal infrastructure |
+| **Frontend** | React 19 + TypeScript | Strong component model, typed UI, fast Vite workflow |
+| **Styling / UI** | MUI 7 + Emotion | Consistent component library, themed UI system |
+| **State Management** | React hooks + component state | Current implementation keeps state local and focused |
+| **Backend** | Azure Functions (Node.js, v4 programming model) | Serverless API runtime with minimal ops overhead |
 | **Database** | Azure CosmosDB (NoSQL/JSON) | Azure credits, flexible schema, managed service |
-| **Real-Time** | Azure Web PubSub | Managed WebSocket service, Azure credits, minimal setup |
+| **Real-Time** | HTTP polling + API refresh (current), Web PubSub planned | Current code relies on API fetch/update flows |
 | **Auth** | Discord OAuth2 | Team already uses Discord; role-mapped permissions |
 | **Static Site** | Jekyll (existing Foam) | Phase 1 existing workspace, no rewrite needed |
 | **Hosting** | Azure Static Web Apps | Azure credits, built-in CDN, SWA + Functions integration |
@@ -110,16 +110,20 @@ EXD8 is a two-phase web platform for MWO competitive team management.
 | **Build Tool** | Vite | Fast HMR, ESM-native, production-optimized bundles |
 | **Discord Bot** | discord.py or discord.js (Phase 3) | Well-maintained libraries for bot development |
 
+### Planned Target Notes
+
+- Web PubSub remains a planned enhancement; the current production code path is request/response API updates.
+- Additional role and workflow hardening from the PRD remains valid directionally, but implementation should be cross-checked with `api/src/functions` before execution.
+
 ### Version Targets (at time of writing)
 
 | Package | Version |
 |---------|---------|
-| React | 18.x |
-| TypeScript | 5.x |
+| React | 19.x |
+| TypeScript | 6.x (app), 5.x (api) |
 | Node.js | 20 LTS |
-| Tailwind CSS | 3.x |
-| Zustand | 4.x |
-| Vite | 5.x |
+| MUI | 7.x |
+| Vite | 8.x |
 
 ---
 
@@ -127,60 +131,44 @@ EXD8 is a two-phase web platform for MWO competitive team management.
 
 ```
 exd8/
-├── .github/
-│   └── workflows/
-│       ├── deploy-static.yml      # Phase 1 Jekyll deploy
-│       └── deploy-app.yml         # Phase 2 React + Functions deploy
-│
-├── docs/                          # Phase 1: Jekyll/Foam static site (existing)
-│   ├── _layouts/
-│   ├── assets/
-│   ├── mwo/                       # MWO content (builds, etc.)
-│   └── _config.yml
-│
-├── app/                           # Phase 2: React SPA
+├── .agents/                       # BMAD skill payloads used by Copilot
+├── _bmad/                         # BMAD config + resolver scripts
+├── _bmad-output/                  # BMAD generated architecture/implementation docs
+├── _layouts/                      # Foam/Jekyll layouts
+├── assets/                        # Site assets
+├── foam_docs/                     # Source Foam documentation
+├── mwo_docs/                      # Generated and curated MWO docs
+├── app/                           # React SPA
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── deck/              # Drop deck UI components
-│   │   │   ├── builds/            # Build repository components
-│   │   │   ├── auth/              # Discord OAuth UI
-│   │   │   └── ui/                # Shared UI primitives
-│   │   ├── hooks/                 # Custom React hooks
-│   │   │   ├── useRealtime.ts     # Azure Web PubSub WebSocket hook
-│   │   │   ├── useDeck.ts         # Deck CRUD operations
-│   │   │   └── useAuth.ts         # Discord OAuth session
-│   │   ├── store/                 # Zustand state slices
-│   │   │   ├── deckStore.ts
-│   │   │   ├── buildStore.ts
-│   │   │   └── authStore.ts
-│   │   ├── api/                   # API client (typed fetch wrappers)
-│   │   ├── types/                 # Shared TypeScript types
-│   │   └── pages/                 # Route-level components
-│   │       ├── SeasonView.tsx
-│   │       ├── DropDeckView.tsx
-│   │       ├── BuildRepository.tsx
-│   │       └── RulesConfig.tsx
+│   │   ├── api/                   # Typed HTTP client wrappers
+│   │   ├── components/            # Main UI surface (deck/repository/auth)
+│   │   ├── data/
+│   │   ├── hooks/
+│   │   └── types/
 │   ├── public/
 │   ├── vite.config.ts
 │   └── package.json
 │
-├── api/                           # Azure Functions (Node.js)
+├── api/                           # Azure Functions API
 │   ├── src/
 │   │   ├── functions/
-│   │   │   ├── auth/              # Discord OAuth token exchange
-│   │   │   ├── decks/             # Deck CRUD endpoints
-│   │   │   ├── builds/            # Build repository endpoints
-│   │   │   ├── rules/             # League rules endpoints
-│   │   │   └── realtime/          # Web PubSub negotiate endpoint
-│   │   ├── middleware/
-│   │   │   ├── authGuard.ts       # Validate Discord session + role
-│   │   │   └── validateDeck.ts    # Deck composition rule enforcement
+│   │   │   ├── auth/
+│   │   │   ├── backups/
+│   │   │   ├── config/
+│   │   │   ├── health/
+│   │   │   ├── matchNights/
+│   │   │   └── mechs/
 │   │   ├── db/
-│   │   │   └── cosmos.ts          # CosmosDB client + query helpers
-│   │   └── types/                 # Shared API types
+│   │   ├── middleware/
+│   │   ├── scripts/
+│   │   └── types/
+│   ├── tests/                     # Cross-cutting API regression tests
 │   ├── host.json
+│   ├── tsconfig.json
 │   └── package.json
 │
+├── README.md
+├── dev-local.sh
 └── staticwebapp.config.json       # Azure SWA routing config
 ```
 
@@ -366,6 +354,13 @@ export async function requireAuth(req, context) {
 
 ## 6. Real-Time Sync
 
+### Current State (Implemented)
+
+- UI synchronization is currently API-driven using HTTP calls and client refresh/state updates.
+- No Web PubSub negotiate route is currently registered in `api/src/functions`.
+
+### Planned Target (Phase 2+)
+
 ### Azure Web PubSub Pattern
 
 ```
@@ -378,7 +373,7 @@ TL edits a slot → POST /api/decks/:matchId/drops/:drop/slots/:slot
   → Azure Function: writes to CosmosDB
   → Azure Function: publishes message to Web PubSub group ("match-2026-05-08")
   → All connected clients receive the update instantly
-  → Client: Zustand store updates → React re-renders slot
+  → Client: local React state updates → React re-renders slot
 ```
 
 ### WebSocket Message Shape
@@ -400,13 +395,17 @@ TL edits a slot → POST /api/decks/:matchId/drops/:drop/slots/:slot
 ```typescript
 // app/src/hooks/useRealtime.ts
 export function useRealtime(matchId: string) {
-  const updateSlot = useDeckStore(s => s.updateSlot)
+  const [slots, setSlots] = useState([])
   
   useEffect(() => {
     const ws = connectToPubSub(matchId)
-    ws.on('SLOT_UPDATED', (msg) => updateSlot(msg.slotId, msg.data))
+    ws.on('SLOT_UPDATED', (msg) => {
+      setSlots((prev) => prev.map((slot) => (slot.slotId === msg.slotId ? { ...slot, ...msg.data } : slot)))
+    })
     return () => ws.close()
   }, [matchId])
+
+  return slots
 }
 ```
 
@@ -414,7 +413,54 @@ export function useRealtime(matchId: string) {
 
 ## 7. API Design
 
-### REST Endpoints (Azure Functions)
+### Current Endpoints (Implemented)
+
+Routes registered in `api/src/functions` currently include:
+
+#### Health
+```
+GET  /api/health
+```
+
+#### Auth
+```
+POST /api/auth/discord
+GET  /api/auth/me
+```
+
+#### Configuration
+```
+GET  /api/config/maps
+```
+
+#### Mechs
+```
+GET    /api/mechs
+POST   /api/mechs
+GET    /api/mechs/{id}
+PUT    /api/mechs/{id}
+DELETE /api/mechs/{id}
+GET    /api/mechs/hierarchy
+POST   /api/mechs/parseBuild
+```
+
+#### Match Nights / Decks
+```
+POST   /api/matchNights
+GET    /api/matchNights/{id}
+GET    /api/decks
+PUT    /api/decks
+DELETE /api/decks/{id}
+GET    /api/quickslots
+PUT    /api/quickslots
+```
+
+#### Backups
+```
+POST /api/backups/discord/manual
+```
+
+### Planned REST Surface (PRD Direction)
 
 #### Auth
 ```
@@ -474,7 +520,14 @@ GET  /api/realtime/negotiate?matchId= → Return signed WebSocket URL
 
 ## 8. Frontend Architecture
 
-### Page Routes
+### Current Routes (Implemented)
+
+```
+/            → DeckBoard
+/repository  → RepositoryView
+```
+
+### Planned Routes (PRD Direction)
 
 ```
 /                     → Season overview (list of match nights)
@@ -488,28 +541,14 @@ GET  /api/realtime/negotiate?matchId= → Return signed WebSocket URL
 
 ```
 App
-├── AuthProvider (Discord session context)
-├── RealtimeProvider (Web PubSub connection)
+├── BrowserRouter
+├── ThemeProvider (MUI)
 └── Router
-    ├── SeasonView
-    │   └── MatchNightCard[]
-    ├── MatchNightView
-    │   ├── DropTabNav
-    │   └── DropDeckView
-    │       └── MechSlotRow[] (8 slots)
-    │           ├── WeightClassBadge
-    │           ├── ChassisVariantField (inline edit, TL only)
-    │           ├── PilotField (inline edit, TL only)
-    │           ├── BuildLink
-    │           ├── SkillCodeCopyButton
-    │           ├── KeyFactorBadges (ECM / BAP / JJ / speed)
-    │           └── BackupPilotIndicator
-    ├── BuildRepository
-    │   ├── BuildFilters (weight class, role, chassis)
-    │   └── BuildCard[]
-    └── RulesConfig (TL only)
-        ├── DropCompositionEditor
-        └── ChassisEquivalenceEditor
+  ├── DeckBoard
+  │   ├── MechSelector
+  │   └── AddBuildDialog
+  ├── RepositoryView
+  └── AuthSplash
 ```
 
 ### Inline Editing Pattern (No Modals)
@@ -523,11 +562,11 @@ Slot fields are editable in-place for TLs:
 
 function ChassisVariantField({ slotId, value, canEdit }) {
   const [editing, setEditing] = useState(false)
-  const patch = useDeckStore(s => s.patchSlot)
+  const [draft, setDraft] = useState(value)
 
   return editing && canEdit
-    ? <input autoFocus defaultValue={value}
-        onBlur={e => { patch(slotId, { variant: e.target.value }); setEditing(false) }} />
+    ? <input autoFocus defaultValue={draft}
+        onBlur={e => { setDraft(e.target.value); setEditing(false) }} />
     : <span onClick={() => canEdit && setEditing(true)}>{value || '—'}</span>
 }
 ```
@@ -658,20 +697,20 @@ export async function validateMech(chassis: string, variant: string) {
 | Element | Convention | Example |
 |---------|-----------|---------|
 | React components | PascalCase | `MechSlotRow` |
-| Hooks | camelCase, `use` prefix | `useDeckStore` |
+| Hooks | camelCase, `use` prefix | `useDiscordAuth` |
 | Azure Functions | camelCase files | `patchSlot.ts` |
 | CosmosDB containers | camelCase plural | `matchNights` |
 | Environment vars | SCREAMING_SNAKE_CASE | `DISCORD_CLIENT_ID` |
-| CSS classes | Tailwind utilities | `bg-zinc-900 text-amber-400` |
+| Theme styling | MUI theme + Emotion styles | `createTheme({ palette: { mode: 'dark' } })` |
 
 ### Optimistic Updates Pattern
 
 All inline edits use optimistic updates:
 
-1. Update local Zustand store immediately (UI feels instant)
+1. Update local component state immediately (UI feels instant)
 2. Fire `PATCH` to API
 3. On success: real-time WebSocket update confirms to all other clients
-4. On failure: revert Zustand store, show inline error
+4. On failure: revert local state, show inline error
 
 ### Rule Validation
 

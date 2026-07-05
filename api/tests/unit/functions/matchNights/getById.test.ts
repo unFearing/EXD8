@@ -4,11 +4,11 @@ const { getMatchNightByIdMock } = vi.hoisted(() => ({
   getMatchNightByIdMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/matchNightRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   getMatchNightById: getMatchNightByIdMock,
 }));
 
-import { getMatchNightByIdHandler } from "./getById.js";
+import { getMatchNightByIdHandler } from "../../../../src/functions/matchNights/getById.js";
 
 describe("getMatchNightByIdHandler", () => {
   it("returns 404 when doc is missing", async () => {

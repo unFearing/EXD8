@@ -4,11 +4,11 @@ const { listMapConfigsMock } = vi.hoisted(() => ({
   listMapConfigsMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/configRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/configRepository.js", () => ({
   listMapConfigs: listMapConfigsMock,
 }));
 
-import { listMapConfigsHandler } from "./listMaps.js";
+import { listMapConfigsHandler } from "../../../../src/functions/config/listMaps.js";
 
 describe("listMapConfigsHandler", () => {
   it("returns 200 with map documents", async () => {

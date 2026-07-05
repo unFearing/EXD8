@@ -4,11 +4,11 @@ const { listMechsMock } = vi.hoisted(() => ({
   listMechsMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   listMechs: listMechsMock,
 }));
 
-import { listMechsHandler } from "./list.js";
+import { listMechsHandler } from "../../../../src/functions/mechs/list.js";
 
 describe("listMechsHandler", () => {
   it("returns 200 with mech list", async () => {

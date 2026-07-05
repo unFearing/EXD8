@@ -4,11 +4,11 @@ const { upsertDropDeckMock } = vi.hoisted(() => ({
   upsertDropDeckMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/matchNightRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   upsertDropDeck: upsertDropDeckMock,
 }));
 
-import { upsertDropDeckHandler } from "./upsertDeck.js";
+import { upsertDropDeckHandler } from "../../../../src/functions/matchNights/upsertDeck.js";
 
 function validPayload() {
   return {

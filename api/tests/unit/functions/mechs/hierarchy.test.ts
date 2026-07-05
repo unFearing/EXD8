@@ -4,11 +4,11 @@ const { getMechHierarchyMock } = vi.hoisted(() => ({
   getMechHierarchyMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   getMechHierarchy: getMechHierarchyMock,
 }));
 
-import { getMechHierarchyHandler } from "./hierarchy.js";
+import { getMechHierarchyHandler } from "../../../../src/functions/mechs/hierarchy.js";
 
 describe("getMechHierarchyHandler", () => {
   it("returns 200 with hierarchy", async () => {

@@ -4,11 +4,11 @@ const { deleteMechByIdMock } = vi.hoisted(() => ({
   deleteMechByIdMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   deleteMechById: deleteMechByIdMock,
 }));
 
-vi.mock("../../middleware/authGuard.js", () => ({
+vi.mock("../../../../src/middleware/authGuard.js", () => ({
   getRequestContext: (request: { headers: Headers }) => {
     const role = request.headers.get("x-user-role");
     const teamId = request.headers.get("x-team-id");
@@ -35,7 +35,7 @@ vi.mock("../../middleware/authGuard.js", () => ({
   },
 }));
 
-import { deleteMechHandler } from "./delete.js";
+import { deleteMechHandler } from "../../../../src/functions/mechs/delete.js";
 
 describe("deleteMechHandler", () => {
   it("returns 200 when mech is successfully deleted", async () => {
@@ -52,8 +52,11 @@ describe("deleteMechHandler", () => {
 
     expect(response.status).toBe(200);
     expect(response.jsonBody).toEqual({
-      id: "550e8400-e29b-41d4-a716-446655440000",
-      deleted: true,
+      ok: true,
+      data: {
+        id: "550e8400-e29b-41d4-a716-446655440000",
+        deleted: true,
+      },
     });
   });
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MECH_ROLE_VALUES } from "./mechRoles.js";
 
 export const weightClassSchema = z.enum(["Light", "Medium", "Heavy", "Assault"]);
 export type WeightClass = z.infer<typeof weightClassSchema>;
@@ -15,15 +16,7 @@ export type QuickslotKey = z.infer<typeof quickslotKeySchema>;
 export const mechTechSchema = z.enum(["IS", "Clan"]);
 export type MechTech = z.infer<typeof mechTechSchema>;
 
-export const mechRoleSchema = z.enum([
-  "Capper",
-  "Striker",
-  "Skirmisher",
-  "Brawler",
-  "Sniper",
-  "Fire Support",
-  "Juggernaut",
-]);
+export const mechRoleSchema = z.enum(MECH_ROLE_VALUES);
 export type MechRole = z.infer<typeof mechRoleSchema>;
 
 const primaryRangeBracketSchema = z
@@ -133,7 +126,7 @@ export const dropDeckUpsertInputSchema = z.object({
 export const quickslotEntrySchema = z.object({
   map: deckMapSchema,
   slot: quickslotKeySchema,
-  deckId: z.string().uuid().optional(),
+  deckId: z.string().min(1).optional(),
 });
 
 export const quickslotDocSchema = z.object({
@@ -154,6 +147,15 @@ export const mapConfigDocSchema = z.object({
   id: z.string().min(1),
   name: deckMapSchema,
   imageUrl: z.string().url().or(z.literal("")),
+  gridUrl: z.string().url().or(z.literal("")).optional(),
+  maproomUrl: z.string().url().or(z.literal("")).optional(),
+});
+
+export const mapConfigUpsertInputSchema = z.object({
+  name: deckMapSchema,
+  imageUrl: z.string().url().or(z.literal("")),
+  gridUrl: z.string().url().or(z.literal("")).optional(),
+  maproomUrl: z.string().url().or(z.literal("")),
 });
 
 export const matchNightCreateInputSchema = z.object({
@@ -237,6 +239,7 @@ const mechDocBaseSchema = z.object({
   primaryRangeBracket: primaryRangeBracketSchema.optional(),
   optimalRange: z.number().nonnegative().optional(),
   maxRange: z.number().nonnegative().optional(),
+  markdown: z.string().optional(),
 }).extend(cosmosSystemFieldsSchema.shape);
 
 export const mechDocSchema = mechDocBaseSchema.superRefine((value, context) => {
@@ -286,6 +289,7 @@ export type DropDeckUpsertInput = z.infer<typeof dropDeckUpsertInputSchema>;
 export type QuickslotDoc = z.infer<typeof quickslotDocSchema>;
 export type QuickslotUpsertInput = z.infer<typeof quickslotUpsertInputSchema>;
 export type MapConfigDoc = z.infer<typeof mapConfigDocSchema>;
+export type MapConfigUpsertInput = z.infer<typeof mapConfigUpsertInputSchema>;
 export type MatchNightCreateInput = z.infer<typeof matchNightCreateInputSchema>;
 export type MatchNightDoc = z.infer<typeof matchNightDocSchema>;
 export type BuildDoc = z.infer<typeof buildDocSchema>;

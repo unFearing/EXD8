@@ -1,5 +1,7 @@
 import "./functions/health/get.js";
 import "./functions/config/listMaps.js";
+import "./functions/config/listMechRoles.js";
+import "./functions/config/upsertMap.js";
 import "./functions/auth/index.js";
 import "./functions/mechs/create.js";
 import "./functions/mechs/hierarchy.js";

@@ -289,8 +289,25 @@ export async function deleteDropDeckById(id: string): Promise<boolean> {
   }
 
   const container = getMatchNightsContainer();
-  await container.item(existing.id, existing.id).delete();
-  return true;
+  const raw = existing as DropDeckDoc & { teamId?: string };
+  const partitionCandidates: Array<string | undefined> = [raw.id, raw.docType, raw.teamId, undefined];
+  const attempted = new Set<string>();
+  let lastError: unknown = null;
+
+  for (const candidate of partitionCandidates) {
+    const key = candidate ?? "__undefined__";
+    if (attempted.has(key)) continue;
+    attempted.add(key);
+
+    try {
+      await container.item(raw.id, candidate as never).delete();
+      return true;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("DELETE_FAILED");
 }
 
 export async function getQuickslotById(id: string): Promise<QuickslotDoc | null> {

@@ -142,6 +142,26 @@ export async function getMapConfigs(): Promise<MapConfigDoc[]> {
   return parsed.data;
 }
 
+export async function getMechRoles(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/config/mech-roles`);
+  const parsed = await parseResponse<string[]>(response);
+  return parsed.data;
+}
+
+export async function saveMapConfig(input: { name: string; imageUrl: string; maproomUrl: string }): Promise<MapConfigDoc> {
+  const response = await fetch(`${API_BASE}/config/maps`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<MapConfigDoc>(response);
+  return parsed.data;
+}
+
 export async function saveDropDeck(input: DropDeckUpsertInput): Promise<DropDeckDoc> {
   const response = await fetch(`${API_BASE}/decks`, {
     method: "POST",
@@ -207,6 +227,20 @@ export async function deleteMech(id: string): Promise<{ id: string; deleted: tru
   });
 
   const parsed = await parseResponse<{ id: string; deleted: true }>(response);
+  return parsed.data;
+}
+
+export async function updateMech(id: string, input: MechDoc): Promise<MechDoc> {
+  const response = await fetch(`${API_BASE}/mechs/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<MechDoc>(response);
   return parsed.data;
 }
 

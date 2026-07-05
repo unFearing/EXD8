@@ -30,6 +30,10 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 
+# Lockfiles are intentionally tracked for deterministic installs
+!api/package-lock.json
+!app/package-lock.json
+
 # Editor
 .idea/
 *.suo

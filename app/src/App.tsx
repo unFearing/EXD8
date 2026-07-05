@@ -8,6 +8,7 @@ import { useDiscordAuth } from "./hooks/useDiscordAuth";
 import "./App.css";
 
 type ThemeMode = "light" | "dark";
+type ViewMode = "view" | "edit";
 
 function buildTheme(mode: ThemeMode) {
   return createTheme({
@@ -45,6 +46,7 @@ function AppContent() {
     const stored = localStorage.getItem("ui-theme-mode");
     return stored === "light" || stored === "dark" ? stored : "dark";
   });
+  const [viewMode, setViewMode] = useState<ViewMode>("edit");
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
   const auth = useDiscordAuth();
@@ -94,6 +96,8 @@ function AppContent() {
                 user={effectiveAuth.user}
                 onLogout={effectiveAuth.logout}
                 hasRole={effectiveAuth.hasRole}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
             }
           />
@@ -106,6 +110,8 @@ function AppContent() {
                 user={effectiveAuth.user}
                 onLogout={effectiveAuth.logout}
                 hasRole={effectiveAuth.hasRole}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
             }
           />

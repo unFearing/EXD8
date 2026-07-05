@@ -4,11 +4,11 @@ const { upsertMechWithIdMock } = vi.hoisted(() => ({
   upsertMechWithIdMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/mechRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
   upsertMechWithId: upsertMechWithIdMock,
 }));
 
-import { upsertMechHandler } from "./upsert.js";
+import { upsertMechHandler } from "../../../../src/functions/mechs/upsert.js";
 
 function validPayload() {
   return {

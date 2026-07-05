@@ -1,16 +1,22 @@
-import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs } from "@mui/material";
+import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import SaveIcon from "@mui/icons-material/Save";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Typography } from "@mui/material";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import type { WeightClassSummary } from "../types/contracts";
-import { deleteMech, getMechHierarchy } from "../api/client";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { MechDoc, WeightClassSummary } from "../types/contracts";
+import { deleteMech, getMechHierarchy, getMechs, updateMech } from "../api/client";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import { AddBuildDialog } from "./AddBuildDialog";
+
+type EditMode = "view" | "edit";
 
 interface RepositoryViewProps {
   mode: "light" | "dark";
@@ -18,6 +24,8 @@ interface RepositoryViewProps {
   user: DiscordUser | null;
   onLogout: () => void;
   hasRole: (roleId: string) => boolean;
+  viewMode: EditMode;
+  onViewModeChange: (mode: EditMode) => void;
 }
 
 export function RepositoryView({
@@ -26,22 +34,30 @@ export function RepositoryView({
   user,
   onLogout,
   hasRole: _hasRole,
+  viewMode,
+  onViewModeChange,
 }: RepositoryViewProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const isLight = mode === "light";
   const [hierarchy, setHierarchy] = useState<WeightClassSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openAddBuild, setOpenAddBuild] = useState(false);
   const [deletingMechId, setDeletingMechId] = useState<string | null>(null);
+  const [savingMechId, setSavingMechId] = useState<string | null>(null);
   const [selectedWeightClass, setSelectedWeightClass] = useState<"Light" | "Medium" | "Heavy" | "Assault">("Light");
+  const editMode = viewMode;
+  const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
+  const [markdownDrafts, setMarkdownDrafts] = useState<Record<string, string>>({});
   const canDelete = user?.appRole === "TL";
 
   const loadHierarchy = async () => {
     setLoading(true);
     try {
-      const data = await getMechHierarchy();
-      setHierarchy(data);
+      const [hierarchyData, mechs] = await Promise.all([getMechHierarchy(), getMechs()]);
+      setHierarchy(hierarchyData);
+      setMechsById(Object.fromEntries(mechs.map((mech) => [mech.id, mech])));
       setError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load repository");
@@ -53,6 +69,14 @@ export function RepositoryView({
   useEffect(() => {
     void loadHierarchy();
   }, []);
+
+  useEffect(() => {
+    const navState = location.state as { openAddBuild?: boolean } | null;
+    if (navState?.openAddBuild) {
+      setOpenAddBuild(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   const handleDeleteMech = async (id: string) => {
     if (!canDelete) {
@@ -91,6 +115,34 @@ export function RepositoryView({
     }
   };
 
+  const handleSaveMarkdown = async (id: string) => {
+    if (!canDelete) {
+      setError("Only TL can edit builds.");
+      return;
+    }
+
+    const source = mechsById[id];
+    if (!source) {
+      setError("Could not find build source document to save markdown.");
+      return;
+    }
+
+    const markdown = (markdownDrafts[id] ?? "").trim();
+
+    try {
+      setSavingMechId(id);
+      await updateMech(id, {
+        ...source,
+        markdown,
+      });
+      await loadHierarchy();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save markdown");
+    } finally {
+      setSavingMechId(null);
+    }
+  };
+
   const filteredHierarchy = hierarchy.filter((weightClass) => weightClass.class === selectedWeightClass);
 
   return (
@@ -112,10 +164,10 @@ export function RepositoryView({
           backdropFilter: "blur(8px)",
         }}
       >
-        <Box sx={{ px: { xs: 1, md: 2 }, py: 1, display: "grid", gap: 1.1 }}>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-            <Stack direction="row" spacing={1.2} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, mr: 0.5 }}>
+        <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
+          <Stack direction="row" spacing={2.2} sx={{ alignItems: "center", flexWrap: "nowrap", justifyContent: "space-between" }}>
+            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6 }}>
                 EXDEATE
               </Typography>
 
@@ -129,19 +181,47 @@ export function RepositoryView({
                 variant="scrollable"
                 scrollButtons="auto"
                 sx={{
-                  minHeight: 34,
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 34, py: 0 },
+                  minHeight: 38,
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
                 <Tab label="Drop Decks" value="dropDecks" />
                 <Tab label="Repository" value="repository" />
               </Tabs>
+
+              <Divider
+                orientation="vertical"
+                flexItem
+                sx={{
+                  alignSelf: "stretch",
+                  borderColor: isLight ? "rgba(108, 128, 158, 0.3)" : "rgba(130, 154, 217, 0.24)",
+                  mx: 1.0,
+                }}
+              />
+
+              <Tabs
+                value={selectedWeightClass}
+                onChange={(_, value: "Light" | "Medium" | "Heavy" | "Assault") => setSelectedWeightClass(value)}
+                variant="scrollable"
+                scrollButtons="auto"
+                sx={{
+                  minHeight: 38,
+                  maxWidth: { xs: 360, md: 500 },
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.6 },
+                  "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
+                }}
+              >
+                <Tab label="Lights" value="Light" />
+                <Tab label="Mediums" value="Medium" />
+                <Tab label="Heavies" value="Heavy" />
+                <Tab label="Assaults" value="Assault" />
+              </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={1.2} sx={{ alignItems: "center", ml: "auto", flexWrap: "wrap" }}>
+            <Stack direction="row" spacing={1.35} sx={{ alignItems: "center", ml: "auto", flexWrap: "nowrap", justifyContent: "flex-end", flexShrink: 0 }}>
               {user && (
-                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.9rem", display: { xs: "none", sm: "block" } }}>
+                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
                   {user.username}
                 </Typography>
               )}
@@ -155,6 +235,10 @@ export function RepositoryView({
                   background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
                   color: isLight ? "#fff" : "#7fb3ff",
                   textTransform: "none",
+                  borderRadius: 999,
+                  px: 2,
+                  minHeight: 38,
+                  fontWeight: 700,
                   "&:hover": {
                     background: isLight ? "rgba(58, 111, 189, 0.95)" : "rgba(127, 179, 255, 0.28)",
                   },
@@ -166,11 +250,14 @@ export function RepositoryView({
               <ButtonGroup
                 size="small"
                 sx={{
-                  borderRadius: 1.5,
+                  borderRadius: 999,
                   overflow: "hidden",
+                  background: isLight ? "rgba(151, 170, 198, 0.1)" : "rgba(121, 149, 206, 0.08)",
                   boxShadow: isLight ? "0 0 0 1px rgba(108, 128, 158, 0.35)" : "0 0 0 1px rgba(130, 154, 217, 0.28)",
                   "& .MuiButton-root": {
                     borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
+                    minHeight: 38,
+                    px: 1.5,
                   },
                 }}
               >
@@ -184,29 +271,42 @@ export function RepositoryView({
                     {isLight ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
                   </Button>
                 </Tooltip>
-                <Button variant="outlined" onClick={onLogout}>
-                  Discord Logout
+                <Button
+                  startIcon={<VisibilityIcon fontSize="small" />}
+                  variant={editMode === "view" ? "contained" : "outlined"}
+                  onClick={() => onViewModeChange("view")}
+                >
+                  View
+                </Button>
+                <Button
+                  startIcon={<EditIcon fontSize="small" />}
+                  variant={editMode === "edit" ? "contained" : "outlined"}
+                  onClick={() => onViewModeChange("edit")}
+                >
+                  Edit
                 </Button>
               </ButtonGroup>
+
+              <Button
+                variant="contained"
+                size="small"
+                onClick={onLogout}
+                sx={{
+                  backgroundColor: "#5865F2",
+                  color: "#fff",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  borderRadius: 999,
+                  px: 2,
+                  minHeight: 38,
+                  "&:hover": { backgroundColor: "#4752C4" },
+                }}
+              >
+                Discord Logout
+              </Button>
             </Stack>
           </Stack>
 
-          <Tabs
-            value={selectedWeightClass}
-            onChange={(_, value: "Light" | "Medium" | "Heavy" | "Assault") => setSelectedWeightClass(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              minHeight: 34,
-              "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 34, py: 0 },
-              "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
-            }}
-          >
-            <Tab label="Lights" value="Light" />
-            <Tab label="Mediums" value="Medium" />
-            <Tab label="Heavies" value="Heavy" />
-            <Tab label="Assaults" value="Assault" />
-          </Tabs>
         </Box>
       </AppBar>
 
@@ -261,21 +361,50 @@ export function RepositoryView({
                                   }}
                                 >
                                   <Stack spacing={1}>
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{build.markdown}</ReactMarkdown>
-                                    {canDelete && (
-                                      <Box>
+                                    {editMode === "edit" ? (
+                                      <TextField
+                                        multiline
+                                        minRows={8}
+                                        value={markdownDrafts[build.id] ?? build.markdown}
+                                        onChange={(event) => {
+                                          const next = event.target.value;
+                                          setMarkdownDrafts((previous) => ({
+                                            ...previous,
+                                            [build.id]: next,
+                                          }));
+                                        }}
+                                        fullWidth
+                                        size="small"
+                                      />
+                                    ) : (
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{build.markdown}</ReactMarkdown>
+                                    )}
+
+                                    {editMode === "edit" && canDelete && (
+                                      <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
                                         <Button
-                                          variant="outlined"
+                                          variant="contained"
+                                          size="small"
+                                          startIcon={<SaveIcon fontSize="small" />}
+                                          disabled={savingMechId === build.id}
+                                          onClick={() => {
+                                            void handleSaveMarkdown(build.id);
+                                          }}
+                                        >
+                                          {savingMechId === build.id ? "Saving..." : "Save Markdown"}
+                                        </Button>
+                                        <IconButton
                                           color="error"
                                           size="small"
                                           disabled={deletingMechId === build.id}
                                           onClick={() => {
                                             void handleDeleteMech(build.id);
                                           }}
+                                          aria-label="Delete mech"
                                         >
-                                          Delete Mech
-                                        </Button>
-                                      </Box>
+                                          <DeleteIcon fontSize="small" />
+                                        </IconButton>
+                                      </Stack>
                                     )}
                                   </Stack>
                                 </Paper>

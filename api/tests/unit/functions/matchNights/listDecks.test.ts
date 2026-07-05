@@ -4,11 +4,11 @@ const { listDropDecksMock } = vi.hoisted(() => ({
   listDropDecksMock: vi.fn(),
 }));
 
-vi.mock("../../db/repositories/matchNightRepository.js", () => ({
+vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   listDropDecks: listDropDecksMock,
 }));
 
-import { listDropDecksHandler } from "./listDecks.js";
+import { listDropDecksHandler } from "../../../../src/functions/matchNights/listDecks.js";
 
 describe("listDropDecksHandler", () => {
   it("returns 200 when auth headers are missing", async () => {

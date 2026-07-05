@@ -19,11 +19,15 @@ import {
   TextField,
   Typography,
   Tooltip,
+  Divider,
 } from "@mui/material";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
-import { deleteDropDeck, getDropDecks, getMapConfigs, getMechs, getQuickslots, saveDropDeck, saveQuickslots } from "../api/client";
+import AddIcon from "@mui/icons-material/Add";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
+import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import { MechSelector } from "./MechSelector";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
@@ -85,6 +89,8 @@ type DeckBoardProps = {
   user: DiscordUser | null;
   onLogout: () => void;
   hasRole: (roleId: string) => boolean;
+  viewMode: EditMode;
+  onViewModeChange: (mode: EditMode) => void;
 };
 
 const MAP_FALLBACK_OPTIONS: DeckMap[] = ["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"];
@@ -100,12 +106,21 @@ const DEFAULT_MAPROOM_URL = "https://maps.mwocomp.com/mwo2?room=IvLEFS2M7dVmsG";
 const PILOT_OPTIONS = [
   "Extra_Better",
   "Saikyou",
-  "ChapDude",
-  "Itsalrightwithme",
   "GrillSquad",
   "Xiphias",
   "Rabbid0Squirrel",
   "NeirSolon",
+  "unFearing",
+  "Acerg",
+  "Heavenwarrior",
+  "Valk1r",
+  "CaLL Me GiL",
+  "P4TCHY",
+  "Bux",
+  "HydroKyle240",
+  "Itsalrightwithme",
+  "ChapDude",
+  "Awesomeguyzzz"
 ];
 
 const getPilotShortcode = (pilotName: string): string => {
@@ -143,7 +158,7 @@ function createEmptyRow(slot: number): DeckRow {
 
 function createTemplate(map: DeckMap, side: TeamSide, version = 1): DeckTemplate {
   return {
-    id: `${map}-${side}-${version}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    id: crypto.randomUUID(),
     name: `${map} ${side} v${version}`,
     map,
     side,
@@ -243,6 +258,21 @@ function resolveMaproomEmbedUrl(selectedMap: DeckMap, selectedMapConfig?: MapCon
   } catch {
     return DEFAULT_MAPROOM_URL;
   }
+}
+
+function resolveMaproomSourceUrl(selectedMapConfig?: MapConfigDoc): string {
+  const configWithEmbed = selectedMapConfig as MapConfigDoc & {
+    maproomUrl?: string;
+    roomUrl?: string;
+    iframeUrl?: string;
+  };
+
+  return (
+    configWithEmbed?.maproomUrl ||
+    configWithEmbed?.roomUrl ||
+    configWithEmbed?.iframeUrl ||
+    DEFAULT_MAPROOM_URL
+  );
 }
 
 function toWeightClassLabel(value: string): "Light" | "Medium" | "Heavy" | "Assault" {
@@ -352,16 +382,17 @@ function toDropDeckUpsertInput(template: DeckTemplate, baseTemplate?: DeckTempla
   };
 }
 
-export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckBoardProps) {
+export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMode, onViewModeChange }: DeckBoardProps) {
   const navigate = useNavigate();
   const isLight = mode === "light";
   const syncedSignaturesRef = useRef<Map<string, string>>(new Map());
   const syncedTemplatesRef = useRef<Map<string, DeckTemplate>>(new Map());
 
-  const [editMode, setEditMode] = useState<EditMode>("edit");
+  const editMode = viewMode;
   const [mapConfigs, setMapConfigs] = useState<MapConfigDoc[]>([]);
   const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_FALLBACK_OPTIONS[0]);
   const [mapTileMode, setMapTileMode] = useState<MapTileMode>("static");
+  const [showGridOverlay, setShowGridOverlay] = useState(false);
   const [iframeZoom, setIframeZoom] = useState(1);
   const [iframeOffsetX, setIframeOffsetX] = useState(0);
   const [iframeOffsetY, setIframeOffsetY] = useState(0);
@@ -377,6 +408,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
   const [mechs, setMechs] = useState<MechDoc[]>([]);
   const [configuredMechs, setConfiguredMechs] = useState<ConfigMech[]>([]);
   const [mechSelectorSource] = useState<SelectorSource>("repository");
+  const [deckRoleOptions, setDeckRoleOptions] = useState<string[]>([]);
+  const [maproomUrlInput, setMaproomUrlInput] = useState("");
+  const [maproomSaving, setMaproomSaving] = useState(false);
+  const [maproomNotice, setMaproomNotice] = useState("");
+  const maproomUrlInputRef = useRef<HTMLInputElement | null>(null);
 
   void hasRole;
   const canDelete = user?.appRole === "TL";
@@ -388,16 +424,43 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
   }, [mapConfigs]);
 
   const selectedMapConfig = useMemo(() => mapConfigs.find((entry) => entry.name === selectedMap), [mapConfigs, selectedMap]);
+  const hasGridOverlay = Boolean(selectedMapConfig?.gridUrl);
   const maproomEmbedUrl = useMemo(
     () => resolveMaproomEmbedUrl(selectedMap, selectedMapConfig),
     [selectedMap, selectedMapConfig],
   );
 
   useEffect(() => {
+    setMaproomUrlInput(resolveMaproomSourceUrl(selectedMapConfig).trim());
+  }, [selectedMapConfig]);
+
+  useEffect(() => {
+    if (!maproomNotice) return;
+    const timeoutId = window.setTimeout(() => setMaproomNotice(""), 2500);
+    return () => window.clearTimeout(timeoutId);
+  }, [maproomNotice]);
+
+  useEffect(() => {
+    if (mapTileMode !== "iframe" || editMode !== "edit") return;
+    const frame = window.requestAnimationFrame(() => {
+      const input = maproomUrlInputRef.current;
+      if (!input) return;
+      input.focus();
+      const length = input.value.length;
+      input.setSelectionRange(length, length);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mapTileMode, editMode, selectedMap]);
+
+  useEffect(() => {
     setIframeZoom(1);
     setIframeOffsetX(0);
     setIframeOffsetY(0);
   }, [selectedMap]);
+
+  useEffect(() => {
+    if (!hasGridOverlay) setShowGridOverlay(false);
+  }, [hasGridOverlay, selectedMap]);
 
   useEffect(() => {
     let cancelled = false;
@@ -419,6 +482,14 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
 
   useEffect(() => {
     let cancelled = false;
+
+    getMechRoles()
+      .then((roles) => {
+        if (!cancelled) setDeckRoleOptions(roles);
+      })
+      .catch(() => {
+        if (!cancelled) setDeckRoleOptions([]);
+      });
 
     Promise.all([getMechs(), loadMechsConfig()])
       .then(([cosmosMechs, configMechs]) => {
@@ -754,6 +825,31 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
     if (candidate) setSelectedTemplateId(candidate.id);
   };
 
+  const saveMaproomUrl = async () => {
+    const currentConfig = selectedMapConfig;
+    if (!currentConfig) {
+      setDeckError("Map config unavailable for this map.");
+      return;
+    }
+
+    try {
+      setMaproomSaving(true);
+      setDeckError("");
+      setMaproomNotice("");
+      const saved = await saveMapConfig({
+        name: selectedMap,
+        imageUrl: currentConfig.imageUrl,
+        maproomUrl: maproomUrlInput.trim(),
+      });
+      setMapConfigs((previous) => previous.map((entry) => (entry.name === saved.name ? { ...entry, ...saved } : entry)));
+      setMaproomNotice("Maproom link saved.");
+    } catch (err) {
+      setDeckError(err instanceof Error ? err.message : "Failed to save maproom URL.");
+    } finally {
+      setMaproomSaving(false);
+    }
+  };
+
   const handleDeleteDeck = async (template: DeckTemplate) => {
     if (!canDelete) {
       setDeckError("Only TL can delete decks.");
@@ -915,10 +1011,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
           backdropFilter: "blur(8px)",
         }}
       >
-        <Box sx={{ px: { xs: 1, md: 2 }, py: 1, display: "grid", gap: 1.1 }}>
-          <Stack direction="row" spacing={1.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-            <Stack direction="row" spacing={1.2} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, mr: 0.5 }}>
+        <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
+          <Stack direction="row" spacing={2.2} sx={{ alignItems: "center", flexWrap: "nowrap", justifyContent: "space-between" }}>
+            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
+              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6 }}>
                 EXDEATE
               </Typography>
 
@@ -932,19 +1028,46 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                 variant="scrollable"
                 scrollButtons="auto"
                 sx={{
-                  minHeight: 34,
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 34, py: 0 },
+                  minHeight: 38,
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
                 <Tab label="Drop Decks" value="dropDecks" />
                 <Tab label="Repository" value="repository" />
               </Tabs>
+
+              <Divider
+                orientation="vertical"
+                flexItem
+                sx={{
+                  alignSelf: "stretch",
+                  borderColor: isLight ? "rgba(108, 128, 158, 0.3)" : "rgba(130, 154, 217, 0.24)",
+                  mx: 1.0,
+                }}
+              />
+
+              <Tabs
+                value={selectedMap}
+                onChange={(_, value: DeckMap) => onMapChange(value)}
+                variant="scrollable"
+                scrollButtons="auto"
+                sx={{
+                  minHeight: 38,
+                  maxWidth: { xs: 360, md: 560 },
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.6 },
+                  "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
+                }}
+              >
+                {mapOptions.map((map) => (
+                  <Tab key={map} label={map} value={map} />
+                ))}
+              </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={1.2} sx={{ ml: "auto", alignItems: "center", flexWrap: "wrap" }}>
+            <Stack direction="row" spacing={1.35} sx={{ ml: "auto", alignItems: "center", flexWrap: "nowrap", justifyContent: "flex-end", flexShrink: 0 }}>
               {user && (
-                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.9rem", display: { xs: "none", sm: "block" } }}>
+                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
                   {user.username}
                 </Typography>
               )}
@@ -952,26 +1075,35 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
               <Button
                 variant="contained"
                 size="small"
-                onClick={onLogout}
+                startIcon={<AddIcon />}
+                onClick={() => navigate("/repository", { state: { openAddBuild: true } })}
                 sx={{
-                  backgroundColor: "#5865F2",
-                  color: "#fff",
+                  background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
+                  color: isLight ? "#fff" : "#7fb3ff",
                   textTransform: "none",
-                  fontWeight: 600,
-                  "&:hover": { backgroundColor: "#4752C4" },
+                  borderRadius: 999,
+                  px: 2,
+                  minHeight: 38,
+                  fontWeight: 700,
+                  "&:hover": {
+                    background: isLight ? "rgba(58, 111, 189, 0.95)" : "rgba(127, 179, 255, 0.28)",
+                  },
                 }}
               >
-                Discord Logout
+                Add Build
               </Button>
 
               <ButtonGroup
                 size="small"
                 sx={{
-                  borderRadius: 1.5,
+                  borderRadius: 999,
                   overflow: "hidden",
+                  background: isLight ? "rgba(151, 170, 198, 0.1)" : "rgba(121, 149, 206, 0.08)",
                   boxShadow: isLight ? "0 0 0 1px rgba(108, 128, 158, 0.35)" : "0 0 0 1px rgba(130, 154, 217, 0.28)",
                   "& .MuiButton-root": {
                     borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
+                    minHeight: 38,
+                    px: 1.5,
                   },
                 }}
               >
@@ -985,31 +1117,41 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                     {isLight ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
                   </Button>
                 </Tooltip>
-                <Button variant={editMode === "view" ? "contained" : "outlined"} onClick={() => setEditMode("view")}>
+                <Button
+                  startIcon={<VisibilityIcon fontSize="small" />}
+                  variant={editMode === "view" ? "contained" : "outlined"}
+                  onClick={() => onViewModeChange("view")}
+                >
                   View
                 </Button>
-                <Button variant={editMode === "edit" ? "contained" : "outlined"} onClick={() => setEditMode("edit")}>
+                <Button
+                  startIcon={<EditIcon fontSize="small" />}
+                  variant={editMode === "edit" ? "contained" : "outlined"}
+                  onClick={() => onViewModeChange("edit")}
+                >
                   Edit
                 </Button>
               </ButtonGroup>
+
+              <Button
+                variant="contained"
+                size="small"
+                onClick={onLogout}
+                sx={{
+                  backgroundColor: "#5865F2",
+                  color: "#fff",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  borderRadius: 999,
+                  px: 2,
+                  minHeight: 38,
+                  "&:hover": { backgroundColor: "#4752C4" },
+                }}
+              >
+                Discord Logout
+              </Button>
             </Stack>
           </Stack>
-
-          <Tabs
-            value={selectedMap}
-            onChange={(_, value: DeckMap) => onMapChange(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              minHeight: 34,
-              "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 34, py: 0 },
-              "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
-            }}
-          >
-            {mapOptions.map((map) => (
-              <Tab key={map} label={map} value={map} />
-            ))}
-          </Tabs>
 
         </Box>
       </AppBar>
@@ -1018,6 +1160,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
         <Stack spacing={2}>
             {error && <Alert severity="error">{error}</Alert>}
             {deckError && <Alert severity="error">{deckError}</Alert>}
+          {maproomNotice && <Alert severity="success">{maproomNotice}</Alert>}
             {deckLoading && <Alert severity="info">Loading drop decks...</Alert>}
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2 }}>
               <Paper
@@ -1046,14 +1189,23 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                       MAP VIEW
                     </Typography>
                     <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap" }}>
-                      <Button
-                        variant={mapTileMode === "static" ? "contained" : "outlined"}
-                        size="small"
-                        onClick={() => setMapTileMode("static")}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Static
-                      </Button>
+                      <ButtonGroup size="small" variant="outlined">
+                        <Button
+                          variant={mapTileMode === "static" ? "contained" : "outlined"}
+                          onClick={() => setMapTileMode("static")}
+                          sx={{ textTransform: "none" }}
+                        >
+                          Static
+                        </Button>
+                        <Button
+                          variant={showGridOverlay ? "contained" : "outlined"}
+                          onClick={() => setShowGridOverlay((prev) => !prev)}
+                          disabled={mapTileMode !== "static" || !hasGridOverlay}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {showGridOverlay ? "Grid On" : "Grid Off"}
+                        </Button>
+                      </ButtonGroup>
                       <Button
                         variant={mapTileMode === "iframe" ? "contained" : "outlined"}
                         size="small"
@@ -1064,6 +1216,28 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                       </Button>
                       {mapTileMode === "iframe" && (
                         <>
+                          <TextField
+                            label="Maproom URL"
+                            size="small"
+                            value={maproomUrlInput}
+                            onChange={(event) => setMaproomUrlInput(event.target.value)}
+                            disabled={editMode !== "edit"}
+                            inputRef={maproomUrlInputRef}
+                            sx={{ minWidth: { xs: 260, md: 440 }, flex: 1 }}
+                          />
+                          {editMode === "edit" && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => {
+                                void saveMaproomUrl();
+                              }}
+                              disabled={maproomSaving}
+                              sx={{ textTransform: "none" }}
+                            >
+                              {maproomSaving ? "Saving..." : "Save Link"}
+                            </Button>
+                          )}
                           <TextField
                             label="Zoom"
                             type="number"
@@ -1116,28 +1290,49 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                       borderRadius: 1.5,
                       overflow: "hidden",
                       border: isLight ? "1px solid rgba(101, 122, 153, 0.34)" : "1px solid rgba(159, 178, 240, 0.24)",
-                      backgroundPosition: "center",
-                      backgroundRepeat: "no-repeat",
-                      backgroundBlendMode: "overlay",
-                      backgroundImage:
-                        `${isLight
-                          ? "linear-gradient(rgba(99,119,148,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(99,119,148,0.16) 1px, transparent 1px)"
-                          : "linear-gradient(rgba(207,221,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(207,221,255,0.08) 1px, transparent 1px)"}${mapTileMode === "static" && selectedMapConfig?.imageUrl ? `, url(${selectedMapConfig.imageUrl})` : ""}`,
-                      backgroundSize: mapTileMode === "static" && selectedMapConfig?.imageUrl ? "30px 30px, 30px 30px, cover" : "30px 30px, 30px 30px",
+                      background: isLight ? "rgba(229, 237, 249, 0.45)" : "rgba(7, 12, 24, 0.52)",
                     }}
                   >
                     {mapTileMode === "static" ? (
-                      <Box
-                        sx={{
-                          position: "absolute",
-                          inset: 16,
-                          borderRadius: 1.5,
-                          border: isLight ? "1px solid rgba(101, 122, 153, 0.34)" : "1px solid rgba(159, 178, 240, 0.24)",
-                          background: isLight
-                            ? "radial-gradient(circle at 30% 30%, rgba(123, 144, 172, 0.34), transparent 42%), radial-gradient(circle at 72% 58%, rgba(156, 171, 192, 0.26), transparent 48%), rgba(205, 216, 230, 0.85)"
-                            : "radial-gradient(circle at 30% 30%, rgba(116, 156, 255, 0.28), transparent 42%), radial-gradient(circle at 72% 58%, rgba(153, 178, 231, 0.18), transparent 48%), rgba(6, 12, 26, 0.8)",
-                        }}
-                      />
+                      <>
+                        {selectedMapConfig?.imageUrl && (
+                          <Box
+                            component="img"
+                            src={selectedMapConfig.imageUrl}
+                            alt={`${selectedMap} map`}
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              objectPosition: "center",
+                              display: "block",
+                              userSelect: "none",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                        {showGridOverlay && selectedMapConfig?.gridUrl && (
+                          <Box
+                            component="img"
+                            src={selectedMapConfig.gridUrl}
+                            alt={`${selectedMap} grid overlay`}
+                            sx={{
+                              position: "absolute",
+                              inset: 0,
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              objectPosition: "center",
+                              display: "block",
+                              opacity: 0.78,
+                              userSelect: "none",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        )}
+                      </>
                     ) : (
                       <>
                         <Box
@@ -1540,7 +1735,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole }: DeckB
                                     sx={editMode === "edit" ? editSelectIconSx : { "& .MuiSelect-icon": { display: "none" } }}
                                   >
                                     <MenuItem value="">{mech?.role ? `${mech.role} (from build)` : "- (none)"}</MenuItem>
-                                    {["Light", "Medium", "Heavy", "Assault", "Support", "Sniper", "Brawler", "Juggernaut"].map((role) => (
+                                    {deckRoleOptions.map((role) => (
                                       <MenuItem key={role} value={role}>{role}</MenuItem>
                                     ))}
                                   </Select>
