@@ -15,7 +15,6 @@ export interface AuthState {
   error: string | null;
 }
 
-const DISCORD_CLIENT_ID = import.meta.env.VITE_DISCORD_CLIENT_ID || "";
 const DISCORD_REDIRECT_URI = `${window.location.origin}/auth/callback`;
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 
@@ -24,12 +23,27 @@ export function useDiscordAuth(): AuthState & {
   logout: () => void;
   hasRole: (roleId: string) => boolean;
 } {
+  const [discordClientId, setDiscordClientId] = useState("");
   const [state, setState] = useState<AuthState>({
     isLoading: true,
     isAuthed: false,
     user: null,
     error: null,
   });
+
+  const loadDiscordClientId = async (): Promise<string> => {
+    if (discordClientId) return discordClientId;
+
+    const response = await fetch("/api/auth/config");
+    if (!response.ok) {
+      throw new Error("Failed to load Discord OAuth configuration");
+    }
+
+    const payload = await response.json() as { ok?: boolean; data?: { clientId?: string } };
+    const clientId = payload?.ok ? payload.data?.clientId ?? "" : "";
+    setDiscordClientId(clientId);
+    return clientId;
+  };
 
   // Check if already authenticated on mount
   useEffect(() => {
@@ -130,31 +144,48 @@ export function useDiscordAuth(): AuthState & {
     handleCallback();
   }, []);
 
+  useEffect(() => {
+    loadDiscordClientId().catch(() => {
+      // Login handler reports the visible error when a user attempts to sign in.
+    });
+  }, []);
+
   const login = () => {
-    if (!DISCORD_CLIENT_ID || DISCORD_CLIENT_ID.includes("YOUR_DISCORD_CLIENT_ID")) {
-      setState((prev) => ({
-        ...prev,
-        error: "Discord client ID is not configured. Set VITE_DISCORD_CLIENT_ID in app/.env.local.",
-      }));
-      return;
-    }
+    void (async () => {
+      try {
+        const clientId = await loadDiscordClientId();
 
-    if (!DISCORD_SNOWFLAKE_REGEX.test(DISCORD_CLIENT_ID)) {
-      setState((prev) => ({
-        ...prev,
-        error: "Discord client ID must be a numeric snowflake (17-20 digits).",
-      }));
-      return;
-    }
+        if (!clientId || clientId.includes("YOUR_DISCORD_CLIENT_ID")) {
+          setState((prev) => ({
+            ...prev,
+            error: "Discord client ID is not configured in API environment variables.",
+          }));
+          return;
+        }
 
-    const scope = "identify guilds.members.read";
-    const url = new URL("https://discord.com/api/oauth2/authorize");
-    url.searchParams.set("client_id", DISCORD_CLIENT_ID);
-    url.searchParams.set("redirect_uri", DISCORD_REDIRECT_URI);
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", scope);
+        if (!DISCORD_SNOWFLAKE_REGEX.test(clientId)) {
+          setState((prev) => ({
+            ...prev,
+            error: "Discord client ID must be a numeric snowflake (17-20 digits).",
+          }));
+          return;
+        }
 
-    window.location.href = url.toString();
+        const scope = "identify guilds.members.read";
+        const url = new URL("https://discord.com/api/oauth2/authorize");
+        url.searchParams.set("client_id", clientId);
+        url.searchParams.set("redirect_uri", DISCORD_REDIRECT_URI);
+        url.searchParams.set("response_type", "code");
+        url.searchParams.set("scope", scope);
+
+        window.location.href = url.toString();
+      } catch {
+        setState((prev) => ({
+          ...prev,
+          error: "Failed to load Discord OAuth configuration from API.",
+        }));
+      }
+    })();
   };
 
   const logout = () => {

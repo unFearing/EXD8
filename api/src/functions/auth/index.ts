@@ -175,3 +175,12 @@ app.http("authMe", {
     }
   },
 });
+
+app.http("authConfig", {
+  methods: ["GET"],
+  authLevel: "anonymous",
+  route: "auth/config",
+  handler: async () => {
+    return ok({ clientId: DISCORD_CLIENT_ID });
+  },
+});
