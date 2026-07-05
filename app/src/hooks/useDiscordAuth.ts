@@ -151,6 +151,7 @@ export function useDiscordAuth(): AuthState & {
   }, []);
 
   const login = () => {
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
     void (async () => {
       try {
         const clientId = await loadDiscordClientId();
@@ -158,6 +159,7 @@ export function useDiscordAuth(): AuthState & {
         if (!clientId || clientId.includes("YOUR_DISCORD_CLIENT_ID")) {
           setState((prev) => ({
             ...prev,
+            isLoading: false,
             error: "Discord client ID is not configured in API environment variables.",
           }));
           return;
@@ -166,6 +168,7 @@ export function useDiscordAuth(): AuthState & {
         if (!DISCORD_SNOWFLAKE_REGEX.test(clientId)) {
           setState((prev) => ({
             ...prev,
+            isLoading: false,
             error: "Discord client ID must be a numeric snowflake (17-20 digits).",
           }));
           return;
@@ -182,6 +185,7 @@ export function useDiscordAuth(): AuthState & {
       } catch {
         setState((prev) => ({
           ...prev,
+          isLoading: false,
           error: "Failed to load Discord OAuth configuration from API.",
         }));
       }

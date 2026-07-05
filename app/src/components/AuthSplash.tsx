@@ -67,38 +67,31 @@ export function AuthSplash({ state, onLogin }: AuthSplashProps) {
           Sign in with Discord to access your team's deck planning tools. You must be a member of the team's Discord server.
         </Typography>
 
-        {state.isLoading ? (
-          <Stack spacing={1} sx={{ alignItems: "center", py: 2 }}>
-            <CircularProgress size={40} />
-            <Typography
-              sx={{
-                fontSize: "0.9rem",
-                color: isLight ? "#556987" : "#cbd6f6",
-              }}
-            >
-              {state.error ? "Auth failed, try again" : "Connecting..."}
-            </Typography>
-          </Stack>
-        ) : (
-          <Button
-            variant="contained"
-            size="large"
-            onClick={onLogin}
-            disabled={state.isLoading}
-            sx={{
-              backgroundColor: "#5865F2",
-              color: "#fff",
-              textTransform: "none",
-              fontWeight: 600,
-              fontSize: "1rem",
-              py: 1.5,
-              "&:hover": { backgroundColor: "#4752C4" },
-              transition: "all 200ms ease",
-            }}
-          >
-            Sign in with Discord
-          </Button>
-        )}
+        <Button
+          variant="contained"
+          size="large"
+          onClick={onLogin}
+          disabled={state.isLoading}
+          sx={{
+            backgroundColor: "#5865F2",
+            color: "#fff",
+            textTransform: "none",
+            fontWeight: 600,
+            fontSize: "1rem",
+            py: 1.5,
+            "&:hover": { backgroundColor: "#4752C4" },
+            transition: "all 200ms ease",
+          }}
+        >
+          {state.isLoading ? (
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+              <CircularProgress size={18} color="inherit" />
+              <span>Authorizing...</span>
+            </Stack>
+          ) : (
+            "Sign in with Discord"
+          )}
+        </Button>
 
         {state.error && (
           <Typography
