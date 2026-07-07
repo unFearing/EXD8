@@ -18,6 +18,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 type StoredDiscordUser = {
   id: string;
+  username?: string;
   appRole?: "TL" | "Pilot";
 };
 
@@ -49,12 +50,14 @@ function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
       "x-team-id": teamId,
       "x-user-role": user.appRole ?? fallbackRole,
       "x-user-id": user.id ?? fallbackUser,
+      "x-user-name": user.username ?? user.id ?? fallbackUser,
     };
   } catch {
     return {
       "x-team-id": teamId,
       "x-user-role": fallbackRole,
       "x-user-id": fallbackUser,
+      "x-user-name": fallbackUser,
     };
   }
 }
@@ -254,5 +257,11 @@ export async function parseMechBuild(url: string): Promise<ParsedMechBuild> {
   });
 
   const parsed = await parseResponse<ParsedMechBuild>(response);
+  return parsed.data;
+}
+
+export async function checkMechLink(url: string): Promise<{ exists: boolean; mechId?: string; chassis?: string; variant?: string }> {
+  const response = await fetch(`${API_BASE}/mechs/checkLink?url=${encodeURIComponent(url)}`);
+  const parsed = await parseResponse<{ exists: boolean; mechId?: string; chassis?: string; variant?: string }>(response);
   return parsed.data;
 }

@@ -175,6 +175,7 @@ export type MechDoc = {
   tech?: "IS" | "Clan";
   tonnage?: number;
   buildUrl?: string;
+  submittedBy?: string;
   equipment?: string[];
   primaryRangeBracket?: [number, number];
   optimalRange?: number;
@@ -210,7 +211,7 @@ export type ConfigMech = {
   tonnage: number;
 };
 
-export type SelectorSource = "repository" | "all";
+export type SelectorSource = "config" | "both" | "repository";
 
 export type ApiSuccess<T> = { ok: true; data: T };
 export type ApiFailure = { ok: false; error: { code: string; message: string; details?: unknown } };

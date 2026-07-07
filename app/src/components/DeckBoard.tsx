@@ -27,7 +27,9 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AddIcon from "@mui/icons-material/Add";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
+import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import { MechSelector } from "./MechSelector";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
@@ -83,6 +85,16 @@ type DeckTemplate = {
   rows: DeckRow[];
 };
 
+type Cs26Issue = {
+  kind: "tonnage" | "class-limit" | "duplicate";
+  message: string;
+};
+
+type Cs26Validation = {
+  issues: Cs26Issue[];
+  rowIssuesBySlot: Map<number, Cs26Issue[]>;
+};
+
 type DeckBoardProps = {
   mode: "light" | "dark";
   onToggleMode: () => void;
@@ -93,15 +105,16 @@ type DeckBoardProps = {
   onViewModeChange: (mode: EditMode) => void;
 };
 
-const MAP_FALLBACK_OPTIONS: DeckMap[] = ["Alpine Peaks", "Bear Claw II", "Crimson Strait", "Frozen City", "River City"];
+const MAP_FALLBACK_OPTIONS: DeckMap[] = CS26_COMPETITION.majorTabs;
 const SIDE_OPTIONS: TeamSide[] = ["1", "2", "either"];
-const ROW_COUNT = 8;
+const ROW_COUNT = CS26_COMPETITION.teamSize;
 const LANCE_OPTIONS: Lance[] = ["", "A", "B", "C"];
 const DECK_AUTOSAVE_DELAY_MS = 1000;
 const DECK_POLL_INTERVAL_MS = 5000;
 const QUICKSLOT_KEYS: QuickslotKey[] = ["A", "B", "C", "D", "E"];
 const MAX_VISIBLE_DECKS_PER_MAP = 3;
 const DEFAULT_MAPROOM_URL = "https://maps.mwocomp.com/mwo2?room=IvLEFS2M7dVmsG";
+const CS26_MIN_TONNAGE = 300;
 
 const PILOT_OPTIONS = [
   "Extra_Better",
@@ -407,7 +420,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [deckError, setDeckError] = useState("");
   const [mechs, setMechs] = useState<MechDoc[]>([]);
   const [configuredMechs, setConfiguredMechs] = useState<ConfigMech[]>([]);
-  const [mechSelectorSource] = useState<SelectorSource>("repository");
+  const [mechSelectorSource, setMechSelectorSource] = useState<SelectorSource>("config");
   const [deckRoleOptions, setDeckRoleOptions] = useState<string[]>([]);
   const [maproomUrlInput, setMaproomUrlInput] = useState("");
   const [maproomSaving, setMaproomSaving] = useState(false);
@@ -645,13 +658,99 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
   const activeTemplate =
     templatesForSelection.find((template) => template.id === selectedTemplateId) ?? templatesForSelection[0];
+
+  const resolveRowConfigMech = (row: DeckRow): ConfigMech | undefined => {
+    const rowChassis = (row.chassis ?? "").toLowerCase().trim();
+    const rowVariant = (row.variant ?? "").toLowerCase().trim();
+    const strippedChassis = rowChassis.replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "");
+
+    return (
+      configuredByPair.get(`${rowChassis}|${rowVariant}`) ??
+      configuredByPair.get(`${strippedChassis}|${rowVariant}`) ??
+      [...configuredByPair.entries()].find(
+        ([key]) => key.startsWith(`${strippedChassis}|`) && key.endsWith(rowVariant),
+      )?.[1]
+    );
+  };
+
   const computeTemplateTonnage = (template?: DeckTemplate) => {
     if (!template) return 0;
     return template.rows.reduce((sum, row) => {
       const byId = mechLookup.get(row.mech)?.tonnage ?? repositoryMechById.get(row.mech)?.tonnage;
       const byConfig = configuredByKey.get(row.mech)?.tonnage;
-      return sum + (byId ?? byConfig ?? 0);
+      const byPair = resolveRowConfigMech(row)?.tonnage;
+      return sum + (byId ?? byConfig ?? byPair ?? 0);
     }, 0);
+  };
+
+  const validateTemplateCs26 = (template?: DeckTemplate): Cs26Validation => {
+    if (!template) return { issues: [], rowIssuesBySlot: new Map<number, Cs26Issue[]>() };
+
+    const issues: Cs26Issue[] = [];
+    const rowIssuesBySlot = new Map<number, Cs26Issue[]>();
+    const tonnage = computeTemplateTonnage(template);
+    if (tonnage < CS26_MIN_TONNAGE || tonnage > CS26_COMPETITION.rules.maxTonnage) {
+      issues.push({
+        kind: "tonnage",
+        message: `Tonnage must be ${CS26_MIN_TONNAGE}-${CS26_COMPETITION.rules.maxTonnage}t (current ${tonnage}t).`,
+      });
+    }
+
+    const classCounts: Record<WeightClass, number> = { Light: 0, Medium: 0, Heavy: 0, Assault: 0 };
+    const chassisCounts = new Map<string, number>();
+    const rowFacts: Array<{ slot: number; rowClass?: WeightClass; normalizedChassis: string }> = [];
+
+    for (const row of template.rows) {
+      const rowMech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
+      const rowConfig = configuredByKey.get(row.mech) ?? resolveRowConfigMech(row);
+      const rowClass = rowMech?.class ?? rowConfig?.class;
+      if (rowClass) {
+        classCounts[rowClass] += 1;
+      }
+
+      const chassis = (row.chassis || rowMech?.chassis || rowConfig?.chassis || "").trim().toLowerCase();
+      if (chassis) {
+        chassisCounts.set(chassis, (chassisCounts.get(chassis) ?? 0) + 1);
+      }
+
+      rowFacts.push({ slot: row.slot, rowClass, normalizedChassis: chassis });
+    }
+
+    const overLimitClasses = new Set<WeightClass>();
+
+    for (const [weightClass, count] of Object.entries(classCounts) as Array<[WeightClass, number]>) {
+      if (count > CS26_COMPETITION.rules.maxPerClass) {
+        overLimitClasses.add(weightClass);
+        issues.push({
+          kind: "class-limit",
+          message: `${weightClass} count ${count} exceeds max ${CS26_COMPETITION.rules.maxPerClass}.`,
+        });
+      }
+    }
+
+    const duplicateChassis = new Set(
+      Array.from(chassisCounts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([chassis]) => chassis),
+    );
+    if (duplicateChassis.size) {
+      issues.push({ kind: "duplicate", message: `Duplicate chassis: ${Array.from(duplicateChassis).join(", ")}.` });
+    }
+
+    for (const row of rowFacts) {
+      const rowIssues: Cs26Issue[] = [];
+      if (row.rowClass && overLimitClasses.has(row.rowClass)) {
+        rowIssues.push({ kind: "class-limit", message: `${row.rowClass} is over the class limit.` });
+      }
+      if (row.normalizedChassis && duplicateChassis.has(row.normalizedChassis)) {
+        rowIssues.push({ kind: "duplicate", message: `Duplicate chassis in deck.` });
+      }
+      if (rowIssues.length) {
+        rowIssuesBySlot.set(row.slot, rowIssues);
+      }
+    }
+
+    return { issues, rowIssuesBySlot };
   };
 
   const updateTemplateById = (templateId: string, updater: (template: DeckTemplate) => DeckTemplate) => {
@@ -1025,8 +1124,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     navigate("/repository");
                   }
                 }}
-                variant="scrollable"
-                scrollButtons="auto"
+                variant="standard"
                 sx={{
                   minHeight: 38,
                   "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
@@ -1050,11 +1148,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               <Tabs
                 value={selectedMap}
                 onChange={(_, value: DeckMap) => onMapChange(value)}
-                variant="scrollable"
-                scrollButtons="auto"
+                variant="standard"
                 sx={{
                   minHeight: 38,
-                  maxWidth: { xs: 360, md: 560 },
                   "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.6 },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
@@ -1490,6 +1586,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               if (!template) {
                 return null;
               }
+              const cs26Validation = validateTemplateCs26(template);
 
               return (
                 <Stack key={slotEntry.slot} spacing={1.2}>
@@ -1583,9 +1680,45 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             ))}
                           </Select>
                         </FormControl>
+                        <FormControl size="small" sx={{ minWidth: 180 }}>
+                          <InputLabel>Mech Source</InputLabel>
+                          <Select
+                            label="Mech Source"
+                            value={mechSelectorSource}
+                            onChange={(event) => setMechSelectorSource(event.target.value as SelectorSource)}
+                          >
+                            <MenuItem value="config">Config</MenuItem>
+                            <MenuItem value="both">Config + Repository</MenuItem>
+                            <MenuItem value="repository">Repository Only</MenuItem>
+                          </Select>
+                        </FormControl>
                         <Typography sx={{ color: isLight ? "#556887" : "#bfd0ff", fontWeight: 700 }}>
                           Total Tonnage: {computeTemplateTonnage(template)} t
                         </Typography>
+                        {(() => {
+                          if (!cs26Validation.issues.length) return null;
+                          return (
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { xs: "flex-start", sm: "center" } }}>
+                              <Stack direction="row" spacing={0.4} sx={{ alignItems: "center" }}>
+                                <WarningAmberIcon fontSize="small" sx={{ color: "#f59e0b" }} />
+                                <Typography variant="caption" sx={{ color: isLight ? "#8a5a00" : "#ffcf76", fontWeight: 700 }}>
+                                  CS26 Issues
+                                </Typography>
+                              </Stack>
+                              <Stack spacing={0.35} sx={{ minWidth: 280 }}>
+                                {cs26Validation.issues.map((issue, idx) => (
+                                  <Typography
+                                    key={`${issue.kind}-${idx}`}
+                                    variant="caption"
+                                    sx={{ color: isLight ? "#8a5a00" : "#ffcf76", fontWeight: 600, lineHeight: 1.35 }}
+                                  >
+                                    {issue.message}
+                                  </Typography>
+                                ))}
+                              </Stack>
+                            </Stack>
+                          );
+                        })()}
                         {canDelete && (
                           <Button
                             variant="outlined"
@@ -1602,18 +1735,18 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     </Box>
 
                     <Box sx={{ p: 1.5, overflowX: "auto" }}>
-                      <Box sx={{ minWidth: 1560 }}>
+                      <Box sx={{ minWidth: 1760 }}>
                         <Box
                           sx={{
                             display: "grid",
-                            gridTemplateColumns: "180px 180px 80px 360px 150px 320px 220px",
+                            gridTemplateColumns: "180px 180px 80px 320px 100px 100px 150px 320px 220px",
                             gap: 1,
                             px: 1,
                             pb: 0.8,
                             borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.25)" : "1px solid rgba(120, 146, 210, 0.2)",
                           }}
                         >
-                          {["Primary", "Alternates", "Lance", "Mech", "Role", "Build", "Skill Tree"].map((header) => (
+                          {["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Skill Tree"].map((header) => (
                             <Typography
                               key={header}
                               variant="caption"
@@ -1628,24 +1761,48 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           {template.rows.map((row, rowIndex) => {
                             const mechDetails = resolveMechDetails(row.mech, mechs, configuredByKey);
                             const mech = mechDetails.mech;
+                            const configMech = mechDetails.configMech;
                             const rowChassis = row.chassis || mech?.chassis || "";
                             const rowVariant = row.variant || mech?.variant || "";
+                            const normalizedChassis = rowChassis.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
+                            const normalizedVariant = rowVariant.toLowerCase().trim();
+                            const selectedConfigMech =
+                              configuredByPair.get(`${rowChassis.toLowerCase()}|${normalizedVariant}`) ??
+                              configuredByPair.get(`${normalizedChassis}|${normalizedVariant}`) ??
+                              [...configuredByPair.entries()].find(
+                                ([key]) => key.startsWith(`${normalizedChassis}|`) && key.endsWith(normalizedVariant),
+                              )?.[1];
                             const buildOptions = getBuildOptions(rowChassis, rowVariant);
                             const selectedBuildId = mech?.id || row.mech || "";
+                            const rowClass = mech?.class ?? configMech?.class ?? selectedConfigMech?.class ?? "-";
+                            const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage;
+                            const rowIssues = cs26Validation.rowIssuesBySlot.get(row.slot) ?? [];
 
                             return (
                               <Box
                                 key={row.slot}
                                 sx={{
                                   display: "grid",
-                                  gridTemplateColumns: "180px 180px 80px 360px 150px 320px 220px",
+                                  gridTemplateColumns: "180px 180px 80px 320px 100px 100px 150px 320px 220px",
                                   gap: 1,
                                   alignItems: "center",
                                   px: 1,
                                   py: 0.7,
                                   borderRadius: 1.2,
-                                  border: isLight ? "1px solid rgba(122, 143, 174, 0.22)" : "1px solid rgba(120, 146, 210, 0.22)",
-                                  background: isLight ? "rgba(226, 234, 244, 0.34)" : "rgba(18, 27, 54, 0.36)",
+                                  border: rowIssues.length
+                                    ? isLight
+                                      ? "1px solid rgba(202, 145, 49, 0.5)"
+                                      : "1px solid rgba(255, 189, 71, 0.45)"
+                                    : isLight
+                                      ? "1px solid rgba(122, 143, 174, 0.22)"
+                                      : "1px solid rgba(120, 146, 210, 0.22)",
+                                  background: rowIssues.length
+                                    ? isLight
+                                      ? "rgba(255, 196, 87, 0.09)"
+                                      : "rgba(255, 183, 77, 0.08)"
+                                    : isLight
+                                      ? "rgba(226, 234, 244, 0.34)"
+                                      : "rgba(18, 27, 54, 0.36)",
                                 }}
                               >
                                 <FormControl size="small" fullWidth variant="standard">
@@ -1706,23 +1863,36 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   </Select>
                                 </FormControl>
 
-                                {editMode === "edit" ? (
-                                  <MechSelector
-                                    selectedMechId={row.mech}
-                                    selectedChassis={rowChassis}
-                                    selectedVariant={rowVariant}
-                                    allConfiguredMechs={configuredMechs}
-                                    repositoryMechs={repositoryMechs}
-                                    repoIdToAllKey={repoIdToAllKey}
-                                    source={mechSelectorSource}
-                                    onChange={(value) => setRowChassisVariant(template.id, rowIndex, value)}
-                                    disabled={false}
-                                  />
-                                ) : (
-                                  <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {mechDetails.label || "-"}
-                                  </Typography>
-                                )}
+                                <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", minWidth: 0 }}>
+                                  {rowIssues.length ? <WarningAmberIcon fontSize="inherit" sx={{ color: "#f59e0b", fontSize: "0.95rem", flexShrink: 0 }} /> : null}
+                                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                                    {editMode === "edit" ? (
+                                      <MechSelector
+                                        selectedMechId={row.mech}
+                                        selectedChassis={rowChassis}
+                                        selectedVariant={rowVariant}
+                                        allConfiguredMechs={configuredMechs}
+                                        repositoryMechs={repositoryMechs}
+                                        repoIdToAllKey={repoIdToAllKey}
+                                        source={mechSelectorSource}
+                                        onChange={(value) => setRowChassisVariant(template.id, rowIndex, value)}
+                                        disabled={false}
+                                      />
+                                    ) : (
+                                      <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {mechDetails.label || "-"}
+                                      </Typography>
+                                    )}
+                                  </Box>
+                                </Stack>
+
+                                <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.85rem" }}>
+                                  {rowClass}
+                                </Typography>
+
+                                <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.85rem" }}>
+                                  {typeof rowTonnage === "number" ? `${rowTonnage} t` : "-"}
+                                </Typography>
 
                                 <FormControl size="small" fullWidth variant="standard">
                                   <Select
@@ -1731,10 +1901,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     displayEmpty
                                     disabled={editMode !== "edit"}
                                     onChange={(event) => updateRow(template.id, rowIndex, (entry) => ({ ...entry, role: event.target.value }))}
-                                    renderValue={(value) => value || (mech?.role ? `${mech.role} (from build)` : "-")}
+                                    renderValue={(value) => value || mech?.role || "-"}
                                     sx={editMode === "edit" ? editSelectIconSx : { "& .MuiSelect-icon": { display: "none" } }}
                                   >
-                                    <MenuItem value="">{mech?.role ? `${mech.role} (from build)` : "- (none)"}</MenuItem>
+                                    <MenuItem value="">{mech?.role || "- (none)"}</MenuItem>
                                     {deckRoleOptions.map((role) => (
                                       <MenuItem key={role} value={role}>{role}</MenuItem>
                                     ))}

@@ -1,6 +1,6 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { createMech } from "../../db/repositories/mechRepository.js";
-import { assertCanWrite, getRequestContext } from "../../middleware/authGuard.js";
+import { assertCanMutate, getRequestContext } from "../../middleware/authGuard.js";
 import { created, fail } from "../../middleware/http.js";
 import { createMechInputSchema } from "../../types/contracts.js";
 
@@ -13,9 +13,10 @@ export async function createMechHandler(request: HttpRequest) {
     }
 
     const ctx = getRequestContext(request);
-    assertCanWrite(ctx);
+    assertCanMutate(ctx);
 
-    const saved = await createMech(parsed.data);
+    const submittedBy = request.headers.get("x-user-name") ?? ctx.userId;
+    const saved = await createMech(parsed.data, submittedBy);
     return created(saved);
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "MISSING_AUTH_CONTEXT") {

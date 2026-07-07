@@ -50,6 +50,18 @@ export function useDiscordAuth(): AuthState & {
     const checkAuth = async () => {
       try {
         const token = localStorage.getItem("discord_token");
+        const cachedUserRaw = localStorage.getItem("discord_user");
+        const cachedUser = cachedUserRaw ? (JSON.parse(cachedUserRaw) as DiscordUser) : null;
+
+        if (cachedUser && token) {
+          setState({
+            isLoading: true,
+            isAuthed: true,
+            user: cachedUser,
+            error: null,
+          });
+        }
+
         if (!token) {
           setState((prev) => ({ ...prev, isLoading: false }));
           return;
@@ -60,7 +72,12 @@ export function useDiscordAuth(): AuthState & {
         });
 
         if (!response.ok) {
+          if (response.status >= 500 && cachedUser) {
+            setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
+            return;
+          }
           localStorage.removeItem("discord_token");
+          localStorage.removeItem("discord_user");
           setState((prev) => ({ ...prev, isLoading: false }));
           return;
         }
@@ -68,6 +85,7 @@ export function useDiscordAuth(): AuthState & {
         const payload = await response.json() as { ok: boolean; data: DiscordUser };
         if (!payload.ok || !payload.data) {
           localStorage.removeItem("discord_token");
+          localStorage.removeItem("discord_user");
           setState((prev) => ({ ...prev, isLoading: false }));
           return;
         }
@@ -82,11 +100,17 @@ export function useDiscordAuth(): AuthState & {
         });
       } catch (err) {
         console.error("Auth check failed:", err);
-        setState((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: "Auth check failed",
-        }));
+        const cachedUserRaw = localStorage.getItem("discord_user");
+        const cachedUser = cachedUserRaw ? (JSON.parse(cachedUserRaw) as DiscordUser) : null;
+        if (cachedUser) {
+          setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
+        } else {
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            error: "Auth check failed",
+          }));
+        }
       }
     };
 

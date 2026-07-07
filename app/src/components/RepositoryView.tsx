@@ -1,4 +1,4 @@
-import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider } from "@mui/material";
+import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -9,7 +9,7 @@ import SaveIcon from "@mui/icons-material/Save";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Typography } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MechDoc, WeightClassSummary } from "../types/contracts";
 import { deleteMech, getMechHierarchy, getMechs, updateMech } from "../api/client";
@@ -47,6 +47,9 @@ export function RepositoryView({
   const [deletingMechId, setDeletingMechId] = useState<string | null>(null);
   const [savingMechId, setSavingMechId] = useState<string | null>(null);
   const [selectedWeightClass, setSelectedWeightClass] = useState<"Light" | "Medium" | "Heavy" | "Assault">("Light");
+  const [selectedTech, setSelectedTech] = useState<"All" | "IS" | "Clan">("All");
+  const [selectedSubmitter, setSelectedSubmitter] = useState<string>("All");
+  const [weaponrySearch, setWeaponrySearch] = useState("");
   const editMode = viewMode;
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [markdownDrafts, setMarkdownDrafts] = useState<Record<string, string>>({});
@@ -143,7 +146,68 @@ export function RepositoryView({
     }
   };
 
-  const filteredHierarchy = hierarchy.filter((weightClass) => weightClass.class === selectedWeightClass);
+  const submitterOptions = useMemo(() => {
+    const values = Array.from(new Set(Object.values(mechsById).map((mech) => (mech.submittedBy ?? "").trim()).filter(Boolean)));
+    return values.sort((a, b) => a.localeCompare(b));
+  }, [mechsById]);
+
+  const matchesFilters = (buildId: string): boolean => {
+    const mech = mechsById[buildId];
+    if (!mech) return false;
+
+    if (selectedTech !== "All" && (mech.tech ?? "") !== selectedTech) {
+      return false;
+    }
+
+    if (selectedSubmitter !== "All" && (mech.submittedBy ?? "") !== selectedSubmitter) {
+      return false;
+    }
+
+    if (weaponrySearch.trim()) {
+      const query = weaponrySearch.trim().toLowerCase();
+      const haystack = `${mech.weaponry ?? ""} ${mech.description ?? ""} ${mech.role ?? ""}`.toLowerCase();
+      if (!haystack.includes(query)) {
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const filteredHierarchy = useMemo(() => {
+    const byClass = hierarchy.filter((weightClass) => weightClass.class === selectedWeightClass);
+
+    return byClass
+      .map((weightClass) => {
+        const chassis = weightClass.chassis
+          .map((chassisEntry) => {
+            const variants = chassisEntry.variants
+              .map((variantEntry) => {
+                const builds = variantEntry.builds.filter((build) => matchesFilters(build.id));
+                return {
+                  ...variantEntry,
+                  builds,
+                  buildCount: builds.length,
+                };
+              })
+              .filter((variantEntry) => variantEntry.builds.length > 0);
+
+            return {
+              ...chassisEntry,
+              variants,
+              buildCount: variants.reduce((sum, variantEntry) => sum + variantEntry.builds.length, 0),
+            };
+          })
+          .filter((chassisEntry) => chassisEntry.variants.length > 0);
+
+        return {
+          ...weightClass,
+          chassis,
+          buildCount: chassis.reduce((sum, chassisEntry) => sum + chassisEntry.buildCount, 0),
+        };
+      })
+      .filter((weightClass) => weightClass.chassis.length > 0);
+  }, [hierarchy, matchesFilters, selectedWeightClass]);
 
   return (
     <Box
@@ -178,8 +242,7 @@ export function RepositoryView({
                     navigate("/");
                   }
                 }}
-                variant="scrollable"
-                scrollButtons="auto"
+                variant="standard"
                 sx={{
                   minHeight: 38,
                   "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
@@ -203,11 +266,9 @@ export function RepositoryView({
               <Tabs
                 value={selectedWeightClass}
                 onChange={(_, value: "Light" | "Medium" | "Heavy" | "Assault") => setSelectedWeightClass(value)}
-                variant="scrollable"
-                scrollButtons="auto"
+                variant="standard"
                 sx={{
                   minHeight: 38,
-                  maxWidth: { xs: 360, md: 500 },
                   "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.6 },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
@@ -324,6 +385,37 @@ export function RepositoryView({
           <Stack spacing={2}>
             {loading && <Alert severity="info">Loading mech repository...</Alert>}
             {error && <Alert severity="error">{error}</Alert>}
+            {!loading && (
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ alignItems: { md: "center" } }}>
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <InputLabel>Tech</InputLabel>
+                  <Select label="Tech" value={selectedTech} onChange={(event) => setSelectedTech(event.target.value as "All" | "IS" | "Clan")}>
+                    <MenuItem value="All">All</MenuItem>
+                    <MenuItem value="IS">IS</MenuItem>
+                    <MenuItem value="Clan">Clan</MenuItem>
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <InputLabel>Submitter</InputLabel>
+                  <Select label="Submitter" value={selectedSubmitter} onChange={(event) => setSelectedSubmitter(event.target.value)}>
+                    <MenuItem value="All">All</MenuItem>
+                    {submitterOptions.map((username) => (
+                      <MenuItem key={username} value={username}>{username}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <TextField
+                  size="small"
+                  label="Weaponry Search"
+                  value={weaponrySearch}
+                  onChange={(event) => setWeaponrySearch(event.target.value)}
+                  sx={{ minWidth: { xs: "100%", md: 280 } }}
+                  placeholder="e.g. gauss, lrm, ppc"
+                />
+              </Stack>
+            )}
             {!loading && filteredHierarchy.length > 0 && (
               <Stack spacing={2}>
                 {filteredHierarchy.map((weightClass) => (

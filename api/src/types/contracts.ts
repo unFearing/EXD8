@@ -235,6 +235,7 @@ const mechDocBaseSchema = z.object({
       message: "tonnage must be between 20 and 100 in increments of 5",
     }).optional(),
   buildUrl: z.string().url().optional(),
+  submittedBy: z.string().min(1).optional(),
   equipment: z.array(z.string().min(1)).optional(),
   primaryRangeBracket: primaryRangeBracketSchema.optional(),
   optimalRange: z.number().nonnegative().optional(),

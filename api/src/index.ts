@@ -10,6 +10,7 @@ import "./functions/mechs/getById.js";
 import "./functions/mechs/upsert.js";
 import "./functions/mechs/delete.js";
 import "./functions/mechs/parseBuild.js";
+import "./functions/mechs/checkLink.js";
 import "./functions/backups/dailyDiscordBackup.js";
 import "./functions/matchNights/create.js";
 import "./functions/matchNights/getById.js";

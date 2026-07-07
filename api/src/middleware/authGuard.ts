@@ -34,6 +34,12 @@ export function assertCanWrite(ctx: RequestContext): void {
   }
 }
 
+export function assertCanMutate(ctx: RequestContext): void {
+  if (ctx.role !== "TL" && ctx.role !== "Pilot") {
+    throw new Error("FORBIDDEN_WRITE");
+  }
+}
+
 export function assertTeamAccess(ctx: RequestContext, teamId: string): void {
   if (ctx.teamId !== teamId) {
     throw new Error("TEAM_MISMATCH");

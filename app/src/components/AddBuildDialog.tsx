@@ -19,10 +19,13 @@ import {
   AccordionSummary,
   AccordionDetails,
   Typography,
+  Autocomplete,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { parseMechBuild, createMech, getMechRoles } from "../api/client";
-import type { CreateMechInput } from "../types/contracts";
+import { parseMechBuild, createMech, getMechRoles, checkMechLink } from "../api/client";
+import type { CreateMechInput, MechsConfigFile } from "../types/contracts";
+
+const EXPORT_CODE_WARNING = "Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.";
 
 function defaultBuildDraft(): CreateMechInput {
   return {
@@ -99,6 +102,40 @@ function parseBuildCodesText(value: string): Record<string, string> {
   return Object.fromEntries(pairs);
 }
 
+function flattenChassisVariants(file: MechsConfigFile): Array<{ chassis: string; variant: string }> {
+  const rows: Array<{ chassis: string; variant: string }> = [];
+  for (const tech of Object.keys(file.mechs) as Array<"IS" | "Clan">) {
+    const byClass = file.mechs[tech];
+    for (const classKey of Object.keys(byClass) as Array<"LIGHT" | "MEDIUM" | "HEAVY" | "ASSAULT">) {
+      const chassisRecords = byClass[classKey];
+      for (const chassisName of Object.keys(chassisRecords)) {
+        const chassis = chassisRecords[chassisName];
+        for (const variant of chassis.variants) {
+          rows.push({ chassis: chassis.chassis_name, variant });
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+async function loadChassisVariants(): Promise<Array<{ chassis: string; variant: string }>> {
+  const candidates = ["/mechs_config.json", "/mwo_docs/mechs_config.json"];
+  for (const path of candidates) {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) continue;
+      const parsed = (await response.json()) as MechsConfigFile;
+      if (!parsed?.mechs) continue;
+      return flattenChassisVariants(parsed);
+    } catch {
+      // Try next source.
+    }
+  }
+
+  return [];
+}
+
 type AddBuildDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -121,6 +158,7 @@ type BulkReviewState = {
 export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuildDialogProps) {
   const isLight = mode === "light";
   const [roleOptions, setRoleOptions] = useState<string[]>([]);
+  const [chassisVariants, setChassisVariants] = useState<Array<{ chassis: string; variant: string }>>([]);
   
   const [useManual, setUseManual] = useState(false);
   const [useBulk, setUseBulk] = useState(false);
@@ -159,6 +197,31 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    loadChassisVariants()
+      .then((rows) => {
+        if (!cancelled) setChassisVariants(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setChassisVariants([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const chassisOptions = Array.from(new Set(chassisVariants.map((row) => row.chassis))).sort((a, b) => a.localeCompare(b));
+  const variantOptions = Array.from(
+    new Set(
+      chassisVariants
+        .filter((row) => row.chassis.toLowerCase() === buildDraft.chassis.toLowerCase())
+        .map((row) => row.variant),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
+  useEffect(() => {
     if (!roleOptions.length) return;
     setBuildDraft((prev) => {
       if (prev.role && roleOptions.includes(prev.role)) return prev;
@@ -176,12 +239,18 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     setWarnings([]);
 
     try {
+      const existing = await checkMechLink(urlInput.trim());
+      if (existing.exists) {
+        setError(`This NAV-Alpha link already exists in the repository (${existing.chassis ?? "Unknown"}-${existing.variant ?? "Unknown"}).`);
+        return;
+      }
+
       const parsed = await parseMechBuild(urlInput.trim());
       setBuildDraft(parsed.draft);
       setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
       setExportCodeText(parsed.draft.buildCodes.export ?? "");
       setEquipmentText(listToText(parsed.draft.metadata.equipment ?? parsed.draft.equipment ?? []));
-      setWarnings(parsed.warnings);
+      setWarnings(parsed.warnings.filter((warning) => warning !== EXPORT_CODE_WARNING));
       setBuildMeta(parsed.metadata);
       setExpanded(true);
       setNotice("Build link parsed. Review fields and save.");
@@ -209,15 +278,23 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
       const parsedBuilds: BulkReviewState["parsedBuilds"] = [];
       let parseErrors = 0;
+      let duplicateSkipped = 0;
 
       for (const link of links) {
         try {
+          const existing = await checkMechLink(link);
+          if (existing.exists) {
+            duplicateSkipped++;
+            parseErrors++;
+            continue;
+          }
+
           const parsed = await parseMechBuild(link);
           parsedBuilds.push({
             link,
             draft: parsed.draft,
             notes: "",
-            warnings: parsed.warnings,
+            warnings: parsed.warnings.filter((warning) => warning !== EXPORT_CODE_WARNING),
           });
         } catch (err) {
           parseErrors++;
@@ -226,13 +303,21 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
       }
 
       if (parsedBuilds.length === 0) {
-        setError(`Failed to parse all ${links.length} links. Check console for details.`);
+        if (duplicateSkipped === links.length) {
+          setError("No new links to import.");
+        } else if (links.length === 1) {
+          setError("Unable to parse link.");
+        } else {
+          setError(`Unable to parse ${links.length} links.`);
+        }
         setParsing(false);
         return;
       }
 
       if (parseErrors > 0) {
-        setNotice(`Parsed ${parsedBuilds.length} / ${links.length} builds (${parseErrors} failed)`);
+        const failedCount = links.length - parsedBuilds.length;
+        const duplicateNote = duplicateSkipped > 0 ? `, ${duplicateSkipped} already existed` : "";
+        setNotice(`Parsed ${parsedBuilds.length}/${links.length}. Skipped ${failedCount}${duplicateNote}.`);
       }
 
       if (reviewBeforeSubmit) {
@@ -537,13 +622,6 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                     onChange={(e) => setUrlInput(e.target.value)}
                     placeholder="https://mwo.nav-alpha.com/mechlab?b=..."
                   />
-                  <Button
-                    variant="contained"
-                    disabled={parsing || !urlInput.trim()}
-                    onClick={handleParse}
-                  >
-                    {parsing ? "..." : "Parse"}
-                  </Button>
                 </Stack>
               )}
 
@@ -561,19 +639,35 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
               ))}
 
               <Stack direction="row" spacing={1}>
-                <TextField
-                  label="Chassis"
-                  size="small"
-                  fullWidth
+                <Autocomplete
+                  freeSolo
+                  options={chassisOptions}
                   value={buildDraft.chassis}
-                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, chassis: e.target.value, codename: `${e.target.value}-${prev.variant}` }))}
-                />
-                <TextField
-                  label="Variant"
-                  size="small"
+                  onChange={(_, value) => {
+                    const next = (value ?? "").trim();
+                    setBuildDraft((prev) => ({ ...prev, chassis: next, codename: `${next}-${prev.variant}` }));
+                  }}
+                  onInputChange={(_, value) => {
+                    const next = value.trim();
+                    setBuildDraft((prev) => ({ ...prev, chassis: next, codename: `${next}-${prev.variant}` }));
+                  }}
                   fullWidth
+                  renderInput={(params) => <TextField {...params} label="Chassis" size="small" fullWidth />}
+                />
+                <Autocomplete
+                  freeSolo
+                  options={variantOptions}
                   value={buildDraft.variant}
-                  onChange={(e) => setBuildDraft((prev) => ({ ...prev, variant: e.target.value, codename: `${prev.chassis}-${e.target.value}` }))}
+                  onChange={(_, value) => {
+                    const next = (value ?? "").trim();
+                    setBuildDraft((prev) => ({ ...prev, variant: next, codename: `${prev.chassis}-${next}` }));
+                  }}
+                  onInputChange={(_, value) => {
+                    const next = value.trim();
+                    setBuildDraft((prev) => ({ ...prev, variant: next, codename: `${prev.chassis}-${next}` }));
+                  }}
+                  fullWidth
+                  renderInput={(params) => <TextField {...params} label="Variant" size="small" fullWidth />}
                 />
                 <TextField
                   label="Tonnage"
@@ -721,7 +815,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
                     <Stack direction="row" spacing={1}>
                       <TextField
-                        label="Range Min"
+                        label="Effective Min"
                         type="number"
                         size="small"
                         value={buildDraft.primaryRangeBracket?.[0] ?? 0}
@@ -730,11 +824,18 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                           setBuildDraft((prev) => ({
                             ...prev,
                             primaryRangeBracket: [min, prev.primaryRangeBracket?.[1] ?? 0],
+                            metadata: {
+                              ...prev.metadata,
+                              ranges: {
+                                ...prev.metadata.ranges,
+                                idealMin: min,
+                              },
+                            },
                           }));
                         }}
                       />
                       <TextField
-                        label="Range Max"
+                        label="Effective Max"
                         type="number"
                         size="small"
                         value={buildDraft.primaryRangeBracket?.[1] ?? 0}
@@ -743,6 +844,13 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                           setBuildDraft((prev) => ({
                             ...prev,
                             primaryRangeBracket: [prev.primaryRangeBracket?.[0] ?? 0, max],
+                            metadata: {
+                              ...prev.metadata,
+                              ranges: {
+                                ...prev.metadata.ranges,
+                                idealMax: max,
+                              },
+                            },
                           }));
                         }}
                       />
@@ -751,14 +859,40 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                         type="number"
                         size="small"
                         value={buildDraft.optimalRange ?? 0}
-                        onChange={(e) => setBuildDraft((prev) => ({ ...prev, optimalRange: Number(e.target.value) || 0 }))}
+                        onChange={(e) => {
+                          const optimal = Number(e.target.value) || 0;
+                          setBuildDraft((prev) => ({
+                            ...prev,
+                            optimalRange: optimal,
+                            metadata: {
+                              ...prev.metadata,
+                              ranges: {
+                                ...prev.metadata.ranges,
+                                optimal,
+                              },
+                            },
+                          }));
+                        }}
                       />
                       <TextField
                         label="Max Range"
                         type="number"
                         size="small"
                         value={buildDraft.maxRange ?? 0}
-                        onChange={(e) => setBuildDraft((prev) => ({ ...prev, maxRange: Number(e.target.value) || 0 }))}
+                        onChange={(e) => {
+                          const maxRange = Number(e.target.value) || 0;
+                          setBuildDraft((prev) => ({
+                            ...prev,
+                            maxRange,
+                            metadata: {
+                              ...prev.metadata,
+                              ranges: {
+                                ...prev.metadata.ranges,
+                                max: maxRange,
+                              },
+                            },
+                          }));
+                        }}
                       />
                     </Stack>
 

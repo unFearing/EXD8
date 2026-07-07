@@ -96,7 +96,7 @@ function inferWeightClass(tonnage?: number): WeightClass {
   return "Assault";
 }
 
-function canonicalizeBuildLink(raw?: string): string {
+export function canonicalizeBuildLink(raw?: string): string {
   const value = (raw ?? "").trim();
   if (!value) return "";
 
@@ -117,6 +117,19 @@ function canonicalizeBuildLink(raw?: string): string {
   } catch {
     return value.toLowerCase();
   }
+}
+
+export async function findMechByBuildLink(rawLink: string): Promise<MechDoc | null> {
+  const candidate = canonicalizeBuildLink(rawLink);
+  if (!candidate) return null;
+
+  const existingDocs = await listMechs();
+  const duplicate = existingDocs.find((doc) => {
+    const docLink = canonicalizeBuildLink(doc.link || doc.buildUrl || "");
+    return docLink && docLink === candidate;
+  });
+
+  return duplicate ?? null;
 }
 
 function normalizeForHierarchy(doc: MechDoc): { className: WeightClass; chassisName: string; variantName: string } {
@@ -150,7 +163,7 @@ function normalizeForHierarchy(doc: MechDoc): { className: WeightClass; chassisN
   };
 }
 
-export async function createMech(input: CreateMechInput): Promise<MechDoc> {
+export async function createMech(input: CreateMechInput, submittedBy?: string): Promise<MechDoc> {
   const candidateLink = canonicalizeBuildLink(input.link || input.buildUrl || "");
   if (candidateLink) {
     const existingDocs = await listMechs();
@@ -173,6 +186,7 @@ export async function createMech(input: CreateMechInput): Promise<MechDoc> {
     tech: input.tech ?? "IS",
     tonnage,
     buildUrl: input.buildUrl || input.link || "",
+    submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",
     equipment: input.equipment ?? input.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
     optimalRange: input.optimalRange ?? input.metadata.ranges.optimal,
@@ -206,13 +220,49 @@ export async function deleteMechById(id: string): Promise<boolean> {
   }
 
   const container = getMechsContainer();
-  await container.item(existing.id, existing.id).delete();
-  return true;
+  const partitionCandidates: Array<string | undefined> = [
+    existing.id,
+    existing.docType,
+    existing.class,
+    existing.tech,
+    existing.chassis,
+    undefined,
+  ];
+  const attempted = new Set<string>();
+  let lastError: unknown = null;
+
+  for (const candidate of partitionCandidates) {
+    const key = candidate ?? "__undefined__";
+    if (attempted.has(key)) continue;
+    attempted.add(key);
+
+    try {
+      await container.item(existing.id, candidate as never).delete();
+      return true;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError ?? new Error("DELETE_FAILED");
 }
 
-export async function upsertMechWithId(id: string, input: CreateMechInput): Promise<MechDoc> {
+export async function upsertMechWithId(id: string, input: CreateMechInput, submittedBy?: string): Promise<MechDoc> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
     throw new Error("INVALID_ID");
+  }
+
+  const candidateLink = canonicalizeBuildLink(input.link || input.buildUrl || "");
+  if (candidateLink) {
+    const existingDocs = await listMechs();
+    const duplicate = existingDocs.find((doc) => {
+      if (doc.id === id) return false;
+      const docLink = canonicalizeBuildLink(doc.link || doc.buildUrl || "");
+      return docLink && docLink === candidateLink;
+    });
+    if (duplicate) {
+      throw new Error("DUPLICATE_BUILD_LINK");
+    }
   }
 
   const tonnage = input.tonnage ?? 50;
@@ -225,6 +275,7 @@ export async function upsertMechWithId(id: string, input: CreateMechInput): Prom
     tech: input.tech ?? "IS",
     tonnage,
     buildUrl: input.buildUrl || input.link || "",
+    submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",
     equipment: input.equipment ?? input.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
     optimalRange: input.optimalRange ?? input.metadata.ranges.optimal,

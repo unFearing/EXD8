@@ -1,4 +1,5 @@
 import type { DeckMap } from "../types/contracts.js";
+import { CS26_COMPETITION } from "./competition.js";
 
 export type MapAssetConfig = {
   name: DeckMap;
@@ -34,4 +35,4 @@ export const MAP_ASSET_CONFIGS: readonly MapAssetConfig[] = [
   },
 ] as const;
 
-export const MAP_ORDER: DeckMap[] = MAP_ASSET_CONFIGS.map((entry) => entry.name);
+export const MAP_ORDER: DeckMap[] = CS26_COMPETITION.majorTabs;

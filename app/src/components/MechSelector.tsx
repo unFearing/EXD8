@@ -26,7 +26,12 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
   disabled,
 }) => {
   const options = useMemo(() => {
-    const list = source === "repository" ? repositoryMechs : allConfiguredMechs;
+    const list =
+      source === "repository"
+        ? repositoryMechs
+        : source === "config"
+          ? allConfiguredMechs
+          : [...allConfiguredMechs, ...repositoryMechs];
     return list
       .map((mech) => ({
         mechId: mech.key,
@@ -55,7 +60,7 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
 
   const effectiveSelectedId = useMemo(() => {
     const effectiveSelectedId =
-      source === "all" ? (repoIdToAllKey.get(selectedMechId) ?? selectedMechId) : selectedMechId;
+      source === "config" ? (repoIdToAllKey.get(selectedMechId) ?? selectedMechId) : selectedMechId;
     return effectiveSelectedId;
   }, [repoIdToAllKey, selectedMechId, source]);
 
@@ -73,15 +78,20 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
       : "";
 
   const flattenedOptions = useMemo(() => {
+    const normalizedChassis = chassisValue.toLowerCase();
     const items: Array<{ token: string; label: string; indent: boolean }> = [];
     for (const group of grouped) {
       items.push({ token: `chassis|${group.chassis}`, label: group.chassis, indent: false });
-      for (const variant of group.variants) {
-        items.push({ token: `variant|${group.chassis}|${variant}`, label: variant, indent: true });
+      // To keep the menu responsive with large default catalogs, only expand variants
+      // for the currently selected chassis.
+      if (normalizedChassis && group.chassis.toLowerCase() === normalizedChassis) {
+        for (const variant of group.variants) {
+          items.push({ token: `variant|${group.chassis}|${variant}`, label: variant, indent: true });
+        }
       }
     }
     return items;
-  }, [grouped]);
+  }, [chassisValue, grouped]);
 
   return (
     <Stack spacing={1} sx={{ width: "100%" }}>

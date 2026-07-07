@@ -290,7 +290,15 @@ export async function deleteDropDeckById(id: string): Promise<boolean> {
 
   const container = getMatchNightsContainer();
   const raw = existing as DropDeckDoc & { teamId?: string };
-  const partitionCandidates: Array<string | undefined> = [raw.id, raw.docType, raw.teamId, undefined];
+  const partitionCandidates: Array<string | undefined> = [
+    raw.id,
+    raw.docType,
+    raw.teamId,
+    raw.map,
+    raw.side,
+    raw.name,
+    undefined,
+  ];
   const attempted = new Set<string>();
   let lastError: unknown = null;
 
