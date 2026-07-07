@@ -689,10 +689,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     const issues: Cs26Issue[] = [];
     const rowIssuesBySlot = new Map<number, Cs26Issue[]>();
     const tonnage = computeTemplateTonnage(template);
-    if (tonnage < CS26_MIN_TONNAGE || tonnage > CS26_COMPETITION.rules.maxTonnage) {
+    if (tonnage < CS26_MIN_TONNAGE) {
       issues.push({
         kind: "tonnage",
-        message: `Tonnage must be ${CS26_MIN_TONNAGE}-${CS26_COMPETITION.rules.maxTonnage}t (current ${tonnage}t).`,
+        message: `Undertonned: ${tonnage}t (minimum ${CS26_MIN_TONNAGE}t).`,
+      });
+    }
+    if (tonnage > CS26_COMPETITION.rules.maxTonnage) {
+      issues.push({
+        kind: "tonnage",
+        message: `Overtonned: ${tonnage}t (maximum ${CS26_COMPETITION.rules.maxTonnage}t).`,
       });
     }
 

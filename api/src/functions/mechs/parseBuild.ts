@@ -1,6 +1,7 @@
 import { app, type HttpRequest } from "@azure/functions";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fail, ok } from "../../middleware/http.js";
-import { navAlphaChassisCatalog } from "../../data/navAlphaChassisCatalog.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
 
 type ParseBuildResponse = {
@@ -22,7 +23,117 @@ type NavAlphaApiResponse = {
   message?: string;
 };
 
+type CachedVariant = {
+  tech?: "IS" | "Clan";
+  label?: string;
+};
+
+type CachedChassis = {
+  chassis: string;
+  defaultTech: "IS" | "Clan";
+  tonnage: number;
+  variants?: Record<string, CachedVariant>;
+};
+
+type MechsConfigEntry = {
+  chassis_name?: string;
+  tonnage?: number;
+  chassis_code?: string;
+  variants?: string[];
+};
+
+type MechsConfigFile = {
+  mechs?: Record<string, Record<string, Record<string, MechsConfigEntry>>>;
+};
+
+type MechsConfigCatalog = {
+  byCode: Record<string, CachedChassis>;
+  byVariant: Record<string, CachedChassis>;
+};
+
 const MWO_EXPORT_CODE_REGEX = /\bA[0-9A-Za-z:;<=>?@\[\]\\^_`|+\-]{20,}\b/g;
+
+function deriveCodeFromVariant(variant: string): string {
+  const normalized = variant.trim().toUpperCase();
+  const parts = normalized.split("-");
+  if (parts.length >= 2 && parts[1] === "IIC") {
+    return `${parts[0]}-IIC`;
+  }
+  return parts[0] ?? normalized;
+}
+
+function loadMechsConfigCatalog(): MechsConfigCatalog {
+  const candidates = [
+    process.env.MECHS_CONFIG_PATH?.trim(),
+    resolve(process.cwd(), "../app/public/mechs_config.json"),
+    resolve(process.cwd(), "app/public/mechs_config.json"),
+  ].filter((value): value is string => Boolean(value));
+
+  let parsed: MechsConfigFile | undefined;
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    try {
+      parsed = JSON.parse(readFileSync(path, "utf8")) as MechsConfigFile;
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  const byCode: Record<string, CachedChassis> = {};
+  const byVariant: Record<string, CachedChassis> = {};
+  const techBuckets = parsed?.mechs ?? {};
+
+  for (const [techKey, classBuckets] of Object.entries(techBuckets)) {
+    const defaultTech: "IS" | "Clan" = techKey.toLowerCase() === "clan" ? "Clan" : "IS";
+    for (const chassisEntries of Object.values(classBuckets)) {
+      for (const [fallbackName, mech] of Object.entries(chassisEntries)) {
+        const chassis = (mech.chassis_name ?? fallbackName).trim();
+        const tonnage = typeof mech.tonnage === "number" ? mech.tonnage : 50;
+        const variants = mech.variants ?? [];
+        const explicitCode = (mech.chassis_code ?? "").trim().toUpperCase();
+
+        const variantMap: Record<string, CachedVariant> = {};
+        const inferredCodes = new Set<string>();
+        for (const variant of variants) {
+          const normalizedVariant = variant.trim().toUpperCase();
+          if (!normalizedVariant) continue;
+          byVariant[normalizedVariant] = {
+            chassis,
+            defaultTech,
+            tonnage,
+            variants: undefined,
+          };
+
+          const inferredCode = deriveCodeFromVariant(normalizedVariant);
+          if (inferredCode) inferredCodes.add(inferredCode);
+
+          const suffix = explicitCode && normalizedVariant.startsWith(`${explicitCode}-`)
+            ? normalizedVariant.slice(explicitCode.length + 1)
+            : normalizedVariant;
+          variantMap[suffix] = { tech: defaultTech };
+        }
+
+        const codes = explicitCode ? [explicitCode] : [...inferredCodes];
+        for (const code of codes) {
+          if (!code) continue;
+          if (!byCode[code]) {
+            byCode[code] = {
+              chassis,
+              defaultTech,
+              tonnage,
+              variants: Object.keys(variantMap).length ? variantMap : undefined,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return { byCode, byVariant };
+}
+
+const mechsConfigCatalog = loadMechsConfigCatalog();
 
 function inferWeightClass(tonnage: number): WeightClass {
   if (tonnage <= 35) return "Light";
@@ -51,7 +162,7 @@ function parseBuildTokenFromUrl(url: URL): string | null {
 
 function resolveChassisCodeFromVariant(variantCode: string): string {
   const upperVariantCode = variantCode.toUpperCase();
-  const knownCodes = Object.keys(navAlphaChassisCatalog)
+  const knownCodes = Object.keys(mechsConfigCatalog.byCode)
     .slice()
     .sort((a, b) => b.length - a.length);
 
@@ -390,12 +501,14 @@ async function fetchBuildFromApi(buildToken: string, apiKey: string): Promise<Js
 }
 
 function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: string[]): ParseBuildResponse {
+  const variantUpper = variantCode.toUpperCase();
+  const fromVariant = mechsConfigCatalog.byVariant[variantUpper];
   const chassisCode = resolveChassisCodeFromVariant(variantCode);
   const variantSuffix =
     variantCode.toUpperCase().startsWith(`${chassisCode.toUpperCase()}-`)
       ? variantCode.slice(chassisCode.length + 1)
       : variantCode.split("-").slice(1).join("-") || variantCode;
-  const catalog = navAlphaChassisCatalog[chassisCode];
+  const catalog = fromVariant ?? mechsConfigCatalog.byCode[chassisCode];
 
   const chassis = catalog?.chassis ?? chassisCode;
   const variantInfo = catalog?.variants?.[variantSuffix];
@@ -404,7 +517,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
   const variantLabel = variantInfo?.label ? `${variantCode} (${variantInfo.label})` : variantCode;
 
   if (!catalog) {
-    warnings.push(`No cached chassis mapping found for code ${chassisCode}; using fallback values.`);
+    warnings.push(`No mechs_config chassis mapping found for code ${chassisCode}; using generic fallback values.`);
   }
 
   return {
@@ -415,7 +528,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       chassisCode,
       cachedChassis: catalog?.chassis ?? null,
       cachedVariantLabel: variantInfo?.label ?? null,
-      parseMode: "url-and-cache",
+      parseMode: "url-and-mechs-config",
     },
     draft: {
       class: inferWeightClass(tonnage),
