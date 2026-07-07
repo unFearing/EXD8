@@ -1,6 +1,7 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { fail, ok } from "../../middleware/http.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
 
@@ -13,7 +14,10 @@ type ParseBuildResponse = {
 
 const REQUEST_TIMEOUT_MS = 7000;
 const NAV_ALPHA_BUILD_API_URL = "https://mwo.nav-alpha.com/api/build/";
+const NAV_ALPHA_MECHS_API_URL = "https://mwo.nav-alpha.com/api/mechs/";
+const NAV_ALPHA_EQUIPMENT_API_URL = "https://mwo.nav-alpha.com/api/equipment/";
 const RENDER_PROXY_BASE_URL = "https://r.jina.ai/http://";
+const NAV_ALPHA_BASE64 = "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmno";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -21,6 +25,39 @@ type NavAlphaApiResponse = {
   ok?: boolean;
   data?: JsonValue;
   message?: string;
+};
+
+type NavAlphaSharedBuild = {
+  token?: string;
+  variant?: string;
+  loadout?: string;
+  author?: string;
+};
+
+type NavAlphaPublicMech = {
+  name?: string;
+  id_code?: string;
+  faction?: string;
+  omni?: string | number | boolean;
+  armor_type?: string;
+  structure_type?: string;
+  heatsink_type?: string;
+  guidance_type?: string;
+  stock_loadout?: string;
+};
+
+type NavAlphaEquipmentItem = {
+  id?: string | number;
+  id_code?: string;
+  item_type?: string;
+  fixed?: boolean | number | string;
+};
+
+type NavAlphaOmnipodItem = {
+  id?: string | number;
+  id_code?: string;
+  component?: string;
+  chassis?: string;
 };
 
 type CachedVariant = {
@@ -51,7 +88,36 @@ type MechsConfigCatalog = {
   byVariant: Record<string, CachedChassis>;
 };
 
+type NavAlphaExportLoadout = {
+  items?: Record<string, number[]>;
+  armor_type?: string;
+  structure_type?: string;
+  heatsink_type?: string;
+  guidance_type?: string;
+  armor?: Record<string, number>;
+  omnipods?: Record<string, number>;
+  actuators?: Record<string, number>;
+};
+
 const MWO_EXPORT_CODE_REGEX = /\bA[0-9A-Za-z:;<=>?@\[\]\\^_`|+\-]{20,}\b/g;
+const NAV_ALPHA_UPGRADE_MAP = {
+  clan: {
+    armor: { std: 5, ferro: 4 },
+    structure: { std: 24, endo: 16 },
+    heatsinks: { double: 4, single: 6 },
+    guidance: { std: 0, artemis: 1 },
+  },
+  inner_sphere: {
+    armor: { std: 0, ferro: 1, "light-ferro": 2, stealth: 3 },
+    structure: { std: 0, endo: 8 },
+    heatsinks: { single: 0, double: 2 },
+    guidance: { std: 0, artemis: 1 },
+  },
+} as const;
+
+let navAlphaMechsPromise: Promise<NavAlphaPublicMech[]> | undefined;
+let navAlphaEquipmentPromise: Promise<NavAlphaEquipmentItem[]> | undefined;
+let navAlphaOmnipodsPromise: Promise<NavAlphaOmnipodItem[]> | undefined;
 
 function deriveCodeFromVariant(variant: string): string {
   const normalized = variant.trim().toUpperCase();
@@ -60,6 +126,263 @@ function deriveCodeFromVariant(variant: string): string {
     return `${parts[0]}-IIC`;
   }
   return parts[0] ?? normalized;
+}
+
+function navAlphaPublicAuthHeader(nativeSecret: string): string {
+  const iss = Date.now().toString();
+  const sig = createHash("sha256").update(iss + nativeSecret).digest("hex");
+  return `Native ${JSON.stringify({ iss, sig })}`;
+}
+
+async function fetchNavAlphaPublicJson(
+  url: string,
+  refererUrl: string,
+  nativeSecret: string,
+  init?: RequestInit,
+): Promise<JsonValue> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        authorization: navAlphaPublicAuthHeader(nativeSecret),
+        origin: "https://mwo.nav-alpha.com",
+        referer: refererUrl,
+        accept: "application/json, text/plain, */*",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+        ...(init?.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Public NAV-Alpha endpoint returned HTTP ${response.status}`);
+    }
+
+    return (await response.json()) as JsonValue;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function decodeNavAlphaResponseData(body: JsonValue): JsonValue {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("Public NAV-Alpha endpoint returned invalid JSON");
+  }
+  const okValue = "ok" in body ? body.ok : undefined;
+  const dataValue = "data" in body ? body.data : undefined;
+  const messageValue = "message" in body ? body.message : undefined;
+  if (okValue !== true) {
+    throw new Error(typeof messageValue === "string" ? messageValue : "Public NAV-Alpha endpoint returned no data");
+  }
+  return dataValue ?? null;
+}
+
+async function fetchBuildFromPublicNavAlpha(
+  buildToken: string,
+  sourceUrl: string,
+  nativeSecret: string,
+): Promise<NavAlphaSharedBuild> {
+  const body = await fetchNavAlphaPublicJson(
+    `${NAV_ALPHA_BUILD_API_URL}?token=${encodeURIComponent(buildToken)}`,
+    sourceUrl,
+    nativeSecret,
+  );
+  const data = decodeNavAlphaResponseData(body);
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("Public NAV-Alpha build payload was not an object");
+  }
+  return data as NavAlphaSharedBuild;
+}
+
+async function fetchNavAlphaMechsCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaPublicMech[]> {
+  navAlphaMechsPromise ??= (async () => {
+    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_MECHS_API_URL, refererUrl, nativeSecret, {
+      method: "POST",
+      body: "{}",
+      headers: { "content-type": "application/json" },
+    });
+    const data = decodeNavAlphaResponseData(body);
+    if (!Array.isArray(data)) {
+      throw new Error("Public NAV-Alpha mechs payload was not a list");
+    }
+    return data as NavAlphaPublicMech[];
+  })();
+  return navAlphaMechsPromise;
+}
+
+async function fetchNavAlphaEquipmentCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaEquipmentItem[]> {
+  navAlphaEquipmentPromise ??= (async () => {
+    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_EQUIPMENT_API_URL, refererUrl, nativeSecret);
+    const data = decodeNavAlphaResponseData(body);
+    if (!Array.isArray(data)) {
+      throw new Error("Public NAV-Alpha equipment payload was not a list");
+    }
+    return data as NavAlphaEquipmentItem[];
+  })();
+  return navAlphaEquipmentPromise;
+}
+
+async function fetchNavAlphaOmnipodsCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaOmnipodItem[]> {
+  navAlphaOmnipodsPromise ??= (async () => {
+    const body = await fetchNavAlphaPublicJson("https://mwo.nav-alpha.com/api/omnipods/", refererUrl, nativeSecret);
+    const data = decodeNavAlphaResponseData(body);
+    if (!Array.isArray(data)) {
+      throw new Error("Public NAV-Alpha omnipods payload was not a list");
+    }
+    return data as NavAlphaOmnipodItem[];
+  })();
+  return navAlphaOmnipodsPromise;
+}
+
+function navAlphaDecTo64(value: number, minLength = 0): string {
+  if (value < 0) return "";
+  let current = value;
+  let encoded = "";
+  let targetLength = minLength;
+  if (current === 0 && targetLength === 0) {
+    targetLength = 1;
+  }
+  while (current > 0) {
+    encoded += NAV_ALPHA_BASE64[current % 64] ?? "";
+    current = Math.floor(current / 64);
+  }
+  while (targetLength > 0 && encoded.length < targetLength) {
+    encoded += "0";
+  }
+  return encoded;
+}
+
+async function computePublicNavAlphaExportCode(
+  sharedBuild: NavAlphaSharedBuild,
+  refererUrl: string,
+  nativeSecret: string,
+): Promise<string | null> {
+  if (!sharedBuild.variant || !sharedBuild.loadout) return null;
+
+  let loadout: NavAlphaExportLoadout;
+  try {
+    loadout = JSON.parse(sharedBuild.loadout) as NavAlphaExportLoadout;
+  } catch {
+    return null;
+  }
+
+  const [variants, equipmentItems, omnipodItems] = await Promise.all([
+    fetchNavAlphaMechsCatalog(refererUrl, nativeSecret),
+    fetchNavAlphaEquipmentCatalog(refererUrl, nativeSecret),
+    fetchNavAlphaOmnipodsCatalog(refererUrl, nativeSecret),
+  ]);
+
+  const variant = variants.find(
+    (entry) => String(entry.name ?? "").toLowerCase() === String(sharedBuild.variant ?? "").toLowerCase(),
+  );
+  if (!variant?.id_code || !variant.faction) return null;
+
+  let stockLoadout: NavAlphaExportLoadout = {};
+  if (variant.stock_loadout) {
+    try {
+      stockLoadout = JSON.parse(variant.stock_loadout) as NavAlphaExportLoadout;
+    } catch {
+      stockLoadout = {};
+    }
+  }
+
+  const mergedLoadout: NavAlphaExportLoadout = {
+    ...stockLoadout,
+    ...loadout,
+    items: { ...(stockLoadout.items ?? {}), ...(loadout.items ?? {}) },
+    armor: { ...(stockLoadout.armor ?? {}), ...(loadout.armor ?? {}) },
+    omnipods: { ...(stockLoadout.omnipods ?? {}), ...(loadout.omnipods ?? {}) },
+    actuators: { ...(stockLoadout.actuators ?? {}), ...(loadout.actuators ?? {}) },
+    armor_type: loadout.armor_type ?? stockLoadout.armor_type ?? variant.armor_type,
+    structure_type: loadout.structure_type ?? stockLoadout.structure_type ?? variant.structure_type,
+    heatsink_type: loadout.heatsink_type ?? stockLoadout.heatsink_type ?? variant.heatsink_type,
+    guidance_type: loadout.guidance_type ?? stockLoadout.guidance_type ?? variant.guidance_type,
+  };
+
+  const faction = String(variant.faction).toLowerCase() === "clan" ? "clan" : "inner_sphere";
+  const omni = String(variant.omni ?? "0") === "1";
+  const upgradeMap = NAV_ALPHA_UPGRADE_MAP[faction];
+  const armorType = mergedLoadout.armor_type as keyof typeof upgradeMap.armor | undefined;
+  const structureType = mergedLoadout.structure_type as keyof typeof upgradeMap.structure | undefined;
+  const heatsinkType = mergedLoadout.heatsink_type as keyof typeof upgradeMap.heatsinks | undefined;
+  const guidanceType = mergedLoadout.guidance_type as keyof typeof upgradeMap.guidance | undefined;
+  if (!armorType || !structureType || !heatsinkType || !guidanceType) return null;
+
+  const itemsById = new Map<number, NavAlphaEquipmentItem>();
+  for (const item of equipmentItems) {
+    const id = Number(item.id);
+    if (Number.isFinite(id)) {
+      itemsById.set(id, item);
+    }
+  }
+
+  const omnipodsById = new Map<number, NavAlphaOmnipodItem>();
+  for (const item of omnipodItems) {
+    const id = Number(item.id);
+    if (Number.isFinite(id)) {
+      omnipodsById.set(id, item);
+    }
+  }
+
+  let code = `A${variant.id_code}`;
+  code += navAlphaDecTo64(upgradeMap.structure[structureType] + upgradeMap.armor[armorType]);
+  code += navAlphaDecTo64(upgradeMap.heatsinks[heatsinkType] + upgradeMap.guidance[guidanceType] + (omni ? 8 : 0));
+  if (omni) {
+    const leftActuators = Math.max(0, Math.min(2, Number(mergedLoadout.actuators?.la ?? 0)));
+    const rightActuators = Math.max(0, Math.min(2, Number(mergedLoadout.actuators?.ra ?? 0)));
+    const actuatorCode = (2 - leftActuators) * 4 + (2 - rightActuators);
+    code += navAlphaDecTo64(actuatorCode);
+  } else {
+    code += ":";
+  }
+
+  const componentOrder = ["hd", "la", "lt", "ct", "rt", "ra", "ll", "rl"] as const;
+  const separators = ["p", "q", "r", "s", "t", "u", "v", "w"] as const;
+  const itemsByComponent = mergedLoadout.items ?? {};
+  const armorByComponent = mergedLoadout.armor ?? {};
+  const omnipodsByComponent = mergedLoadout.omnipods ?? {};
+
+  for (let index = 0; index < componentOrder.length; index += 1) {
+    const component = componentOrder[index];
+    code += navAlphaDecTo64(armorByComponent[component] ?? 0, 2);
+    if (omni && component !== "ct") {
+      const omnipodId = Number(omnipodsByComponent[component]);
+      const omnipod = omnipodsById.get(omnipodId);
+      if (!omnipod?.id_code) return null;
+      code += omnipod.id_code;
+    }
+    if (!omni && component === "ct") {
+      const centerTorsoItems = (itemsByComponent.ct ?? [])
+        .map((id) => itemsById.get(Number(id)))
+        .filter((item): item is NavAlphaEquipmentItem => Boolean(item));
+      const engine = centerTorsoItems.find((item) => item.item_type === "engine");
+      if (engine?.id_code) {
+        code += `|${engine.id_code}`;
+      }
+      const heatSinks = centerTorsoItems.filter((item) => item.item_type === "heat_sink" && item.id_code);
+      for (const heatSink of heatSinks) {
+        code += `|${heatSink.id_code}`;
+      }
+    }
+
+    for (const itemId of itemsByComponent[component] ?? []) {
+      const item = itemsById.get(Number(itemId));
+      if (!item?.id_code) continue;
+      if (item.item_type === "internal") continue;
+      if (item.fixed === true || item.fixed === 1 || item.fixed === "1") continue;
+      if (!omni && component === "ct" && (item.item_type === "engine" || item.item_type === "heat_sink")) continue;
+      code += `|${item.id_code}`;
+    }
+    code += separators[index];
+  }
+
+  for (const component of ["ct", "lt", "rt"] as const) {
+    code += navAlphaDecTo64(armorByComponent[`${component}_rear`] ?? 0, 2);
+  }
+
+  return code.startsWith("A") ? code : null;
 }
 
 function loadMechsConfigCatalog(): MechsConfigCatalog {
@@ -262,6 +585,16 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
 
   const weaponPattern = /(ac\/?\d+|uac|lbx|gauss|ppc|laser|flamer|machine gun|srm|lrm|atm|hag|rifle|narc|tag|snub)/i;
   const equipmentPattern = /(ammo|engine|heat\s*sink|probe|ecm|jump\s*jet|tcomp|targeting computer|sensor|masc|endo|ferro|stealth|dhs)/i;
+  const splitTokensPattern = /\s{2,}|\s+(?=Armor|Structure|RIGHT|LEFT|CENTER|HEAD|Shoulder|Upper|Lower|Hand|Hip|Foot|Life|Sensors|Cockpit|Gyro|Clan XL Engine|XL Engine|Light Engine|Std Engine|Ammo|C-Double Heat Sink)/i;
+
+  const addEquipment = (value: string) => {
+    const normalizedEquipment = /^dhs$/i.test(value) ? "C-Double Heat Sink" : value;
+    equipmentCounts.set(normalizedEquipment, (equipmentCounts.get(normalizedEquipment) ?? 0) + 1);
+  };
+
+  const addWeapon = (value: string) => {
+    weaponCounts.set(value, (weaponCounts.get(value) ?? 0) + 1);
+  };
 
   for (const rawLine of renderedText.split(/\r?\n/)) {
     const line = sanitizeRenderedLine(rawLine);
@@ -292,14 +625,48 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
       }
     }
 
+    const tokens = line
+      .split(splitTokensPattern)
+      .map((token) => sanitizeRenderedLine(token))
+      .filter(Boolean);
+
+    let matchedToken = false;
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (/^(Armor|Structure|RIGHT|LEFT|CENTER|HEAD|Shoulder|Upper|Lower|Hand|Hip|Foot|Life Support|Sensors|Cockpit|Gyro)$/i.test(token)) {
+        continue;
+      }
+
+      const nextToken = tokens[index + 1] ?? "";
+      if (weaponPattern.test(token) && /^ammo$/i.test(nextToken)) {
+        addEquipment(`${token} Ammo`);
+        matchedToken = true;
+        index += 1;
+        continue;
+      }
+
+      if (equipmentPattern.test(token)) {
+        addEquipment(token);
+        matchedToken = true;
+        continue;
+      }
+      if (weaponPattern.test(token)) {
+        addWeapon(token);
+        matchedToken = true;
+      }
+    }
+
+    if (matchedToken) {
+      continue;
+    }
+
     if (equipmentPattern.test(line)) {
-      const normalizedEquipment = /^dhs$/i.test(line) ? "C-Double Heat Sink" : line;
-      equipmentCounts.set(normalizedEquipment, (equipmentCounts.get(normalizedEquipment) ?? 0) + 1);
+      addEquipment(line);
       continue;
     }
 
     if (weaponPattern.test(line)) {
-      weaponCounts.set(line, (weaponCounts.get(line) ?? 0) + 1);
+      addWeapon(line);
     }
   }
 
@@ -598,6 +965,39 @@ export async function parseMechBuildHandler(request: HttpRequest) {
     result.metadata.buildToken = buildToken;
 
     const navApiKey = process.env.NAV_ALPHA_API_KEY?.trim();
+    const navAlphaNativeSecret = process.env.NAV_ALPHA_NATIVE_SECRET?.trim();
+
+    if (buildToken) {
+      if (!navAlphaNativeSecret) {
+        warnings.push("NAV_ALPHA_NATIVE_SECRET is not configured; skipping NAV-Alpha public export-code fetch.");
+      } else {
+        try {
+          const publicBuild = await fetchBuildFromPublicNavAlpha(buildToken, parsedUrl.toString(), navAlphaNativeSecret);
+          const publicExportCode = await computePublicNavAlphaExportCode(
+            publicBuild,
+            parsedUrl.toString(),
+            navAlphaNativeSecret,
+          );
+          if (publicExportCode) {
+            result.draft.buildCodes = {
+              ...result.draft.buildCodes,
+              export: publicExportCode,
+            };
+            result.metadata.extractedExportCode = true;
+            result.metadata.publicBuildVariant = publicBuild.variant ?? null;
+          }
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : "Public NAV-Alpha build fetch failed";
+          if (/HTTP 401|HTTP 403/.test(message)) {
+            warnings.push(
+              "Public NAV-Alpha auth was rejected (401/403). NAV_ALPHA_NATIVE_SECRET may be invalid or rotated; continuing with fallback parsers.",
+            );
+          } else {
+            warnings.push(`Public NAV-Alpha build fetch failed: ${message}`);
+          }
+        }
+      }
+    }
 
     try {
       const renderedText = await fetchRenderedBuildText(parsedUrl.toString());

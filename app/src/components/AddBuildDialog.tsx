@@ -78,8 +78,14 @@ function listToText(items: string[]): string {
   return items.join("\n");
 }
 
-function buildCodesToText(codes: Record<string, string>): string {
+function buildCodesToText(codes: Record<string, string>, variant = ""): string {
+  const hasVariantAnnotation = /\([^)]*\)/.test(variant);
+  if (!hasVariantAnnotation && codes.export) {
+    return `default: ${codes.export}`;
+  }
+
   return Object.entries(codes)
+    .filter(([key]) => key !== "export")
     .map(([key, value]) => `${key}: ${value}`)
     .join("\n");
 }
@@ -247,7 +253,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
       const parsed = await parseMechBuild(urlInput.trim());
       setBuildDraft(parsed.draft);
-      setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
+      setBuildCodeText(buildCodesToText(parsed.draft.buildCodes, parsed.draft.variant));
       setExportCodeText(parsed.draft.buildCodes.export ?? "");
       setEquipmentText(listToText(parsed.draft.metadata.equipment ?? parsed.draft.equipment ?? []));
       setWarnings(parsed.warnings.filter((warning) => warning !== EXPORT_CODE_WARNING));
