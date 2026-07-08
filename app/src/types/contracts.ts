@@ -28,6 +28,7 @@ export type DeckRowDoc = {
 
 export type DropDeckDoc = {
   id: string;
+  comp?: string;
   map: DeckMap;
   side: LegacyDeckSide;
   description?: string;

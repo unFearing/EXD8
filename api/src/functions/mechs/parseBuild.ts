@@ -17,6 +17,7 @@ const NAV_ALPHA_BUILD_API_URL = "https://mwo.nav-alpha.com/api/build/";
 const NAV_ALPHA_MECHS_API_URL = "https://mwo.nav-alpha.com/api/mechs/";
 const NAV_ALPHA_EQUIPMENT_API_URL = "https://mwo.nav-alpha.com/api/equipment/";
 const RENDER_PROXY_BASE_URL = "https://r.jina.ai/http://";
+const NAV_ALPHA_NATIVE_SECRET = "gIRb6VRI6Ox99xSgSQl74FC3XMqJAnIRb6l5i1lQCW6KaW8E9x76Az4iQtW8ESl5";
 const NAV_ALPHA_BASE64 = "0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmno";
 
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -128,18 +129,13 @@ function deriveCodeFromVariant(variant: string): string {
   return parts[0] ?? normalized;
 }
 
-function navAlphaPublicAuthHeader(nativeSecret: string): string {
+function navAlphaPublicAuthHeader(): string {
   const iss = Date.now().toString();
-  const sig = createHash("sha256").update(iss + nativeSecret).digest("hex");
+  const sig = createHash("sha256").update(iss + NAV_ALPHA_NATIVE_SECRET).digest("hex");
   return `Native ${JSON.stringify({ iss, sig })}`;
 }
 
-async function fetchNavAlphaPublicJson(
-  url: string,
-  refererUrl: string,
-  nativeSecret: string,
-  init?: RequestInit,
-): Promise<JsonValue> {
+async function fetchNavAlphaPublicJson(url: string, refererUrl: string, init?: RequestInit): Promise<JsonValue> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -147,7 +143,7 @@ async function fetchNavAlphaPublicJson(
       ...init,
       signal: controller.signal,
       headers: {
-        authorization: navAlphaPublicAuthHeader(nativeSecret),
+        authorization: navAlphaPublicAuthHeader(),
         origin: "https://mwo.nav-alpha.com",
         referer: refererUrl,
         accept: "application/json, text/plain, */*",
@@ -179,16 +175,8 @@ function decodeNavAlphaResponseData(body: JsonValue): JsonValue {
   return dataValue ?? null;
 }
 
-async function fetchBuildFromPublicNavAlpha(
-  buildToken: string,
-  sourceUrl: string,
-  nativeSecret: string,
-): Promise<NavAlphaSharedBuild> {
-  const body = await fetchNavAlphaPublicJson(
-    `${NAV_ALPHA_BUILD_API_URL}?token=${encodeURIComponent(buildToken)}`,
-    sourceUrl,
-    nativeSecret,
-  );
+async function fetchBuildFromPublicNavAlpha(buildToken: string, sourceUrl: string): Promise<NavAlphaSharedBuild> {
+  const body = await fetchNavAlphaPublicJson(`${NAV_ALPHA_BUILD_API_URL}?token=${encodeURIComponent(buildToken)}`, sourceUrl);
   const data = decodeNavAlphaResponseData(body);
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Public NAV-Alpha build payload was not an object");
@@ -196,9 +184,9 @@ async function fetchBuildFromPublicNavAlpha(
   return data as NavAlphaSharedBuild;
 }
 
-async function fetchNavAlphaMechsCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaPublicMech[]> {
+async function fetchNavAlphaMechsCatalog(refererUrl: string): Promise<NavAlphaPublicMech[]> {
   navAlphaMechsPromise ??= (async () => {
-    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_MECHS_API_URL, refererUrl, nativeSecret, {
+    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_MECHS_API_URL, refererUrl, {
       method: "POST",
       body: "{}",
       headers: { "content-type": "application/json" },
@@ -212,9 +200,9 @@ async function fetchNavAlphaMechsCatalog(refererUrl: string, nativeSecret: strin
   return navAlphaMechsPromise;
 }
 
-async function fetchNavAlphaEquipmentCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaEquipmentItem[]> {
+async function fetchNavAlphaEquipmentCatalog(refererUrl: string): Promise<NavAlphaEquipmentItem[]> {
   navAlphaEquipmentPromise ??= (async () => {
-    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_EQUIPMENT_API_URL, refererUrl, nativeSecret);
+    const body = await fetchNavAlphaPublicJson(NAV_ALPHA_EQUIPMENT_API_URL, refererUrl);
     const data = decodeNavAlphaResponseData(body);
     if (!Array.isArray(data)) {
       throw new Error("Public NAV-Alpha equipment payload was not a list");
@@ -224,9 +212,9 @@ async function fetchNavAlphaEquipmentCatalog(refererUrl: string, nativeSecret: s
   return navAlphaEquipmentPromise;
 }
 
-async function fetchNavAlphaOmnipodsCatalog(refererUrl: string, nativeSecret: string): Promise<NavAlphaOmnipodItem[]> {
+async function fetchNavAlphaOmnipodsCatalog(refererUrl: string): Promise<NavAlphaOmnipodItem[]> {
   navAlphaOmnipodsPromise ??= (async () => {
-    const body = await fetchNavAlphaPublicJson("https://mwo.nav-alpha.com/api/omnipods/", refererUrl, nativeSecret);
+    const body = await fetchNavAlphaPublicJson("https://mwo.nav-alpha.com/api/omnipods/", refererUrl);
     const data = decodeNavAlphaResponseData(body);
     if (!Array.isArray(data)) {
       throw new Error("Public NAV-Alpha omnipods payload was not a list");
@@ -254,11 +242,7 @@ function navAlphaDecTo64(value: number, minLength = 0): string {
   return encoded;
 }
 
-async function computePublicNavAlphaExportCode(
-  sharedBuild: NavAlphaSharedBuild,
-  refererUrl: string,
-  nativeSecret: string,
-): Promise<string | null> {
+async function computePublicNavAlphaExportCode(sharedBuild: NavAlphaSharedBuild, refererUrl: string): Promise<string | null> {
   if (!sharedBuild.variant || !sharedBuild.loadout) return null;
 
   let loadout: NavAlphaExportLoadout;
@@ -269,9 +253,9 @@ async function computePublicNavAlphaExportCode(
   }
 
   const [variants, equipmentItems, omnipodItems] = await Promise.all([
-    fetchNavAlphaMechsCatalog(refererUrl, nativeSecret),
-    fetchNavAlphaEquipmentCatalog(refererUrl, nativeSecret),
-    fetchNavAlphaOmnipodsCatalog(refererUrl, nativeSecret),
+    fetchNavAlphaMechsCatalog(refererUrl),
+    fetchNavAlphaEquipmentCatalog(refererUrl),
+    fetchNavAlphaOmnipodsCatalog(refererUrl),
   ]);
 
   const variant = variants.find(
@@ -965,37 +949,23 @@ export async function parseMechBuildHandler(request: HttpRequest) {
     result.metadata.buildToken = buildToken;
 
     const navApiKey = process.env.NAV_ALPHA_API_KEY?.trim();
-    const navAlphaNativeSecret = process.env.NAV_ALPHA_NATIVE_SECRET?.trim();
 
     if (buildToken) {
-      if (!navAlphaNativeSecret) {
-        warnings.push("NAV_ALPHA_NATIVE_SECRET is not configured; skipping NAV-Alpha public export-code fetch.");
-      } else {
-        try {
-          const publicBuild = await fetchBuildFromPublicNavAlpha(buildToken, parsedUrl.toString(), navAlphaNativeSecret);
-          const publicExportCode = await computePublicNavAlphaExportCode(
-            publicBuild,
-            parsedUrl.toString(),
-            navAlphaNativeSecret,
-          );
-          if (publicExportCode) {
-            result.draft.buildCodes = {
-              ...result.draft.buildCodes,
-              export: publicExportCode,
-            };
-            result.metadata.extractedExportCode = true;
-            result.metadata.publicBuildVariant = publicBuild.variant ?? null;
-          }
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : "Public NAV-Alpha build fetch failed";
-          if (/HTTP 401|HTTP 403/.test(message)) {
-            warnings.push(
-              "Public NAV-Alpha auth was rejected (401/403). NAV_ALPHA_NATIVE_SECRET may be invalid or rotated; continuing with fallback parsers.",
-            );
-          } else {
-            warnings.push(`Public NAV-Alpha build fetch failed: ${message}`);
-          }
+      try {
+        const publicBuild = await fetchBuildFromPublicNavAlpha(buildToken, parsedUrl.toString());
+        const publicExportCode = await computePublicNavAlphaExportCode(publicBuild, parsedUrl.toString());
+        if (publicExportCode) {
+          result.draft.buildCodes = {
+            ...result.draft.buildCodes,
+            export: publicExportCode,
+          };
+          result.metadata.extractedExportCode = true;
+          result.metadata.publicBuildVariant = publicBuild.variant ?? null;
         }
+      } catch (error: unknown) {
+        warnings.push(
+          error instanceof Error ? `Public NAV-Alpha build fetch failed: ${error.message}` : "Public NAV-Alpha build fetch failed",
+        );
       }
     }
 

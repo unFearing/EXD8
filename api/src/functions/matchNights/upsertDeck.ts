@@ -15,6 +15,9 @@ export async function upsertDropDeckHandler(request: HttpRequest) {
     const saved = await upsertDropDeck(parsed.data, updatedBy);
     return ok(saved);
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "MIN_FILLED_SLOTS") {
+      return fail(400, "BAD_REQUEST", "Deck must have at least 5 filled slots before saving");
+    }
     if (error instanceof Error && error.message === "MISSING_BASE_CONTEXT") {
       return fail(400, "BAD_REQUEST", "Missing base context for deck update");
     }

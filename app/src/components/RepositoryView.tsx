@@ -53,6 +53,8 @@ export function RepositoryView({
   const editMode = viewMode;
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [markdownDrafts, setMarkdownDrafts] = useState<Record<string, string>>({});
+  const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
+  const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
   const canDelete = user?.appRole === "TL";
 
   const loadHierarchy = async () => {
@@ -74,12 +76,81 @@ export function RepositoryView({
   }, []);
 
   useEffect(() => {
-    const navState = location.state as { openAddBuild?: boolean } | null;
+    const query = new URLSearchParams(location.search);
+    const viewParam = query.get("view")?.toLowerCase();
+    if (viewParam === "view") {
+      onViewModeChange("view");
+    }
+    const focusMechId = query.get("focusMechId") ?? undefined;
+    const focusChassis = query.get("focusChassis") ?? undefined;
+    const focusVariant = query.get("focusVariant") ?? undefined;
+    if (focusMechId || focusChassis) {
+      setFocusTarget({ mechId: focusMechId, chassis: focusChassis, variant: focusVariant });
+    }
+
+    const navState = location.state as {
+      openAddBuild?: boolean;
+      focusMechId?: string;
+      focusChassis?: string;
+      focusVariant?: string;
+    } | null;
     if (navState?.openAddBuild) {
       setOpenAddBuild(true);
+    }
+    if (navState?.focusMechId || navState?.focusChassis) {
+      setFocusTarget({
+        mechId: navState.focusMechId,
+        chassis: navState.focusChassis,
+        variant: navState.focusVariant,
+      });
+    }
+    if (navState) {
       navigate(location.pathname, { replace: true, state: null });
     }
-  }, [location.pathname, location.state, navigate]);
+  }, [location.pathname, location.search, location.state, navigate, onViewModeChange]);
+
+  useEffect(() => {
+    if (!focusTarget || loading) return;
+
+    const normalize = (value: string) => value.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
+    let targetId = focusTarget.mechId ?? "";
+    if (!targetId && focusTarget.chassis) {
+      const chassisNeedle = normalize(focusTarget.chassis);
+      const variantNeedle = (focusTarget.variant ?? "").toLowerCase().trim();
+      const found = Object.values(mechsById).find((mech) => {
+        if (normalize(mech.chassis) !== chassisNeedle) return false;
+        if (!variantNeedle) return true;
+        return (mech.variant ?? "").toLowerCase().trim() === variantNeedle;
+      });
+      targetId = found?.id ?? "";
+    }
+
+    if (!targetId) {
+      setFocusTarget(null);
+      return;
+    }
+
+    const targetMech = mechsById[targetId];
+    if (targetMech?.class && targetMech.class !== selectedWeightClass) {
+      setSelectedWeightClass(targetMech.class);
+      return;
+    }
+
+    const element = document.getElementById(`repo-mech-${targetId}`);
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    setHighlightedMechId(targetId);
+    setFocusTarget(null);
+  }, [focusTarget, loading, mechsById, selectedWeightClass]);
+
+  useEffect(() => {
+    if (!highlightedMechId) return;
+    const timeout = window.setTimeout(() => setHighlightedMechId(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [highlightedMechId]);
 
   const handleDeleteMech = async (id: string) => {
     if (!canDelete) {
@@ -445,11 +516,26 @@ export function RepositoryView({
                               {variant.builds.map((build) => (
                                 <Paper
                                   key={build.id}
+                                  id={`repo-mech-${build.id}`}
                                   variant="outlined"
                                   sx={{
                                     p: 1,
                                     borderColor: isLight ? "rgba(114, 133, 162, 0.28)" : "rgba(130, 154, 217, 0.25)",
-                                    background: isLight ? "rgba(255, 255, 255, 0.72)" : "rgba(8, 14, 28, 0.72)",
+                                    background:
+                                      highlightedMechId === build.id
+                                        ? isLight
+                                          ? "rgba(174, 210, 255, 0.5)"
+                                          : "rgba(77, 139, 255, 0.28)"
+                                        : isLight
+                                          ? "rgba(255, 255, 255, 0.72)"
+                                          : "rgba(8, 14, 28, 0.72)",
+                                    boxShadow:
+                                      highlightedMechId === build.id
+                                        ? isLight
+                                          ? "0 0 0 2px rgba(58, 111, 189, 0.32)"
+                                          : "0 0 0 2px rgba(127, 179, 255, 0.42)"
+                                        : "none",
+                                    transition: "background 220ms ease, box-shadow 220ms ease",
                                   }}
                                 >
                                   <Stack spacing={1}>
@@ -469,7 +555,14 @@ export function RepositoryView({
                                         size="small"
                                       />
                                     ) : (
-                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{build.markdown}</ReactMarkdown>
+                                      <ReactMarkdown
+                                        remarkPlugins={[remarkGfm]}
+                                        components={{
+                                          a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+                                        }}
+                                      >
+                                        {build.markdown}
+                                      </ReactMarkdown>
                                     )}
 
                                     {editMode === "edit" && canDelete && (

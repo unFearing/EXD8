@@ -9,6 +9,8 @@ export type DeckMap = z.infer<typeof deckMapSchema>;
 
 export const deckSideSchema = z.enum(["1", "2", "either"]);
 export type DeckSide = z.infer<typeof deckSideSchema>;
+export const deckCompSchema = z.literal("CS26");
+export type DeckComp = z.infer<typeof deckCompSchema>;
 
 export const quickslotKeySchema = z.enum(["A", "B", "C", "D", "E"]);
 export type QuickslotKey = z.infer<typeof quickslotKeySchema>;
@@ -91,6 +93,7 @@ export const schemaVersionSchema = z.enum(["1.0", "1.0.0"]);
 
 export const dropDeckDocSchema = z.object({
   id: z.string().uuid(),
+  comp: deckCompSchema,
   map: deckMapSchema,
   side: deckSideSchema,
   description: z.string().default(""),

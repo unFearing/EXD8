@@ -10,6 +10,8 @@ import type {
 import { getMatchNightsContainer } from "../cosmos.js";
 
 type DropDeckEditable = Pick<DropDeckDoc, "map" | "side" | "name" | "description" | "deck">;
+const DROP_DECK_COMP = "CS26" as const;
+const MIN_FILLED_SLOTS_TO_SAVE = 5;
 
 type DeckMergeResult = {
   merged: DropDeckEditable;
@@ -42,6 +44,14 @@ function cloneEditable(value: DropDeckEditable): DropDeckEditable {
 
 function hasChanged(base: unknown, value: unknown): boolean {
   return JSON.stringify(base) !== JSON.stringify(value);
+}
+
+function countFilledDeckSlots(deck: DropDeckEditable["deck"]): number {
+  return deck.reduce((count, slot) => {
+    const hasMechId = Boolean((slot.mech ?? "").trim());
+    const hasChassis = Boolean((slot.chassis ?? "").trim());
+    return count + (hasMechId || hasChassis ? 1 : 0);
+  }, 0);
 }
 
 function mergeEditable(
@@ -192,8 +202,11 @@ export async function listDropDecks(): Promise<DropDeckDoc[]> {
   const container = getMatchNightsContainer();
   const { resources } = await container.items
     .query<DropDeckDoc>({
-      query:
-        "SELECT * FROM c WHERE IS_DEFINED(c.map) AND IS_DEFINED(c.side) AND IS_DEFINED(c.deck) AND IS_ARRAY(c.deck) ORDER BY c.updatedAt DESC",
+      query: "SELECT * FROM c WHERE c.docType = @docType AND c.comp = @comp ORDER BY c.updatedAt DESC",
+      parameters: [
+        { name: "@docType", value: "dropDeck" },
+        { name: "@comp", value: DROP_DECK_COMP },
+      ],
     })
     .fetchAll();
 
@@ -204,9 +217,12 @@ export async function getDropDeckById(id: string): Promise<DropDeckDoc | null> {
   const container = getMatchNightsContainer();
   const { resources } = await container.items
     .query<DropDeckDoc>({
-      query:
-        "SELECT * FROM c WHERE c.id = @id AND IS_DEFINED(c.map) AND IS_DEFINED(c.side) AND IS_DEFINED(c.deck) AND IS_ARRAY(c.deck)",
-      parameters: [{ name: "@id", value: id }],
+      query: "SELECT * FROM c WHERE c.id = @id AND c.docType = @docType AND c.comp = @comp",
+      parameters: [
+        { name: "@id", value: id },
+        { name: "@docType", value: "dropDeck" },
+        { name: "@comp", value: DROP_DECK_COMP },
+      ],
     })
     .fetchAll();
 
@@ -225,6 +241,11 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
     description: input.description,
     deck: input.deck,
   };
+
+  if (countFilledDeckSlots(incomingEditable.deck) < MIN_FILLED_SLOTS_TO_SAVE) {
+    const error = new Error("MIN_FILLED_SLOTS");
+    throw error;
+  }
 
   let editable: DropDeckEditable = incomingEditable;
   let nextRevision = existing?.revision ?? 0;
@@ -264,6 +285,7 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
 
   const doc: DropDeckDoc = {
     id,
+    comp: DROP_DECK_COMP,
     map: editable.map,
     side: editable.side,
     name: editable.name,
@@ -291,6 +313,7 @@ export async function deleteDropDeckById(id: string): Promise<boolean> {
   const container = getMatchNightsContainer();
   const raw = existing as DropDeckDoc & { teamId?: string };
   const partitionCandidates: Array<string | undefined> = [
+    raw.comp,
     raw.id,
     raw.docType,
     raw.teamId,

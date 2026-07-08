@@ -9,6 +9,7 @@ import {
   Checkbox,
   Container,
   FormControl,
+  IconButton,
   InputLabel,
   MenuItem,
   Paper,
@@ -28,6 +29,8 @@ import AddIcon from "@mui/icons-material/Add";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
@@ -85,6 +88,12 @@ type DeckTemplate = {
   rows: DeckRow[];
 };
 
+type CopiedCell = {
+  templateId: string;
+  slot: number;
+  field: "export" | "skill";
+};
+
 type Cs26Issue = {
   kind: "tonnage" | "class-limit" | "duplicate";
   message: string;
@@ -111,6 +120,8 @@ const ROW_COUNT = CS26_COMPETITION.teamSize;
 const LANCE_OPTIONS: Lance[] = ["", "A", "B", "C"];
 const DECK_AUTOSAVE_DELAY_MS = 1000;
 const DECK_POLL_INTERVAL_MS = 5000;
+const MIN_FILLED_SLOTS_TO_SAVE = 5;
+const TEXT_INPUT_AUTOSAVE_DELAY_MS = 450;
 const QUICKSLOT_KEYS: QuickslotKey[] = ["A", "B", "C", "D", "E"];
 const MAX_VISIBLE_DECKS_PER_MAP = 3;
 const DEFAULT_MAPROOM_URL = "https://maps.mwocomp.com/mwo2?room=IvLEFS2M7dVmsG";
@@ -151,6 +162,27 @@ const editSelectIconSx = {
   "&.Mui-focused .MuiSelect-icon": { opacity: 0.5 },
 };
 
+const DECK_GRID_COLUMNS = "minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.55fr) minmax(0, 2fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.2fr)";
+
+function getBuildCodeEntries(buildCodes?: Record<string, string>): Array<{ key: string; code: string; label: string }> {
+  if (!buildCodes) return [];
+  return Object.entries(buildCodes)
+    .filter(([, code]) => typeof code === "string" && code.trim().length > 0)
+    .map(([key, code]) => ({ key, code: code.trim(), label: `${key}: ${code.trim()}` }));
+}
+
+function getPreferredBuildCode(buildCodes?: Record<string, string>): string {
+  const entries = getBuildCodeEntries(buildCodes);
+  if (!entries.length) return "";
+  const exportEntry = entries.find((entry) => entry.key.toLowerCase() === "export");
+  if (exportEntry) return exportEntry.code;
+  const defaultEntry = entries.find((entry) => entry.key.toLowerCase() === "default");
+  if (defaultEntry) return defaultEntry.code;
+  const importedEntry = entries.find((entry) => entry.key.toLowerCase() === "imported");
+  if (importedEntry) return importedEntry.code;
+  return entries[0]?.code ?? "";
+}
+
 function createEmptyRow(slot: number): DeckRow {
   return {
     slot,
@@ -165,6 +197,7 @@ function createEmptyRow(slot: number): DeckRow {
     codename: "",
     buildUrl: "",
     role: "",
+    buildCode: "",
     skillTree: "",
   };
 }
@@ -172,7 +205,7 @@ function createEmptyRow(slot: number): DeckRow {
 function createTemplate(map: DeckMap, side: TeamSide, version = 1): DeckTemplate {
   return {
     id: crypto.randomUUID(),
-    name: `${map} ${side} v${version}`,
+    name: `${map} ${sideLabel(side)} v${version}`,
     map,
     side,
     description: "",
@@ -180,8 +213,40 @@ function createTemplate(map: DeckMap, side: TeamSide, version = 1): DeckTemplate
   };
 }
 
-function defaultTemplates(mapOptions: DeckMap[]): DeckTemplate[] {
-  return mapOptions.flatMap((map) => SIDE_OPTIONS.map((side) => createTemplate(map, side, 1)));
+function escapedRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toTemplateToken(side: TeamSide): string {
+  if (side === "1") return "Team 1";
+  if (side === "2") return "Team 2";
+  return "Either";
+}
+
+function toLegacyTemplateToken(side: TeamSide): string {
+  if (side === "1") return "1";
+  if (side === "2") return "2";
+  return "either";
+}
+
+function parseAutoTemplateName(name: string, map: DeckMap): { version: number; sideToken: string } | null {
+  const matcher = new RegExp(`^${escapedRegex(map)}\\s+(Team 1|Team 2|Either|1|2|either)\\s+v(\\d+)$`, "i");
+  const match = name.trim().match(matcher);
+  if (!match) return null;
+  return { version: Number(match[2]), sideToken: match[1] };
+}
+
+function isAutoTemplateName(name: string, map: DeckMap, side: TeamSide): boolean {
+  const parsed = parseAutoTemplateName(name, map);
+  if (!parsed) return false;
+  const normalized = parsed.sideToken.toLowerCase();
+  return normalized === toTemplateToken(side).toLowerCase() || normalized === toLegacyTemplateToken(side);
+}
+
+function normalizeTemplateName(name: string, map: DeckMap, side: TeamSide): string {
+  const parsed = parseAutoTemplateName(name, map);
+  if (!parsed) return name;
+  return `${map} ${toTemplateToken(side)} v${parsed.version}`;
 }
 
 function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
@@ -198,11 +263,13 @@ function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
     codename: row?.codename ?? "",
     buildUrl: row?.buildUrl ?? "",
     role: row?.role ?? "",
+    buildCode: row?.buildCode ?? "",
     skillTree: row?.skillTree ?? "",
   };
 }
 
 function toTemplate(doc: DropDeckDoc): DeckTemplate {
+  const normalizedSide = doc.side === "Team 1" ? "1" : doc.side === "Team 2" ? "2" : doc.side === "Agnostic" ? "either" : doc.side;
   const rows = Array.from({ length: ROW_COUNT }, (_, idx) => {
     const row = doc.deck.find((entry) => entry.slot === idx + 1);
     return normalizeRow(idx + 1, row);
@@ -210,9 +277,9 @@ function toTemplate(doc: DropDeckDoc): DeckTemplate {
 
   return {
     id: doc.id,
-    name: doc.name,
+    name: normalizeTemplateName(doc.name, doc.map, normalizedSide),
     map: doc.map,
-    side: doc.side === "Team 1" ? "1" : doc.side === "Team 2" ? "2" : doc.side === "Agnostic" ? "either" : doc.side,
+    side: normalizedSide,
     description: doc.description ?? doc.strategy ?? "",
     revision: doc.revision,
     updatedAt: doc.updatedAt,
@@ -381,6 +448,7 @@ function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
       codename: row.codename,
       buildUrl: row.buildUrl,
       role: row.role ?? "",
+      buildCode: row.buildCode ?? "",
       skillTree: row.skillTree ?? "",
     })),
   };
@@ -409,7 +477,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [iframeZoom, setIframeZoom] = useState(1);
   const [iframeOffsetX, setIframeOffsetX] = useState(0);
   const [iframeOffsetY, setIframeOffsetY] = useState(0);
-  const [templates, setTemplates] = useState<DeckTemplate[]>(defaultTemplates(MAP_FALLBACK_OPTIONS));
+  const [templates, setTemplates] = useState<DeckTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [quickslotId, setQuickslotId] = useState("quickslots-default");
   const [quickslots, setQuickslots] = useState<QuickslotEntry[]>([]);
@@ -425,7 +493,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [maproomUrlInput, setMaproomUrlInput] = useState("");
   const [maproomSaving, setMaproomSaving] = useState(false);
   const [maproomNotice, setMaproomNotice] = useState("");
+  const [copiedCell, setCopiedCell] = useState<CopiedCell | null>(null);
   const maproomUrlInputRef = useRef<HTMLInputElement | null>(null);
+  const textInputDebounceRef = useRef<Map<string, number>>(new Map());
 
   void hasRole;
   const canDelete = user?.appRole === "TL";
@@ -452,6 +522,21 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     const timeoutId = window.setTimeout(() => setMaproomNotice(""), 2500);
     return () => window.clearTimeout(timeoutId);
   }, [maproomNotice]);
+
+  useEffect(() => {
+    if (!copiedCell) return;
+    const timeoutId = window.setTimeout(() => setCopiedCell(null), 1100);
+    return () => window.clearTimeout(timeoutId);
+  }, [copiedCell]);
+
+  useEffect(() => {
+    return () => {
+      for (const timeoutId of textInputDebounceRef.current.values()) {
+        window.clearTimeout(timeoutId);
+      }
+      textInputDebounceRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (mapTileMode !== "iframe" || editMode !== "edit") return;
@@ -540,7 +625,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         if (!docs.length) {
           syncedSignaturesRef.current = new Map();
           syncedTemplatesRef.current = new Map();
-          setTemplates(defaultTemplates(mapOptions));
+          setTemplates([]);
           setSelectedTemplateId("");
           return;
         }
@@ -557,7 +642,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         const message = err instanceof Error ? err.message : "Failed to load drop decks";
         const looksLikeNetworkError = /NetworkError|Failed to fetch|Load failed/i.test(message);
         setDeckError(looksLikeNetworkError ? "" : message);
-        setTemplates(defaultTemplates(mapOptions));
+        setTemplates([]);
       })
       .finally(() => {
         if (!cancelled) setDeckLoading(false);
@@ -683,6 +768,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     }, 0);
   };
 
+  const countFilledSlots = (template?: DeckTemplate): number => {
+    if (!template) return 0;
+    return template.rows.reduce((count, row) => {
+      const hasMechId = Boolean((row.mech ?? "").trim());
+      const hasChassis = Boolean((row.chassis ?? "").trim());
+      return count + (hasMechId || hasChassis ? 1 : 0);
+    }, 0);
+  };
+
   const validateTemplateCs26 = (template?: DeckTemplate): Cs26Validation => {
     if (!template) return { issues: [], rowIssuesBySlot: new Map<number, Cs26Issue[]>() };
 
@@ -770,6 +864,27 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     }));
   };
 
+  const scheduleTextInputCommit = (key: string, commit: () => void) => {
+    const existing = textInputDebounceRef.current.get(key);
+    if (existing !== undefined) {
+      window.clearTimeout(existing);
+    }
+    const timeoutId = window.setTimeout(() => {
+      textInputDebounceRef.current.delete(key);
+      commit();
+    }, TEXT_INPUT_AUTOSAVE_DELAY_MS);
+    textInputDebounceRef.current.set(key, timeoutId);
+  };
+
+  const flushTextInputCommit = (key: string, commit: () => void) => {
+    const existing = textInputDebounceRef.current.get(key);
+    if (existing !== undefined) {
+      window.clearTimeout(existing);
+      textInputDebounceRef.current.delete(key);
+    }
+    commit();
+  };
+
   const getBuildOptions = (chassis: string, variant: string): MechDoc[] => {
     if (!chassis) return [];
     const normalize = (value: string) => value.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
@@ -797,6 +912,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     weaponry: build.weaponry,
     codename: build.codename ?? "",
     buildUrl: build.link || build.buildUrl || "",
+    buildCode: getPreferredBuildCode(build.buildCodes),
     role: build.role ?? row.role ?? "",
     skillTree: build.skillCode ?? row.skillTree ?? "",
     equipmentText: (build.metadata?.equipment ?? build.equipment ?? []).join(", "),
@@ -812,6 +928,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         weaponry: "",
         codename: "",
         buildUrl: "",
+        buildCode: "",
       };
     });
   };
@@ -822,6 +939,41 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       if (!build) return { ...row, mech: mechId };
       return applyBuildToRow(row, build);
     });
+  };
+
+  const copyBuildCode = async (value: string, templateId: string, slot: number) => {
+    const code = value.trim();
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCell({ templateId, slot, field: "export" });
+    } catch {
+      setDeckError("Failed to copy export code.");
+    }
+  };
+
+  const copySkillTreeCode = async (value: string, templateId: string, slot: number) => {
+    const code = value.trim();
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCell({ templateId, slot, field: "skill" });
+    } catch {
+      setDeckError("Failed to copy skill tree code.");
+    }
+  };
+
+  const openMechInRepository = (mechId: string | undefined, chassis: string, variant: string) => {
+    const params = new URLSearchParams();
+    params.set("view", "view");
+    if (mechId) {
+      params.set("focusMechId", mechId);
+    } else {
+      if (chassis) params.set("focusChassis", chassis);
+      if (variant) params.set("focusVariant", variant);
+    }
+    const targetUrl = `/repository${params.toString() ? `?${params.toString()}` : ""}`;
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
   const getVisibleAlternates = (row: DeckRow): string[] =>
@@ -849,6 +1001,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
     const localTemplate = templates.find((template) => template.id === deckId);
     if (!localTemplate) return deckId;
+
+    if (countFilledSlots(localTemplate) < MIN_FILLED_SLOTS_TO_SAVE) {
+      setDeckError(`Deck must have at least ${MIN_FILLED_SLOTS_TO_SAVE} filled slots before saving.`);
+      return undefined;
+    }
 
     const savedDoc = await saveDropDeck(toDropDeckUpsertInput(localTemplate));
     const savedTemplate = toTemplate(savedDoc);
@@ -882,6 +1039,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const setQuickslotDeck = async (slot: QuickslotKey, deckId?: string) => {
     try {
       const resolvedDeckId = await ensureDeckIdForQuickslot(deckId);
+      if (resolvedDeckId) {
+        const duplicate = quickslots.some(
+          (entry) => entry.map === selectedMap && entry.slot !== slot && entry.deckId === resolvedDeckId,
+        );
+        if (duplicate) {
+          setDeckError("That deck is already assigned to another quickslot for this map.");
+          return;
+        }
+      }
       const rest = quickslots.filter((entry) => !(entry.map === selectedMap && entry.slot === slot));
       const next = resolvedDeckId ? [...rest, { map: selectedMap, slot, deckId: resolvedDeckId }] : rest;
       void persistQuickslots(next);
@@ -916,7 +1082,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     if (mapQuickslots.length >= MAX_VISIBLE_DECKS_PER_MAP) return;
     const nextSlot = QUICKSLOT_KEYS.find((key) => !mapQuickslotLookup.get(key)?.deckId);
     if (!nextSlot) return;
-    const fallbackDeck = templatesForSelection.find((template) => isUuid(template.id)) ?? templatesForSelection[0];
+    const assignedDeckIds = new Set(
+      fixedMapQuickslots.map((entry) => entry.deckId).filter((value): value is string => Boolean(value)),
+    );
+    const fallbackDeck = templatesForSelection.find((template) => isUuid(template.id) && !assignedDeckIds.has(template.id));
     void setQuickslotDeck(nextSlot, fallbackDeck?.id);
   };
 
@@ -1013,6 +1182,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     });
 
     if (!dirtyTemplate || deckSaving) {
+      return;
+    }
+
+    if (countFilledSlots(dirtyTemplate) < MIN_FILLED_SLOTS_TO_SAVE) {
       return;
     }
 
@@ -1550,9 +1723,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                       </Stack>
                       <FormControl size="small" sx={{ flex: 1, minWidth: 220 }}>
                         <InputLabel>Deck</InputLabel>
+                        {(() => {
+                          const safeDeckId =
+                            entry.deckId && templatesForSelection.some((template) => template.id === entry.deckId)
+                              ? entry.deckId
+                              : "";
+                          return (
                         <Select
                           label="Deck"
-                          value={entry.deckId ?? ""}
+                          value={safeDeckId}
                           onChange={(event) => {
                             const value = String(event.target.value);
                             if (value === "__new__") {
@@ -1562,6 +1741,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               setQuickslotDeck(entry.slot, fresh.id);
                               return;
                             }
+                            const alreadyAssigned = fixedMapQuickslots.some((slotEntry) => slotEntry.slot !== entry.slot && slotEntry.deckId === value);
+                            if (alreadyAssigned) {
+                              setDeckError("That deck is already assigned to another quickslot for this map.");
+                              return;
+                            }
                             setQuickslotDeck(entry.slot, value || undefined);
                             if (value) setSelectedTemplateId(value);
                           }}
@@ -1569,11 +1753,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           <MenuItem value="">Unassigned</MenuItem>
                           <MenuItem value="__new__">Create fresh deck</MenuItem>
                           {templatesForSelection.map((template) => (
-                            <MenuItem key={template.id} value={template.id}>
-                              {template.name} ({sideLabel(template.side)})
+                            <MenuItem
+                              key={template.id}
+                              value={template.id}
+                              disabled={fixedMapQuickslots.some((slotEntry) => slotEntry.slot !== entry.slot && slotEntry.deckId === template.id)}
+                            >
+                              {template.name}
                             </MenuItem>
                           ))}
                         </Select>
+                          );
+                        })()}
                       </FormControl>
                       <Button variant="text" color="inherit" onClick={() => clearQuickslotDeck(entry.slot)} disabled={!entry.deckId}>
                         Clear
@@ -1596,32 +1786,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
               return (
                 <Stack key={slotEntry.slot} spacing={1.2}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 1.6,
-                      borderRadius: 2,
-                      border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-                      background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
-                    }}
-                  >
-                    <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>
-                      STRAT DESCRIPTION | SLOT {slotEntry.slot}
-                    </Typography>
-                    <TextField
-                      variant="outlined"
-                      fullWidth
-                      multiline
-                      minRows={4}
-                      value={template.description ?? ""}
-                      disabled={editMode !== "edit"}
-                      sx={{ mt: 1 }}
-                      onChange={(event) => {
-                        updateTemplateById(template.id, (current) => ({ ...current, description: event.target.value }));
-                      }}
-                    />
-                  </Paper>
-
+                  {(() => {
+                    const filledSlots = countFilledSlots(template);
+                    const readyToAutosave = filledSlots >= MIN_FILLED_SLOTS_TO_SAVE;
+                    return (
+                      <Typography variant="caption" sx={{ color: readyToAutosave ? (isLight ? "#4f6282" : "#c9d8ff") : (isLight ? "#8a5a00" : "#ffcf76"), px: 0.4 }}>
+                        {readyToAutosave
+                          ? `Autosave active (${filledSlots}/${ROW_COUNT} slots filled).`
+                          : `Autosave pending: fill at least ${MIN_FILLED_SLOTS_TO_SAVE} slots (${filledSlots}/${ROW_COUNT} filled).`}
+                      </Typography>
+                    );
+                  })()}
                   <Paper
                     elevation={0}
                     sx={{
@@ -1656,14 +1831,34 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         <TextField
                           size="small"
                           label="Deck Name"
-                          value={template.name ?? ""}
+                          defaultValue={template.name ?? ""}
                           disabled={editMode !== "edit"}
-                          onChange={(event) =>
-                            updateTemplateById(template.id, (current) => ({
-                              ...current,
-                              name: event.target.value,
-                            }))
-                          }
+                          onChange={(event) => {
+                            const nextName = event.target.value;
+                            const commitKey = `deck-name-${template.id}`;
+                            scheduleTextInputCommit(commitKey, () => {
+                              updateTemplateById(template.id, (current) => {
+                                if ((current.name ?? "") === nextName) return current;
+                                return {
+                                  ...current,
+                                  name: nextName,
+                                };
+                              });
+                            });
+                          }}
+                          onBlur={(event) => {
+                            const nextName = event.target.value;
+                            const commitKey = `deck-name-${template.id}`;
+                            flushTextInputCommit(commitKey, () => {
+                              updateTemplateById(template.id, (current) => {
+                                if ((current.name ?? "") === nextName) return current;
+                                return {
+                                  ...current,
+                                  name: nextName,
+                                };
+                              });
+                            });
+                          }}
                           sx={{ minWidth: 220 }}
                         />
                         <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -1676,6 +1871,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               updateTemplateById(template.id, (current) => ({
                                 ...current,
                                 side: event.target.value as TeamSide,
+                                name: isAutoTemplateName(current.name, current.map, current.side)
+                                  ? `${current.map} ${toTemplateToken(event.target.value as TeamSide)} v${parseAutoTemplateName(current.name, current.map)?.version ?? 1}`
+                                  : current.name,
                               }))
                             }
                           >
@@ -1740,19 +1938,19 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                       </Stack>
                     </Box>
 
-                    <Box sx={{ p: 1.5, overflowX: "auto" }}>
-                      <Box sx={{ minWidth: 1760 }}>
+                    <Box sx={{ p: 1.5, overflowX: "hidden", width: "100%" }}>
+                      <Box sx={{ width: "100%" }}>
                         <Box
                           sx={{
                             display: "grid",
-                            gridTemplateColumns: "180px 180px 80px 320px 100px 100px 150px 320px 220px",
+                            gridTemplateColumns: DECK_GRID_COLUMNS,
                             gap: 1,
                             px: 1,
                             pb: 0.8,
                             borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.25)" : "1px solid rgba(120, 146, 210, 0.2)",
                           }}
                         >
-                          {["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Skill Tree"].map((header) => (
+                          {["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Export Code", "Skill Tree"].map((header) => (
                             <Typography
                               key={header}
                               variant="caption"
@@ -1780,6 +1978,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               )?.[1];
                             const buildOptions = getBuildOptions(rowChassis, rowVariant);
                             const selectedBuildId = mech?.id || row.mech || "";
+                            const hasSelectedRepositoryBuild = Boolean(mech && row.mech && mech.id === row.mech);
                             const rowClass = mech?.class ?? configMech?.class ?? selectedConfigMech?.class ?? "-";
                             const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage;
                             const rowIssues = cs26Validation.rowIssuesBySlot.get(row.slot) ?? [];
@@ -1789,7 +1988,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 key={row.slot}
                                 sx={{
                                   display: "grid",
-                                  gridTemplateColumns: "180px 180px 80px 320px 100px 100px 150px 320px 220px",
+                                  gridTemplateColumns: DECK_GRID_COLUMNS,
                                   gap: 1,
                                   alignItems: "center",
                                   px: 1,
@@ -1817,14 +2016,27 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     variant="standard"
                                     value={row.primary}
                                     displayEmpty
+                                    MenuProps={{
+                                      slotProps: {
+                                        paper: {
+                                          sx: {
+                                            maxHeight: 420,
+                                            "& .MuiMenuItem-root": {
+                                              minHeight: 34,
+                                              py: 0.2,
+                                            },
+                                          },
+                                        },
+                                      },
+                                    }}
                                     disabled={editMode !== "edit"}
                                     onChange={(event) => setPrimaryPilots(template.id, rowIndex, event.target.value as string[])}
                                     renderValue={(value) => formatPilotDisplay((value as string[]) || []) || "-"}
                                     sx={editMode === "edit" ? editSelectIconSx : { "& .MuiSelect-icon": { display: "none" } }}
                                   >
                                     {PILOT_OPTIONS.map((pilot) => (
-                                      <MenuItem key={pilot} value={pilot}>
-                                        <Checkbox checked={row.primary.includes(pilot)} size="small" sx={{ mr: 1 }} />
+                                      <MenuItem key={pilot} value={pilot} dense>
+                                        <Checkbox checked={row.primary.includes(pilot)} size="small" sx={{ mr: 0.6, py: 0.2 }} />
                                         {getPilotShortcode(pilot)}
                                       </MenuItem>
                                     ))}
@@ -1837,14 +2049,27 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     variant="standard"
                                     value={getVisibleAlternates(row)}
                                     displayEmpty
+                                    MenuProps={{
+                                      slotProps: {
+                                        paper: {
+                                          sx: {
+                                            maxHeight: 420,
+                                            "& .MuiMenuItem-root": {
+                                              minHeight: 34,
+                                              py: 0.2,
+                                            },
+                                          },
+                                        },
+                                      },
+                                    }}
                                     disabled={editMode !== "edit"}
                                     onChange={(event) => setAlternatePilots(template.id, rowIndex, event.target.value as string[])}
                                     renderValue={(value) => formatPilotDisplay((value as string[]) || []) || "-"}
                                     sx={editMode === "edit" ? editSelectIconSx : { "& .MuiSelect-icon": { display: "none" } }}
                                   >
                                     {PILOT_OPTIONS.map((pilot) => (
-                                      <MenuItem key={pilot} value={pilot}>
-                                        <Checkbox checked={getVisibleAlternates(row).includes(pilot)} size="small" sx={{ mr: 1 }} />
+                                      <MenuItem key={pilot} value={pilot} dense>
+                                        <Checkbox checked={getVisibleAlternates(row).includes(pilot)} size="small" sx={{ mr: 0.6, py: 0.2 }} />
                                         {getPilotShortcode(pilot)}
                                       </MenuItem>
                                     ))}
@@ -1953,21 +2178,223 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   </Typography>
                                 )}
 
+                                {(() => {
+                                  const selectedCode = row.buildCode && row.buildCode.trim().length > 0
+                                    ? row.buildCode.trim()
+                                    : getPreferredBuildCode(mech?.buildCodes);
+
+                                  if (!selectedCode) {
+                                    return (
+                                      <Typography
+                                        variant="body2"
+                                        sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                                      >
+                                        -
+                                      </Typography>
+                                    );
+                                  }
+
+                                  return (
+                                    <Stack direction="row" spacing={0.2} sx={{ alignItems: "center", minWidth: 0 }}>
+                                      <Typography
+                                        variant="body2"
+                                        onClick={() => {
+                                          void copyBuildCode(selectedCode, template.id, row.slot);
+                                        }}
+                                        title="Click to copy"
+                                        sx={{
+                                          color: isLight ? "#3a6fbd" : "#7fb3ff",
+                                          fontSize: "0.8rem",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          cursor: "pointer",
+                                          minWidth: 0,
+                                          flex: 1,
+                                        }}
+                                      >
+                                        {selectedCode}
+                                      </Typography>
+                                      {copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "export" && (
+                                        <Typography
+                                          variant="caption"
+                                          sx={{
+                                            px: 0.6,
+                                            py: 0.15,
+                                            borderRadius: 0.8,
+                                            background: isLight ? "rgba(58, 111, 189, 0.14)" : "rgba(127, 179, 255, 0.2)",
+                                            color: isLight ? "#2f5d99" : "#b7d4ff",
+                                            fontWeight: 700,
+                                            flexShrink: 0,
+                                          }}
+                                        >
+                                          Copied
+                                        </Typography>
+                                      )}
+                                      <Tooltip title="Copy export code">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => {
+                                            void copyBuildCode(selectedCode, template.id, row.slot);
+                                          }}
+                                          sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                        >
+                                          <ContentCopyIcon fontSize="inherit" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    </Stack>
+                                  );
+                                })()}
+
                                 {editMode === "edit" ? (
-                                  <TextField
-                                    variant="standard"
-                                    fullWidth
-                                    value={row.skillTree ?? ""}
-                                    onChange={(event) => updateRow(template.id, rowIndex, (entry) => ({ ...entry, skillTree: event.target.value }))}
-                                  />
+                                  <Stack direction="row" spacing={0.3} sx={{ alignItems: "center", minWidth: 0 }}>
+                                    <TextField
+                                      variant="standard"
+                                      fullWidth
+                                      defaultValue={row.skillTree ?? ""}
+                                      onChange={(event) => {
+                                        const nextSkillTree = event.target.value;
+                                        const commitKey = `skill-tree-${template.id}-${row.slot}`;
+                                        scheduleTextInputCommit(commitKey, () => {
+                                          updateRow(template.id, rowIndex, (entry) => {
+                                            if ((entry.skillTree ?? "") === nextSkillTree) return entry;
+                                            return { ...entry, skillTree: nextSkillTree };
+                                          });
+                                        });
+                                      }}
+                                      onBlur={(event) => {
+                                        const nextSkillTree = event.target.value;
+                                        const commitKey = `skill-tree-${template.id}-${row.slot}`;
+                                        flushTextInputCommit(commitKey, () => {
+                                          updateRow(template.id, rowIndex, (entry) => {
+                                            if ((entry.skillTree ?? "") === nextSkillTree) return entry;
+                                            return { ...entry, skillTree: nextSkillTree };
+                                          });
+                                        });
+                                      }}
+                                    />
+                                    {(() => {
+                                      const skillTreeCode = (row.skillTree || mech?.skillCode || "").trim();
+                                      const copyable = Boolean(skillTreeCode) && skillTreeCode !== "-" && skillTreeCode.toLowerCase() !== "pending";
+                                      if (!copyable) return null;
+                                      return (
+                                        <>
+                                          {copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "skill" && (
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                px: 0.6,
+                                                py: 0.15,
+                                                borderRadius: 0.8,
+                                                background: isLight ? "rgba(58, 111, 189, 0.14)" : "rgba(127, 179, 255, 0.2)",
+                                                color: isLight ? "#2f5d99" : "#b7d4ff",
+                                                fontWeight: 700,
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              Copied
+                                            </Typography>
+                                          )}
+                                          <Tooltip title="Copy skill tree code">
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => {
+                                                void copySkillTreeCode(skillTreeCode, template.id, row.slot);
+                                              }}
+                                              sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                            >
+                                              <ContentCopyIcon fontSize="inherit" />
+                                            </IconButton>
+                                          </Tooltip>
+                                        </>
+                                      );
+                                    })()}
+                                    {hasSelectedRepositoryBuild && (
+                                      <Tooltip title="Open this mech in Repository">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => openMechInRepository(mech?.id, rowChassis, rowVariant)}
+                                          sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                        >
+                                          <OpenInNewIcon fontSize="inherit" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </Stack>
                                 ) : (
-                                  <Typography
-                                    variant="body2"
-                                    sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.85rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-                                    title={row.skillTree || mech?.skillCode || ""}
-                                  >
-                                    {row.skillTree || mech?.skillCode || "-"}
-                                  </Typography>
+                                  <Stack direction="row" spacing={0.3} sx={{ alignItems: "center", minWidth: 0 }}>
+                                    {(() => {
+                                      const skillTreeCode = (row.skillTree || mech?.skillCode || "").trim();
+                                      const display = skillTreeCode || "-";
+                                      const copyable = Boolean(skillTreeCode) && skillTreeCode !== "-" && skillTreeCode.toLowerCase() !== "pending";
+                                      return (
+                                        <>
+                                          {copyable && (
+                                            <>
+                                              {copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "skill" && (
+                                                <Typography
+                                                  variant="caption"
+                                                  sx={{
+                                                    px: 0.6,
+                                                    py: 0.15,
+                                                    borderRadius: 0.8,
+                                                    background: isLight ? "rgba(58, 111, 189, 0.14)" : "rgba(127, 179, 255, 0.2)",
+                                                    color: isLight ? "#2f5d99" : "#b7d4ff",
+                                                    fontWeight: 700,
+                                                    flexShrink: 0,
+                                                  }}
+                                                >
+                                                  Copied
+                                                </Typography>
+                                              )}
+                                              <Tooltip title="Copy skill tree code">
+                                                <IconButton
+                                                  size="small"
+                                                  onClick={() => {
+                                                    void copySkillTreeCode(skillTreeCode, template.id, row.slot);
+                                                  }}
+                                                  sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                                >
+                                                  <ContentCopyIcon fontSize="inherit" />
+                                                </IconButton>
+                                              </Tooltip>
+                                            </>
+                                          )}
+                                          <Typography
+                                            variant="body2"
+                                            onClick={() => {
+                                              if (!copyable) return;
+                                              void copySkillTreeCode(skillTreeCode, template.id, row.slot);
+                                            }}
+                                            sx={{
+                                              color: copyable ? (isLight ? "#3a6fbd" : "#7fb3ff") : (isLight ? "#4f6282" : "#d3ddfc"),
+                                              fontSize: "0.85rem",
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              minWidth: 0,
+                                              flex: 1,
+                                              cursor: copyable ? "pointer" : "default",
+                                            }}
+                                            title={copyable ? "Click to copy" : display}
+                                          >
+                                            {display}
+                                          </Typography>
+                                        </>
+                                      );
+                                    })()}
+                                    {hasSelectedRepositoryBuild && (
+                                      <Tooltip title="Open this mech in Repository">
+                                        <IconButton
+                                          size="small"
+                                          onClick={() => openMechInRepository(mech?.id, rowChassis, rowVariant)}
+                                          sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                        >
+                                          <OpenInNewIcon fontSize="inherit" />
+                                        </IconButton>
+                                      </Tooltip>
+                                    )}
+                                  </Stack>
                                 )}
                               </Box>
                             );
@@ -1975,6 +2402,49 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         </Stack>
                       </Box>
                     </Box>
+                  </Paper>
+
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 1.6,
+                      borderRadius: 2,
+                      border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
+                      background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>
+                      STRAT DESCRIPTION | SLOT {slotEntry.slot}
+                    </Typography>
+                    <TextField
+                      variant="outlined"
+                      fullWidth
+                      multiline
+                      minRows={4}
+                      defaultValue={template.description ?? ""}
+                      disabled={editMode !== "edit"}
+                      sx={{ mt: 1 }}
+                      onChange={(event) => {
+                        const nextDescription = event.target.value;
+                        const commitKey = `deck-description-${template.id}`;
+                        scheduleTextInputCommit(commitKey, () => {
+                          updateTemplateById(template.id, (current) => {
+                            if ((current.description ?? "") === nextDescription) return current;
+                            return { ...current, description: nextDescription };
+                          });
+                        });
+                      }}
+                      onBlur={(event) => {
+                        const nextDescription = event.target.value;
+                        const commitKey = `deck-description-${template.id}`;
+                        flushTextInputCommit(commitKey, () => {
+                          updateTemplateById(template.id, (current) => {
+                            if ((current.description ?? "") === nextDescription) return current;
+                            return { ...current, description: nextDescription };
+                          });
+                        });
+                      }}
+                    />
                   </Paper>
                 </Stack>
               );
