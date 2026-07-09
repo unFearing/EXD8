@@ -258,9 +258,8 @@ async function computePublicNavAlphaExportCode(sharedBuild: NavAlphaSharedBuild,
     fetchNavAlphaOmnipodsCatalog(refererUrl),
   ]);
 
-  const variant = variants.find(
-    (entry) => String(entry.name ?? "").toLowerCase() === String(sharedBuild.variant ?? "").toLowerCase(),
-  );
+  const sharedVariantKey = normalizeLookupToken(sharedBuild.variant ?? "");
+  const variant = variants.find((entry) => normalizeLookupToken(String(entry.name ?? "")) === sharedVariantKey);
   if (!variant?.id_code || !variant.faction) return null;
 
   let stockLoadout: NavAlphaExportLoadout = {};
@@ -453,12 +452,14 @@ function normalizeVariant(raw: string): string {
   return raw.trim().toUpperCase();
 }
 
+function normalizeLookupToken(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
 function parseVariantFromUrl(url: URL): string | null {
   const b = url.searchParams.get("b") ?? url.searchParams.get("build") ?? "";
   if (!b) return null;
-  const candidate = b.includes("_") ? b.split("_").at(-1) : b;
-  if (!candidate) return null;
-  return normalizeVariant(candidate);
+  return normalizeVariant(b);
 }
 
 function parseBuildTokenFromUrl(url: URL): string | null {
@@ -468,19 +469,19 @@ function parseBuildTokenFromUrl(url: URL): string | null {
 }
 
 function resolveChassisCodeFromVariant(variantCode: string): string {
-  const upperVariantCode = variantCode.toUpperCase();
+  const normalizedVariantCode = normalizeLookupToken(variantCode);
   const knownCodes = Object.keys(mechsConfigCatalog.byCode)
     .slice()
     .sort((a, b) => b.length - a.length);
 
   for (const code of knownCodes) {
-    const upperCode = code.toUpperCase();
-    if (upperVariantCode === upperCode || upperVariantCode.startsWith(`${upperCode}-`)) {
+    const normalizedCode = normalizeLookupToken(code);
+    if (normalizedVariantCode === normalizedCode || normalizedVariantCode.startsWith(normalizedCode)) {
       return code;
     }
   }
 
-  return variantCode.split("-")[0];
+  return variantCode.split(/[-_]/)[0];
 }
 
 function parseWeaponsFromHtml(html: string): string[] {
@@ -855,14 +856,29 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
   const variantUpper = variantCode.toUpperCase();
   const fromVariant = mechsConfigCatalog.byVariant[variantUpper];
   const chassisCode = resolveChassisCodeFromVariant(variantCode);
-  const variantSuffix =
-    variantCode.toUpperCase().startsWith(`${chassisCode.toUpperCase()}-`)
-      ? variantCode.slice(chassisCode.length + 1)
-      : variantCode.split("-").slice(1).join("-") || variantCode;
+  const variantSuffixCandidates = Array.from(
+    new Set(
+      [
+        variantCode.toUpperCase().startsWith(`${chassisCode.toUpperCase()}-`)
+          ? variantCode.slice(chassisCode.length + 1)
+          : variantCode.split("-").slice(1).join("-") || variantCode,
+        variantCode.split("_").at(-1) ?? "",
+        variantCode.split("_").slice(1).join("_") || "",
+      ].filter(Boolean),
+    ),
+  );
   const catalog = fromVariant ?? mechsConfigCatalog.byCode[chassisCode];
 
   const chassis = catalog?.chassis ?? chassisCode;
-  const variantInfo = catalog?.variants?.[variantSuffix];
+  const variantInfo = catalog?.variants
+    ? variantSuffixCandidates
+        .map((suffix) =>
+          Object.entries(catalog.variants ?? {}).find(
+            ([variantSuffix]) => normalizeLookupToken(variantSuffix) === normalizeLookupToken(suffix),
+          ),
+        )
+        .find((entry): entry is [string, CachedVariant] => Boolean(entry))?.[1]
+    : undefined;
   const tonnage = catalog?.tonnage ?? 50;
   const tech = variantInfo?.tech ?? catalog?.defaultTech ?? "IS";
   const variantLabel = variantInfo?.label ? `${variantCode} (${variantInfo.label})` : variantCode;
