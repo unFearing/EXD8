@@ -37,25 +37,42 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
         mechId: mech.key,
         chassis: mech.chassis,
         variant: mech.variant,
+        tonnage: mech.tonnage,
       }))
-      .sort((a, b) => `${a.chassis}|${a.variant}`.localeCompare(`${b.chassis}|${b.variant}`));
+      .sort((a, b) => {
+        const tonnageDelta = (a.tonnage ?? Number.POSITIVE_INFINITY) - (b.tonnage ?? Number.POSITIVE_INFINITY);
+        if (tonnageDelta !== 0) return tonnageDelta;
+        const chassisDelta = a.chassis.localeCompare(b.chassis);
+        if (chassisDelta !== 0) return chassisDelta;
+        return a.variant.localeCompare(b.variant);
+      });
   }, [allConfiguredMechs, repositoryMechs, source]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, string[]>();
+    const chassisTonnage = new Map<string, number>();
     for (const option of options) {
       const list = map.get(option.chassis) ?? [];
       if (!list.includes(option.variant)) {
         list.push(option.variant);
       }
       map.set(option.chassis, list);
+      const existing = chassisTonnage.get(option.chassis);
+      if (existing === undefined || option.tonnage < existing) {
+        chassisTonnage.set(option.chassis, option.tonnage);
+      }
     }
     return Array.from(map.entries())
       .map(([chassis, variants]) => ({
         chassis,
         variants: variants.slice().sort((a, b) => a.localeCompare(b)),
+        tonnage: chassisTonnage.get(chassis) ?? Number.POSITIVE_INFINITY,
       }))
-      .sort((a, b) => a.chassis.localeCompare(b.chassis));
+      .sort((a, b) => {
+        const tonnageDelta = (a.tonnage ?? Number.POSITIVE_INFINITY) - (b.tonnage ?? Number.POSITIVE_INFINITY);
+        if (tonnageDelta !== 0) return tonnageDelta;
+        return a.chassis.localeCompare(b.chassis);
+      });
   }, [options]);
 
   const effectiveSelectedId = useMemo(() => {
@@ -93,6 +110,14 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
     return items;
   }, [chassisValue, grouped]);
 
+  const tokenToMechId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const option of options) {
+      map.set(`variant|${option.chassis}|${option.variant}`, option.mechId);
+    }
+    return map;
+  }, [options]);
+
   return (
     <Stack spacing={1} sx={{ width: "100%" }}>
       <FormControl size="small" variant="standard" fullWidth>
@@ -114,7 +139,7 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
               onChange({ mechId: "", chassis, variant: "" });
               return;
             }
-            onChange({ mechId: "", chassis, variant: variant ?? "" });
+            onChange({ mechId: tokenToMechId.get(token) ?? "", chassis, variant: variant ?? "" });
           }}
         >
           <MenuItem value="">Select Mech</MenuItem>

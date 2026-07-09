@@ -7,6 +7,7 @@ import {
   Button,
   ButtonGroup,
   Checkbox,
+  Autocomplete,
   Container,
   FormControl,
   IconButton,
@@ -93,6 +94,121 @@ type CopiedCell = {
   slot: number;
   field: "export" | "skill";
 };
+
+type BuildOption = {
+  label: string;
+  code: string;
+};
+
+function BuildAutocompleteField({
+  value,
+  options,
+  onCommit,
+  onSelect,
+}: {
+  value: string;
+  options: BuildOption[];
+  onCommit: (value: string) => void;
+  onSelect?: (option: BuildOption | null) => void;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  const focusedRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!focusedRef.current && value !== localValue) {
+      setLocalValue(value);
+    }
+  }, [localValue, value]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (localValue === value) return;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+    }
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      onCommit(localValue);
+    }, TEXT_INPUT_AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, [localValue, onCommit, value]);
+
+  return (
+    <Autocomplete
+      freeSolo
+      forcePopupIcon
+      options={options}
+      inputValue={localValue}
+      openOnFocus
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        if (localValue !== value) {
+          onCommit(localValue);
+        }
+      }}
+      onInputChange={(_, nextValue) => {
+        setLocalValue(nextValue);
+      }}
+      onChange={(_, nextValue) => {
+        if (typeof nextValue === "string") {
+          const nextText = nextValue.trim();
+          setLocalValue(nextText);
+          onCommit(nextText);
+          onSelect?.(options.find((option) => option.label === nextText || option.code === nextText) ?? null);
+          return;
+        }
+
+        if (!nextValue) {
+          setLocalValue("");
+          onCommit("");
+          onSelect?.(null);
+          return;
+        }
+
+        setLocalValue(nextValue.label);
+        onCommit(nextValue.label);
+        onSelect?.(nextValue);
+      }}
+      getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+      renderOption={(props, option) => (
+        <li {...props}>
+          <Stack spacing={0.1} sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ lineHeight: 1.1 }}>
+              {option.label}
+            </Typography>
+            <Typography variant="caption" sx={{ opacity: 0.72, lineHeight: 1.1 }}>
+              {option.code}
+            </Typography>
+          </Stack>
+        </li>
+      )}
+      renderInput={(params) => (
+        <TextField {...params} variant="standard" placeholder="Build" fullWidth sx={{ minWidth: 0 }} />
+      )}
+      sx={{ minWidth: 0 }}
+    />
+  );
+}
 
 type Cs26Issue = {
   kind: "tonnage" | "class-limit" | "duplicate";
@@ -885,59 +1001,22 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     commit();
   };
 
-  const getBuildOptions = (chassis: string, variant: string): MechDoc[] => {
-    if (!chassis) return [];
-    const normalize = (value: string) => value.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
-    const c = normalize(chassis);
-    const v = variant.toLowerCase().trim();
-    return mechs.filter((doc) => {
-      if (normalize(doc.chassis) !== c) return false;
-      if (!variant) return true;
-      return doc.variant.toLowerCase().trim() === v;
-    });
-  };
-
-  const formatBuildLabel = (weaponry: string, codename: string): string => {
-    const w = weaponry.trim();
-    const c = codename.trim();
-    if (w && c) return `${w} | ${c}`;
-    return w || c || "-";
-  };
-
-  const applyBuildToRow = (row: DeckRow, build: MechDoc): DeckRow => ({
-    ...row,
-    mech: build.id,
-    chassis: build.chassis,
-    variant: build.variant,
-    weaponry: build.weaponry,
-    codename: build.codename ?? "",
-    buildUrl: build.link || build.buildUrl || "",
-    buildCode: getPreferredBuildCode(build.buildCodes),
-    role: build.role ?? row.role ?? "",
-    skillTree: build.skillCode ?? row.skillTree ?? "",
-    equipmentText: (build.metadata?.equipment ?? build.equipment ?? []).join(", "),
-  });
-
   const setRowChassisVariant = (templateId: string, rowIndex: number, value: { mechId: string; chassis: string; variant: string }) => {
     updateRow(templateId, rowIndex, (row) => {
+      const build = value.mechId ? mechLookup.get(value.mechId) : undefined;
       return {
         ...row,
-        mech: "",
+        mech: build?.id ?? value.mechId ?? "",
         chassis: value.chassis,
         variant: value.variant,
-        weaponry: "",
-        codename: "",
-        buildUrl: "",
-        buildCode: "",
+        weaponry: build?.weaponry ?? "",
+        codename: build?.codename ?? "",
+        buildUrl: build?.link || build?.buildUrl || "",
+        buildCode: build ? getPreferredBuildCode(build.buildCodes) : "",
+        role: build?.role ?? row.role ?? "",
+        skillTree: build?.skillCode ?? row.skillTree ?? "",
+        equipmentText: build ? (build.metadata?.equipment ?? build.equipment ?? []).join(", ") : row.equipmentText,
       };
-    });
-  };
-
-  const setRowBuild = (templateId: string, rowIndex: number, mechId: string) => {
-    updateRow(templateId, rowIndex, (row) => {
-      const build = mechLookup.get(mechId);
-      if (!build) return { ...row, mech: mechId };
-      return applyBuildToRow(row, build);
     });
   };
 
@@ -1976,9 +2055,38 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               [...configuredByPair.entries()].find(
                                 ([key]) => key.startsWith(`${normalizedChassis}|`) && key.endsWith(normalizedVariant),
                               )?.[1];
-                            const buildOptions = getBuildOptions(rowChassis, rowVariant);
-                            const selectedBuildId = mech?.id || row.mech || "";
-                            const hasSelectedRepositoryBuild = Boolean(mech && row.mech && mech.id === row.mech);
+                            const buildOptions = (() => {
+                              const matchingMechs = mechs.filter((doc) => {
+                                const docChassis = doc.chassis.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
+                                const docVariant = doc.variant.toLowerCase().trim();
+                                return docChassis === normalizedChassis && docVariant === normalizedVariant;
+                              });
+
+                              const seen = new Set<string>();
+                              const options: Array<{ label: string; code: string }> = [];
+
+                              for (const doc of matchingMechs) {
+                                const preferredCode = getPreferredBuildCode(doc.buildCodes);
+                                const labelBase = doc.weaponry?.trim() || doc.codename?.trim() || doc.id;
+                                const label = doc.codename?.trim() ? `${labelBase} | ${doc.codename.trim()}` : labelBase;
+                                const dedupeKey = `${label}::${preferredCode}`;
+                                if (seen.has(dedupeKey)) continue;
+                                seen.add(dedupeKey);
+                                options.push({ label, code: preferredCode });
+                              }
+
+                              if (!options.length && mech?.buildCodes) {
+                                for (const { key, code, label } of getBuildCodeEntries(mech.buildCodes)) {
+                                  const dedupeKey = `${label}::${code}`;
+                                  if (seen.has(dedupeKey)) continue;
+                                  seen.add(dedupeKey);
+                                  options.push({ label: `${key}: ${label}`, code });
+                                }
+                              }
+
+                              return options;
+                            })();
+                            const hasSelectedRepositoryBuild = Boolean(mech && row.mech && mech.id === row.mech && (row.weaponry ?? "") === (mech.weaponry ?? ""));
                             const rowClass = mech?.class ?? configMech?.class ?? selectedConfigMech?.class ?? "-";
                             const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage;
                             const rowIssues = cs26Validation.rowIssuesBySlot.get(row.slot) ?? [];
@@ -2143,108 +2251,105 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 </FormControl>
 
                                 {editMode === "edit" ? (
-                                  <FormControl size="small" fullWidth variant="standard">
-                                    <Select
-                                      variant="standard"
-                                      value={selectedBuildId}
-                                      displayEmpty
-                                      disabled={!rowChassis || buildOptions.length === 0}
-                                      onChange={(event) => setRowBuild(template.id, rowIndex, String(event.target.value))}
-                                      sx={editSelectIconSx}
-                                      renderValue={(value) => {
-                                        const picked = buildOptions.find((b) => b.id === String(value));
-                                        return formatBuildLabel(picked?.weaponry ?? row.weaponry ?? "", picked?.codename ?? row.codename ?? "") || "-";
-                                      }}
-                                    >
-                                      {buildOptions.map((build) => (
-                                        <MenuItem key={build.id} value={build.id}>
-                                          {formatBuildLabel(build.weaponry, build.codename ?? "")}
-                                        </MenuItem>
-                                      ))}
-                                    </Select>
-                                  </FormControl>
-                                ) : (row.buildUrl || mech?.link || mech?.buildUrl) ? (
-                                  <a
-                                    href={row.buildUrl || mech?.link || mech?.buildUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{ color: isLight ? "#3a6fbd" : "#7fb3ff", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}
-                                  >
-                                    {formatBuildLabel(row.weaponry || mech?.weaponry || "", row.codename || mech?.codename || "") || "-"}
-                                  </a>
+                                  <BuildAutocompleteField
+                                    value={row.weaponry ?? ""}
+                                    options={buildOptions}
+                                    onCommit={(nextBuildText) => {
+                                      updateRow(template.id, rowIndex, (entry) => {
+                                        if ((entry.weaponry ?? "") === nextBuildText) return entry;
+                                        return { ...entry, weaponry: nextBuildText };
+                                      });
+                                    }}
+                                    onSelect={(option) => {
+                                      updateRow(template.id, rowIndex, (entry) => {
+                                        if (!option) return entry;
+                                        const nextBuildCode = option.code.trim();
+                                        if ((entry.weaponry ?? "") === option.label && (entry.buildCode ?? "") === nextBuildCode) return entry;
+                                        return {
+                                          ...entry,
+                                          weaponry: option.label,
+                                          buildCode: nextBuildCode,
+                                        };
+                                      });
+                                    }}
+                                  />
                                 ) : (
                                   <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {formatBuildLabel(row.weaponry || mech?.weaponry || "", row.codename || mech?.codename || "") || "-"}
+                                    {row.weaponry || mech?.weaponry || "-"}
                                   </Typography>
                                 )}
 
-                                {(() => {
-                                  const selectedCode = row.buildCode && row.buildCode.trim().length > 0
-                                    ? row.buildCode.trim()
-                                    : getPreferredBuildCode(mech?.buildCodes);
-
-                                  if (!selectedCode) {
-                                    return (
-                                      <Typography
-                                        variant="body2"
-                                        sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-                                      >
-                                        -
-                                      </Typography>
-                                    );
-                                  }
-
-                                  return (
-                                    <Stack direction="row" spacing={0.2} sx={{ alignItems: "center", minWidth: 0 }}>
-                                      <Typography
-                                        variant="body2"
-                                        onClick={() => {
-                                          void copyBuildCode(selectedCode, template.id, row.slot);
-                                        }}
-                                        title="Click to copy"
-                                        sx={{
-                                          color: isLight ? "#3a6fbd" : "#7fb3ff",
-                                          fontSize: "0.8rem",
-                                          whiteSpace: "nowrap",
-                                          overflow: "hidden",
-                                          textOverflow: "ellipsis",
-                                          cursor: "pointer",
-                                          minWidth: 0,
-                                          flex: 1,
-                                        }}
-                                      >
-                                        {selectedCode}
-                                      </Typography>
-                                      {copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "export" && (
-                                        <Typography
-                                          variant="caption"
-                                          sx={{
-                                            px: 0.6,
-                                            py: 0.15,
-                                            borderRadius: 0.8,
-                                            background: isLight ? "rgba(58, 111, 189, 0.14)" : "rgba(127, 179, 255, 0.2)",
-                                            color: isLight ? "#2f5d99" : "#b7d4ff",
-                                            fontWeight: 700,
-                                            flexShrink: 0,
-                                          }}
-                                        >
-                                          Copied
-                                        </Typography>
-                                      )}
-                                      <Tooltip title="Copy export code">
-                                        <IconButton
-                                          size="small"
-                                          onClick={() => {
-                                            void copyBuildCode(selectedCode, template.id, row.slot);
-                                          }}
-                                          sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
-                                        >
-                                          <ContentCopyIcon fontSize="inherit" />
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Stack>
-                                  );
-                                })()}
+                                {editMode === "edit" ? (
+                                  <Stack direction="row" spacing={0.2} sx={{ alignItems: "center", minWidth: 0 }}>
+                                    {(() => {
+                                      const selectedCode = row.buildCode ?? "";
+                                      if (!selectedCode) {
+                                        return (
+                                          <Typography
+                                            variant="body2"
+                                            sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                                          >
+                                            -
+                                          </Typography>
+                                        );
+                                      }
+                                      return (
+                                        <Stack direction="row" spacing={0.2} sx={{ alignItems: "center", minWidth: 0 }}>
+                                          <Typography
+                                            variant="body2"
+                                            onClick={() => {
+                                              void copyBuildCode(selectedCode, template.id, row.slot);
+                                            }}
+                                            title="Click to copy"
+                                            sx={{
+                                              color: isLight ? "#3a6fbd" : "#7fb3ff",
+                                              fontSize: "0.8rem",
+                                              whiteSpace: "nowrap",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              cursor: "pointer",
+                                              minWidth: 0,
+                                              flex: 1,
+                                            }}
+                                          >
+                                            {selectedCode}
+                                          </Typography>
+                                          {copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "export" && (
+                                            <Typography
+                                              variant="caption"
+                                              sx={{
+                                                px: 0.6,
+                                                py: 0.15,
+                                                borderRadius: 0.8,
+                                                background: isLight ? "rgba(58, 111, 189, 0.14)" : "rgba(127, 179, 255, 0.2)",
+                                                color: isLight ? "#2f5d99" : "#b7d4ff",
+                                                fontWeight: 700,
+                                                flexShrink: 0,
+                                              }}
+                                            >
+                                              Copied
+                                            </Typography>
+                                          )}
+                                          <Tooltip title="Copy export code">
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => {
+                                                void copyBuildCode(selectedCode, template.id, row.slot);
+                                              }}
+                                              sx={{ color: isLight ? "#3a6fbd" : "#7fb3ff", flexShrink: 0 }}
+                                            >
+                                              <ContentCopyIcon fontSize="inherit" />
+                                            </IconButton>
+                                          </Tooltip>
+                                        </Stack>
+                                      );
+                                    })()}
+                                  </Stack>
+                                ) : (
+                                  <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.8rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {row.buildCode || "-"}
+                                  </Typography>
+                                )}
 
                                 {editMode === "edit" ? (
                                   <Stack direction="row" spacing={0.3} sx={{ alignItems: "center", minWidth: 0 }}>

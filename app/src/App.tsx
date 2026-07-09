@@ -1,4 +1,4 @@
-import { CssBaseline, ThemeProvider, createTheme } from "@mui/material";
+import { Box, CssBaseline, ThemeProvider, Typography, createTheme } from "@mui/material";
 import { useMemo, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DeckBoard } from "./components/DeckBoard";
@@ -118,6 +118,20 @@ function AppContent() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       )}
+      <Box
+        sx={{
+          position: "fixed",
+          right: 12,
+          bottom: 8,
+          zIndex: 1300,
+          pointerEvents: "none",
+          opacity: 0.72,
+        }}
+      >
+        <Typography variant="caption" sx={{ color: mode === "light" ? "#60779d" : "#aec3ef", letterSpacing: "0.02em" }}>
+          {__APP_BUILD_INFO__}
+        </Typography>
+      </Box>
     </ThemeProvider>
   );
 }
