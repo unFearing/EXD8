@@ -10,6 +10,13 @@ import "./App.css";
 type ThemeMode = "light" | "dark";
 type ViewMode = "view" | "edit";
 
+const APP_BUILD_WATERMARK_RIGHT_PX = 12;
+const APP_BUILD_WATERMARK_BOTTOM_PX = 8;
+const APP_BUILD_WATERMARK_OPACITY = 0.78;
+const APP_BUILD_WATERMARK_FONT_SIZE = "0.88rem";
+const APP_BUILD_WATERMARK_FONT_WEIGHT = 700;
+const APP_ROLE_TEAM_LEAD = "TL" as const;
+
 function buildTheme(mode: ThemeMode) {
   return createTheme({
     palette: {
@@ -60,7 +67,7 @@ function AppContent() {
           id: "local-dev",
           username: "Local Dev",
           roles: ["local-dev"],
-          appRole: "TL" as const,
+          appRole: APP_ROLE_TEAM_LEAD,
         },
         error: null,
         login: () => {
@@ -121,14 +128,22 @@ function AppContent() {
       <Box
         sx={{
           position: "fixed",
-          right: 12,
-          bottom: 8,
+          right: APP_BUILD_WATERMARK_RIGHT_PX,
+          bottom: APP_BUILD_WATERMARK_BOTTOM_PX,
           zIndex: 1300,
           pointerEvents: "none",
-          opacity: 0.72,
+          opacity: APP_BUILD_WATERMARK_OPACITY,
         }}
       >
-        <Typography variant="caption" sx={{ color: mode === "light" ? "#60779d" : "#aec3ef", letterSpacing: "0.02em" }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: mode === "light" ? "#60779d" : "#aec3ef",
+            letterSpacing: "0.035em",
+            fontSize: APP_BUILD_WATERMARK_FONT_SIZE,
+            fontWeight: APP_BUILD_WATERMARK_FONT_WEIGHT,
+          }}
+        >
           {__APP_BUILD_INFO__}
         </Typography>
       </Box>

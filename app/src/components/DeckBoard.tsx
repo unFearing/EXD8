@@ -32,6 +32,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import BackspaceIcon from "@mui/icons-material/Backspace";
 import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
@@ -86,6 +87,7 @@ type DeckTemplate = {
   description: string;
   revision?: number;
   updatedAt?: string;
+  updatedBy?: string;
   rows: DeckRow[];
 };
 
@@ -235,13 +237,15 @@ const SIDE_OPTIONS: TeamSide[] = ["1", "2", "either"];
 const ROW_COUNT = CS26_COMPETITION.teamSize;
 const LANCE_OPTIONS: Lance[] = ["", "A", "B", "C"];
 const DECK_AUTOSAVE_DELAY_MS = 1000;
-const DECK_POLL_INTERVAL_MS = 5000;
+const DECK_POLL_INTERVAL_MS = 10000;
 const MIN_FILLED_SLOTS_TO_SAVE = 5;
 const TEXT_INPUT_AUTOSAVE_DELAY_MS = 450;
 const QUICKSLOT_KEYS: QuickslotKey[] = ["A", "B", "C", "D", "E"];
 const MAX_VISIBLE_DECKS_PER_MAP = 3;
 const DEFAULT_MAPROOM_URL = "https://maps.mwocomp.com/mwo2?room=IvLEFS2M7dVmsG";
 const CS26_MIN_TONNAGE = 300;
+const LIVE_EDITOR_WINDOW_MS = 60000;
+const TABLE_HEADERS = ["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Export Code", "Skill Tree", ""];
 
 const PILOT_OPTIONS = [
   "Extra_Better",
@@ -278,7 +282,7 @@ const editSelectIconSx = {
   "&.Mui-focused .MuiSelect-icon": { opacity: 0.5 },
 };
 
-const DECK_GRID_COLUMNS = "minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.55fr) minmax(0, 2fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.2fr)";
+const DECK_GRID_COLUMNS = "minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.55fr) minmax(0, 2fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 0.5fr)";
 
 function getBuildCodeEntries(buildCodes?: Record<string, string>): Array<{ key: string; code: string; label: string }> {
   if (!buildCodes) return [];
@@ -384,6 +388,18 @@ function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
   };
 }
 
+function normalizeChassisToken(value: string): string {
+  return value.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
+}
+
+function normalizeVariantToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\s*\([^)]*\)\s*/g, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
 function toTemplate(doc: DropDeckDoc): DeckTemplate {
   const normalizedSide = doc.side === "Team 1" ? "1" : doc.side === "Team 2" ? "2" : doc.side === "Agnostic" ? "either" : doc.side;
   const rows = Array.from({ length: ROW_COUNT }, (_, idx) => {
@@ -399,6 +415,7 @@ function toTemplate(doc: DropDeckDoc): DeckTemplate {
     description: doc.description ?? doc.strategy ?? "",
     revision: doc.revision,
     updatedAt: doc.updatedAt,
+    updatedBy: doc.updatedBy,
     rows,
   };
 }
@@ -407,28 +424,6 @@ function sideLabel(side: TeamSide): string {
   if (side === "1") return "Team 1";
   if (side === "2") return "Team 2";
   return "Either";
-}
-
-function resolveMechDetails(
-  selection: string,
-  mechs: MechDoc[],
-  configuredByKey: Map<string, ConfigMech>,
-): { mech?: MechDoc; configMech?: ConfigMech; label: string } {
-  if (!selection) return { label: "-" };
-
-  const byId = mechs.find((mech) => mech.id === selection);
-  if (byId) return { mech: byId, label: `${byId.chassis}-${byId.variant}` };
-
-  const config = configuredByKey.get(selection);
-  if (config) return { configMech: config, label: `${config.chassis}-${config.variant}` };
-
-  const byVariant = mechs.find((mech) => `${mech.chassis}-${mech.variant}` === selection);
-  if (byVariant) return { mech: byVariant, label: selection };
-
-  const byChassis = mechs.find((mech) => mech.chassis === selection);
-  if (byChassis) return { mech: byChassis, label: selection };
-
-  return { label: selection };
 }
 
 function resolveMaproomEmbedUrl(selectedMap: DeckMap, selectedMapConfig?: MapConfigDoc): string {
@@ -525,6 +520,14 @@ function formatUpdatedAt(value?: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString();
+}
+
+function isLikelyDiscordSnowflake(value: string): boolean {
+  return /^\d{12,20}$/.test(value.trim());
+}
+
+function getPairLookupKey(chassis: string, variant: string): string {
+  return `${normalizeChassisToken(chassis)}|${normalizeVariantToken(variant)}`;
 }
 
 function isUuid(value: string): boolean {
@@ -771,6 +774,50 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
   const mechLookup = useMemo(() => new Map(mechs.map((mech) => [mech.id, mech])), [mechs]);
   const configuredByKey = useMemo(() => new Map(configuredMechs.map((mech) => [mech.key, mech])), [configuredMechs]);
+  const configuredByNormalizedPair = useMemo(
+    () => new Map(configuredMechs.map((mech) => [getPairLookupKey(mech.chassis, mech.variant), mech])),
+    [configuredMechs],
+  );
+  const configuredByNormalizedChassis = useMemo(() => {
+    const map = new Map<string, ConfigMech[]>();
+    for (const mech of configuredMechs) {
+      const key = normalizeChassisToken(mech.chassis);
+      const list = map.get(key) ?? [];
+      list.push(mech);
+      map.set(key, list);
+    }
+    return map;
+  }, [configuredMechs]);
+  const mechsByNormalizedPair = useMemo(() => {
+    const map = new Map<string, MechDoc[]>();
+    for (const mech of mechs) {
+      const key = getPairLookupKey(mech.chassis, mech.variant);
+      const list = map.get(key) ?? [];
+      list.push(mech);
+      map.set(key, list);
+    }
+    return map;
+  }, [mechs]);
+  const buildOptionsByPair = useMemo(() => {
+    const map = new Map<string, Array<{ label: string; code: string }>>();
+    for (const docs of mechsByNormalizedPair.values()) {
+      if (!docs.length) continue;
+      const key = getPairLookupKey(docs[0].chassis, docs[0].variant);
+      const seen = new Set<string>();
+      const options: Array<{ label: string; code: string }> = [];
+      for (const doc of docs) {
+        const preferredCode = getPreferredBuildCode(doc.buildCodes);
+        const labelBase = doc.weaponry?.trim() || doc.codename?.trim() || doc.id;
+        const label = doc.codename?.trim() ? `${labelBase} | ${doc.codename.trim()}` : labelBase;
+        const dedupeKey = `${label}::${preferredCode}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        options.push({ label, code: preferredCode });
+      }
+      map.set(key, options);
+    }
+    return map;
+  }, [mechsByNormalizedPair]);
   // Config catalog indexed by normalized chassis|variant for enrichment lookups.
   const configuredByPair = useMemo(
     () => new Map(configuredMechs.map((mech) => [`${mech.chassis}|${mech.variant}`.toLowerCase(), mech])),
@@ -831,6 +878,31 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     [templates, selectedMap],
   );
 
+  const currentUserIdentitySet = useMemo(() => {
+    const values = [(user?.username ?? "").trim().toLowerCase(), (user?.id ?? "").trim().toLowerCase()];
+    return new Set(values.filter(Boolean));
+  }, [user?.id, user?.username]);
+
+  const resolveConfigMechByRowSelection = (chassis: string, variant: string): ConfigMech | undefined => {
+    const exact = configuredByNormalizedPair.get(getPairLookupKey(chassis, variant));
+    if (exact) return exact;
+
+    const normalizedChassis = normalizeChassisToken(chassis);
+    const candidates = configuredByNormalizedChassis.get(normalizedChassis) ?? [];
+    if (!candidates.length) return undefined;
+
+    const normalizedVariant = normalizeVariantToken(variant);
+    if (!normalizedVariant) {
+      return candidates[0];
+    }
+
+    return (
+      candidates.find((candidate) => normalizeVariantToken(candidate.variant) === normalizedVariant) ??
+      candidates.find((candidate) => normalizedVariant.startsWith(normalizeVariantToken(candidate.variant))) ??
+      candidates.find((candidate) => normalizeVariantToken(candidate.variant).startsWith(normalizedVariant))
+    );
+  };
+
   const mapQuickslotLookup = useMemo(() => {
     const lookup = new Map<QuickslotKey, QuickslotEntry>();
     for (const entry of quickslots) {
@@ -861,17 +933,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     templatesForSelection.find((template) => template.id === selectedTemplateId) ?? templatesForSelection[0];
 
   const resolveRowConfigMech = (row: DeckRow): ConfigMech | undefined => {
-    const rowChassis = (row.chassis ?? "").toLowerCase().trim();
-    const rowVariant = (row.variant ?? "").toLowerCase().trim();
-    const strippedChassis = rowChassis.replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "");
-
-    return (
-      configuredByPair.get(`${rowChassis}|${rowVariant}`) ??
-      configuredByPair.get(`${strippedChassis}|${rowVariant}`) ??
-      [...configuredByPair.entries()].find(
-        ([key]) => key.startsWith(`${strippedChassis}|`) && key.endsWith(rowVariant),
-      )?.[1]
-    );
+    const rowMech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
+    return resolveConfigMechByRowSelection(row.chassis || rowMech?.chassis || "", row.variant || rowMech?.variant || "");
   };
 
   const computeTemplateTonnage = (template?: DeckTemplate) => {
@@ -1003,7 +1066,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
   const setRowChassisVariant = (templateId: string, rowIndex: number, value: { mechId: string; chassis: string; variant: string }) => {
     updateRow(templateId, rowIndex, (row) => {
-      const build = value.mechId ? mechLookup.get(value.mechId) : undefined;
+      const build =
+        (value.mechId ? mechLookup.get(value.mechId) : undefined) ??
+        mechsByNormalizedPair.get(getPairLookupKey(value.chassis, value.variant))?.[0];
+      const configSelection = resolveConfigMechByRowSelection(value.chassis, value.variant);
       return {
         ...row,
         mech: build?.id ?? value.mechId ?? "",
@@ -1015,9 +1081,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         buildCode: build ? getPreferredBuildCode(build.buildCodes) : "",
         role: build?.role ?? row.role ?? "",
         skillTree: build?.skillCode ?? row.skillTree ?? "",
+        weightClass: build?.class ?? configSelection?.class ?? row.weightClass,
+        tonnage: build?.tonnage ?? configSelection?.tonnage ?? row.tonnage,
         equipmentText: build ? (build.metadata?.equipment ?? build.equipment ?? []).join(", ") : row.equipmentText,
       };
     });
+  };
+
+  const clearRowSlot = (templateId: string, rowIndex: number) => {
+    updateRow(templateId, rowIndex, (row) => normalizeRow(row.slot));
   };
 
   const copyBuildCode = async (value: string, templateId: string, slot: number) => {
@@ -1319,11 +1391,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   useEffect(() => {
 
     const intervalId = window.setInterval(async () => {
-      const dirtyActiveTemplate = activeTemplate
-        ? syncedSignaturesRef.current.get(activeTemplate.id) !== templateSignature(activeTemplate)
-        : false;
+      const inUseTemplateIds = new Set<string>([
+        ...mapQuickslots.map((entry) => entry.deckId).filter((value): value is string => Boolean(value)),
+        activeTemplate?.id ?? "",
+      ]);
+      const hasDirtyVisibleTemplate = templates.some((template) => {
+        if (!inUseTemplateIds.has(template.id)) return false;
+        return syncedSignaturesRef.current.get(template.id) !== templateSignature(template);
+      });
 
-      if (dirtyActiveTemplate || deckSaving) {
+      if (hasDirtyVisibleTemplate || deckSaving) {
         return;
       }
 
@@ -1334,7 +1411,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         }
 
         const mapped = docs.map((doc) => toTemplate(doc));
-        syncedSignaturesRef.current = new Map(mapped.map((template) => [template.id, templateSignature(template)]));
+        const nextSignatures = new Map(mapped.map((template) => [template.id, templateSignature(template)]));
+        const previousSignatures = syncedSignaturesRef.current;
+        const signaturesChanged =
+          nextSignatures.size !== previousSignatures.size ||
+          Array.from(nextSignatures.entries()).some(([id, signature]) => previousSignatures.get(id) !== signature);
+
+        if (!signaturesChanged) {
+          return;
+        }
+
+        syncedSignaturesRef.current = nextSignatures;
         syncedTemplatesRef.current = new Map(mapped.map((template) => [template.id, template]));
         setTemplates(mapped);
         setSelectedTemplateId((previous) => (mapped.some((template) => template.id === previous) ? previous : mapped[0]?.id ?? ""));
@@ -1346,7 +1433,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [activeTemplate, deckSaving]);
+  }, [activeTemplate, deckSaving, mapQuickslots, templates]);
 
   return (
     <Box
@@ -1862,6 +1949,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                 return null;
               }
               const cs26Validation = validateTemplateCs26(template);
+              const updatedAtMs = template.updatedAt ? Date.parse(template.updatedAt) : Number.NaN;
+              const recentlyUpdated = Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs < LIVE_EDITOR_WINDOW_MS;
+              const normalizedUpdatedBy = (template.updatedBy ?? "").trim().toLowerCase();
+              const remoteEditor =
+                recentlyUpdated &&
+                Boolean(template.updatedBy) &&
+                !currentUserIdentitySet.has(normalizedUpdatedBy)
+                  ? isLikelyDiscordSnowflake(template.updatedBy ?? "")
+                    ? "a teammate"
+                    : template.updatedBy
+                  : null;
 
               return (
                 <Stack key={slotEntry.slot} spacing={1.2}>
@@ -1880,7 +1978,13 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     elevation={0}
                     sx={{
                       borderRadius: 2,
-                      border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
+                      border: remoteEditor
+                        ? isLight
+                          ? "1px solid rgba(56, 140, 97, 0.55)"
+                          : "1px solid rgba(96, 212, 155, 0.6)"
+                        : isLight
+                          ? "1px solid rgba(114, 133, 162, 0.34)"
+                          : "1px solid rgba(130, 154, 217, 0.35)",
                       background: isLight ? "rgba(235, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.92)",
                       overflow: "hidden",
                     }}
@@ -1905,6 +2009,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           {formatUpdatedAt(template.updatedAt) ? ` | Updated ${formatUpdatedAt(template.updatedAt)}` : ""}
                           {deckSaving ? " | Syncing..." : ""}
                         </Typography>
+                        {remoteEditor && (
+                          <Typography variant="caption" sx={{ color: isLight ? "#26724f" : "#6fe2ad", fontWeight: 700 }}>
+                            Live edit indicator: {remoteEditor} updated this deck recently.
+                          </Typography>
+                        )}
                       </Stack>
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
                         <TextField
@@ -2029,7 +2138,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.25)" : "1px solid rgba(120, 146, 210, 0.2)",
                           }}
                         >
-                          {["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Export Code", "Skill Tree"].map((header) => (
+                          {TABLE_HEADERS.map((header) => (
                             <Typography
                               key={header}
                               variant="caption"
@@ -2042,40 +2151,23 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
                         <Stack spacing={0.6} sx={{ pt: 0.8 }}>
                           {template.rows.map((row, rowIndex) => {
-                            const mechDetails = resolveMechDetails(row.mech, mechs, configuredByKey);
-                            const mech = mechDetails.mech;
-                            const configMech = mechDetails.configMech;
+                            const mech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
+                            const configMech = configuredByKey.get(row.mech);
+                            const mechLabel = mech
+                              ? `${mech.chassis}-${mech.variant}`
+                              : configMech
+                                ? `${configMech.chassis}-${configMech.variant}`
+                                : row.mech || "-";
                             const rowChassis = row.chassis || mech?.chassis || "";
                             const rowVariant = row.variant || mech?.variant || "";
-                            const normalizedChassis = rowChassis.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
-                            const normalizedVariant = rowVariant.toLowerCase().trim();
-                            const selectedConfigMech =
-                              configuredByPair.get(`${rowChassis.toLowerCase()}|${normalizedVariant}`) ??
-                              configuredByPair.get(`${normalizedChassis}|${normalizedVariant}`) ??
-                              [...configuredByPair.entries()].find(
-                                ([key]) => key.startsWith(`${normalizedChassis}|`) && key.endsWith(normalizedVariant),
-                              )?.[1];
+                            const normalizedChassis = normalizeChassisToken(rowChassis);
+                            const normalizedVariant = normalizeVariantToken(rowVariant);
+                            const selectedConfigMech = resolveConfigMechByRowSelection(rowChassis, rowVariant);
                             const buildOptions = (() => {
-                              const matchingMechs = mechs.filter((doc) => {
-                                const docChassis = doc.chassis.toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "").trim();
-                                const docVariant = doc.variant.toLowerCase().trim();
-                                return docChassis === normalizedChassis && docVariant === normalizedVariant;
-                              });
-
-                              const seen = new Set<string>();
-                              const options: Array<{ label: string; code: string }> = [];
-
-                              for (const doc of matchingMechs) {
-                                const preferredCode = getPreferredBuildCode(doc.buildCodes);
-                                const labelBase = doc.weaponry?.trim() || doc.codename?.trim() || doc.id;
-                                const label = doc.codename?.trim() ? `${labelBase} | ${doc.codename.trim()}` : labelBase;
-                                const dedupeKey = `${label}::${preferredCode}`;
-                                if (seen.has(dedupeKey)) continue;
-                                seen.add(dedupeKey);
-                                options.push({ label, code: preferredCode });
-                              }
+                              const options = [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])];
 
                               if (!options.length && mech?.buildCodes) {
+                                const seen = new Set(options.map((option) => `${option.label}::${option.code}`));
                                 for (const { key, code, label } of getBuildCodeEntries(mech.buildCodes)) {
                                   const dedupeKey = `${label}::${code}`;
                                   if (seen.has(dedupeKey)) continue;
@@ -2116,6 +2208,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     : isLight
                                       ? "rgba(226, 234, 244, 0.34)"
                                       : "rgba(18, 27, 54, 0.36)",
+                                  boxShadow: "none",
+                                  "&:focus-within": {
+                                    border: isLight
+                                      ? "1px solid rgba(70, 136, 223, 0.72)"
+                                      : "1px solid rgba(129, 188, 255, 0.8)",
+                                    boxShadow: isLight
+                                      ? "0 0 0 1px rgba(70, 136, 223, 0.18) inset"
+                                      : "0 0 0 1px rgba(129, 188, 255, 0.24) inset",
+                                  },
                                 }}
                               >
                                 <FormControl size="small" fullWidth variant="standard">
@@ -2219,7 +2320,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                       />
                                     ) : (
                                       <Typography sx={{ color: isLight ? "#4f6282" : "#d3ddfc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                        {mechDetails.label || "-"}
+                                        {mechLabel}
                                       </Typography>
                                     )}
                                   </Box>
@@ -2501,6 +2602,20 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     )}
                                   </Stack>
                                 )}
+
+                                <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+                                  {editMode === "edit" ? (
+                                    <Tooltip title="Clear slot">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => clearRowSlot(template.id, rowIndex)}
+                                        sx={{ color: isLight ? "#7d8fae" : "#9ab8ef", flexShrink: 0 }}
+                                      >
+                                        <BackspaceIcon fontSize="inherit" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  ) : null}
+                                </Box>
                               </Box>
                             );
                           })}
@@ -2522,6 +2637,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                       STRAT DESCRIPTION | SLOT {slotEntry.slot}
                     </Typography>
                     <TextField
+                      key={`strat-description-${template.id}`}
                       variant="outlined"
                       fullWidth
                       multiline

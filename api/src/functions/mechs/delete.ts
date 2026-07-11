@@ -1,7 +1,13 @@
 import { app, type HttpRequest } from "@azure/functions";
-import { deleteMechById } from "../../db/repositories/mechRepository.js";
+import { deleteMechById, getMechById } from "../../db/repositories/mechRepository.js";
 import { assertCanWrite, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
+
+const APP_ROLE_TEAM_LEAD = "TL";
+
+function normalizeUserName(value: string | null | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
 
 export async function deleteMechHandler(request: HttpRequest) {
   try {
@@ -11,7 +17,20 @@ export async function deleteMechHandler(request: HttpRequest) {
     }
 
     const ctx = getRequestContext(request);
-    assertCanWrite(ctx);
+    const mech = await getMechById(id);
+    if (!mech) {
+      return fail(404, "NOT_FOUND", "Mech not found");
+    }
+
+    if (ctx.role !== APP_ROLE_TEAM_LEAD) {
+      const requestUser = normalizeUserName(request.headers.get("x-user-name") ?? ctx.userId);
+      const owner = normalizeUserName(mech.submittedBy);
+      if (!requestUser || !owner || requestUser !== owner) {
+        return fail(403, "FORBIDDEN", "Write permission denied");
+      }
+    } else {
+      assertCanWrite(ctx);
+    }
 
     const deleted = await deleteMechById(id);
     if (!deleted) {

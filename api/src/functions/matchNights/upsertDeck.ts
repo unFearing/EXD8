@@ -11,7 +11,7 @@ export async function upsertDropDeckHandler(request: HttpRequest) {
       return fail(400, "BAD_REQUEST", "Invalid payload", parsed.error.flatten());
     }
 
-    const updatedBy = request.headers.get("x-user-id") ?? "deckboard-ui";
+    const updatedBy = request.headers.get("x-user-name") ?? request.headers.get("x-user-id") ?? "deckboard-ui";
     const saved = await upsertDropDeck(parsed.data, updatedBy);
     return ok(saved);
   } catch (error: unknown) {

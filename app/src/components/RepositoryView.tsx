@@ -28,6 +28,13 @@ interface RepositoryViewProps {
   onViewModeChange: (mode: EditMode) => void;
 }
 
+const APP_ROLE_TEAM_LEAD = "TL";
+const ERROR_DELETE_PERMISSION = "You can only delete your own builds unless you have TL role.";
+const ERROR_DELETE_PERMISSION_NO_PERIOD = "You can only delete your own builds unless you have TL role";
+const ERROR_SAVE_PERMISSION = "Only TL can edit builds.";
+const TECH_ALL = "All";
+const WEIGHT_CLASS_DEFAULT: "Light" | "Medium" | "Heavy" | "Assault" = "Light";
+
 export function RepositoryView({
   mode,
   onToggleMode,
@@ -46,16 +53,23 @@ export function RepositoryView({
   const [openAddBuild, setOpenAddBuild] = useState(false);
   const [deletingMechId, setDeletingMechId] = useState<string | null>(null);
   const [savingMechId, setSavingMechId] = useState<string | null>(null);
-  const [selectedWeightClass, setSelectedWeightClass] = useState<"Light" | "Medium" | "Heavy" | "Assault">("Light");
-  const [selectedTech, setSelectedTech] = useState<"All" | "IS" | "Clan">("All");
-  const [selectedSubmitter, setSelectedSubmitter] = useState<string>("All");
+  const [selectedWeightClass, setSelectedWeightClass] = useState<"Light" | "Medium" | "Heavy" | "Assault">(WEIGHT_CLASS_DEFAULT);
+  const [selectedTech, setSelectedTech] = useState<"All" | "IS" | "Clan">(TECH_ALL);
+  const [selectedSubmitter, setSelectedSubmitter] = useState<string>(TECH_ALL);
   const [weaponrySearch, setWeaponrySearch] = useState("");
   const editMode = viewMode;
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [markdownDrafts, setMarkdownDrafts] = useState<Record<string, string>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
   const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
-  const canDelete = user?.appRole === "TL";
+  const canManageBuilds = user?.appRole === APP_ROLE_TEAM_LEAD;
+  const normalizedUserName = (user?.username ?? "").trim().toLowerCase();
+
+  const canDeleteBuild = (build: MechDoc): boolean => {
+    if (canManageBuilds) return true;
+    const submitter = (build.submittedBy ?? "").trim().toLowerCase();
+    return Boolean(normalizedUserName) && submitter === normalizedUserName;
+  };
 
   const loadHierarchy = async () => {
     setLoading(true);
@@ -153,8 +167,9 @@ export function RepositoryView({
   }, [highlightedMechId]);
 
   const handleDeleteMech = async (id: string) => {
-    if (!canDelete) {
-      setError("Only TL can delete mechs.");
+    const build = mechsById[id];
+    if (!build || !canDeleteBuild(build)) {
+      setError(ERROR_DELETE_PERMISSION);
       return;
     }
 
@@ -172,7 +187,7 @@ export function RepositoryView({
       if (err instanceof Error) {
         const statusCode = (err as Error & { status?: number }).status;
         if (statusCode === 403) {
-          errorMessage = "You don't have permission to delete mechs (TL role required)";
+          errorMessage = ERROR_DELETE_PERMISSION_NO_PERIOD;
         } else if (statusCode === 404) {
           errorMessage = "Mech not found or was already deleted";
         } else if (statusCode === 400) {
@@ -190,8 +205,8 @@ export function RepositoryView({
   };
 
   const handleSaveMarkdown = async (id: string) => {
-    if (!canDelete) {
-      setError("Only TL can edit builds.");
+    if (!canManageBuilds) {
+      setError(ERROR_SAVE_PERMISSION);
       return;
     }
 
@@ -226,11 +241,11 @@ export function RepositoryView({
     const mech = mechsById[buildId];
     if (!mech) return false;
 
-    if (selectedTech !== "All" && (mech.tech ?? "") !== selectedTech) {
+    if (selectedTech !== TECH_ALL && (mech.tech ?? "") !== selectedTech) {
       return false;
     }
 
-    if (selectedSubmitter !== "All" && (mech.submittedBy ?? "") !== selectedSubmitter) {
+    if (selectedSubmitter !== TECH_ALL && (mech.submittedBy ?? "") !== selectedSubmitter) {
       return false;
     }
 
@@ -461,7 +476,7 @@ export function RepositoryView({
                 <FormControl size="small" sx={{ minWidth: 130 }}>
                   <InputLabel>Tech</InputLabel>
                   <Select label="Tech" value={selectedTech} onChange={(event) => setSelectedTech(event.target.value as "All" | "IS" | "Clan")}>
-                    <MenuItem value="All">All</MenuItem>
+                    <MenuItem value={TECH_ALL}>{TECH_ALL}</MenuItem>
                     <MenuItem value="IS">IS</MenuItem>
                     <MenuItem value="Clan">Clan</MenuItem>
                   </Select>
@@ -470,7 +485,7 @@ export function RepositoryView({
                 <FormControl size="small" sx={{ minWidth: 180 }}>
                   <InputLabel>Submitter</InputLabel>
                   <Select label="Submitter" value={selectedSubmitter} onChange={(event) => setSelectedSubmitter(event.target.value)}>
-                    <MenuItem value="All">All</MenuItem>
+                    <MenuItem value={TECH_ALL}>{TECH_ALL}</MenuItem>
                     {submitterOptions.map((username) => (
                       <MenuItem key={username} value={username}>{username}</MenuItem>
                     ))}
@@ -565,30 +580,40 @@ export function RepositoryView({
                                       </ReactMarkdown>
                                     )}
 
-                                    {editMode === "edit" && canDelete && (
+                                    {editMode === "edit" && (
                                       <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
-                                        <Button
-                                          variant="contained"
-                                          size="small"
-                                          startIcon={<SaveIcon fontSize="small" />}
-                                          disabled={savingMechId === build.id}
-                                          onClick={() => {
-                                            void handleSaveMarkdown(build.id);
-                                          }}
-                                        >
-                                          {savingMechId === build.id ? "Saving..." : "Save Markdown"}
-                                        </Button>
-                                        <IconButton
-                                          color="error"
-                                          size="small"
-                                          disabled={deletingMechId === build.id}
-                                          onClick={() => {
-                                            void handleDeleteMech(build.id);
-                                          }}
-                                          aria-label="Delete mech"
-                                        >
-                                          <DeleteIcon fontSize="small" />
-                                        </IconButton>
+                                        {canManageBuilds ? (
+                                          <Button
+                                            variant="contained"
+                                            size="small"
+                                            startIcon={<SaveIcon fontSize="small" />}
+                                            disabled={savingMechId === build.id}
+                                            onClick={() => {
+                                              void handleSaveMarkdown(build.id);
+                                            }}
+                                          >
+                                            {savingMechId === build.id ? "Saving..." : "Save Markdown"}
+                                          </Button>
+                                        ) : (
+                                          <Box />
+                                        )}
+                                        {(() => {
+                                          const sourceBuild = mechsById[build.id];
+                                          if (!sourceBuild || !canDeleteBuild(sourceBuild)) return null;
+                                          return (
+                                          <IconButton
+                                            color="error"
+                                            size="small"
+                                            disabled={deletingMechId === build.id}
+                                            onClick={() => {
+                                              void handleDeleteMech(build.id);
+                                            }}
+                                            aria-label="Delete mech"
+                                          >
+                                            <DeleteIcon fontSize="small" />
+                                          </IconButton>
+                                          );
+                                        })()}
                                       </Stack>
                                     )}
                                   </Stack>

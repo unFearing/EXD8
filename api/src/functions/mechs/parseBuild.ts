@@ -459,7 +459,13 @@ function normalizeLookupToken(raw: string): string {
 function parseVariantFromUrl(url: URL): string | null {
   const b = url.searchParams.get("b") ?? url.searchParams.get("build") ?? "";
   if (!b) return null;
-  return normalizeVariant(b);
+  const trimmed = b.trim();
+  if (!trimmed) return null;
+  // NAV-Alpha commonly prefixes the build token as <hash>_<variant>.
+  // Preserve underscore variants unless this prefix pattern is present.
+  const hashPrefixed = trimmed.match(/^[0-9a-f]{6,}_(.+)$/i);
+  const candidate = hashPrefixed?.[1] ?? trimmed;
+  return normalizeVariant(candidate);
 }
 
 function parseBuildTokenFromUrl(url: URL): string | null {
@@ -854,7 +860,11 @@ async function fetchBuildFromApi(buildToken: string, apiKey: string): Promise<Js
 
 function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: string[]): ParseBuildResponse {
   const variantUpper = variantCode.toUpperCase();
-  const fromVariant = mechsConfigCatalog.byVariant[variantUpper];
+  const fromVariant =
+    mechsConfigCatalog.byVariant[variantUpper] ??
+    Object.entries(mechsConfigCatalog.byVariant).find(
+      ([knownVariant]) => normalizeLookupToken(knownVariant) === normalizeLookupToken(variantCode),
+    )?.[1];
   const chassisCode = resolveChassisCodeFromVariant(variantCode);
   const variantSuffixCandidates = Array.from(
     new Set(

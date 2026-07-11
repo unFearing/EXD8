@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { FormControl, MenuItem, Select, Stack } from "@mui/material";
 import type { ConfigMech, SelectorSource } from "../types/contracts";
 
@@ -14,7 +14,7 @@ type MechSelectorProps = {
   disabled: boolean;
 };
 
-export const MechSelector: React.FC<MechSelectorProps> = ({
+const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   selectedMechId,
   selectedChassis,
   selectedVariant,
@@ -49,12 +49,12 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
   }, [allConfiguredMechs, repositoryMechs, source]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, string[]>();
+    const map = new Map<string, Array<{ variant: string; tonnage: number }>>();
     const chassisTonnage = new Map<string, number>();
     for (const option of options) {
       const list = map.get(option.chassis) ?? [];
-      if (!list.includes(option.variant)) {
-        list.push(option.variant);
+      if (!list.some((entry) => entry.variant === option.variant)) {
+        list.push({ variant: option.variant, tonnage: option.tonnage });
       }
       map.set(option.chassis, list);
       const existing = chassisTonnage.get(option.chassis);
@@ -63,9 +63,15 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
       }
     }
     return Array.from(map.entries())
-      .map(([chassis, variants]) => ({
+      .map(([chassis, variantEntries]) => ({
         chassis,
-        variants: variants.slice().sort((a, b) => a.localeCompare(b)),
+        variants: variantEntries
+          .slice()
+          .sort((a, b) => {
+            const tonnageDelta = (a.tonnage ?? Number.POSITIVE_INFINITY) - (b.tonnage ?? Number.POSITIVE_INFINITY);
+            if (tonnageDelta !== 0) return tonnageDelta;
+            return a.variant.localeCompare(b.variant);
+          }),
         tonnage: chassisTonnage.get(chassis) ?? Number.POSITIVE_INFINITY,
       }))
       .sort((a, b) => {
@@ -98,12 +104,16 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
     const normalizedChassis = chassisValue.toLowerCase();
     const items: Array<{ token: string; label: string; indent: boolean }> = [];
     for (const group of grouped) {
-      items.push({ token: `chassis|${group.chassis}`, label: group.chassis, indent: false });
+      const chassisLabel = Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis;
+      items.push({ token: `chassis|${group.chassis}`, label: chassisLabel, indent: false });
       // To keep the menu responsive with large default catalogs, only expand variants
       // for the currently selected chassis.
       if (normalizedChassis && group.chassis.toLowerCase() === normalizedChassis) {
-        for (const variant of group.variants) {
-          items.push({ token: `variant|${group.chassis}|${variant}`, label: variant, indent: true });
+        for (const variantEntry of group.variants) {
+          const variantLabel = Number.isFinite(variantEntry.tonnage)
+            ? `${variantEntry.variant} (${variantEntry.tonnage}t)`
+            : variantEntry.variant;
+          items.push({ token: `variant|${group.chassis}|${variantEntry.variant}`, label: variantLabel, indent: true });
         }
       }
     }
@@ -129,8 +139,10 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
             const token = String(value);
             if (!token) return "Select Mech";
             const [kind, chassis, variant] = token.split("|");
-            if (kind === "chassis") return chassis;
-            return `${chassis} / ${variant}`;
+            const selected = options.find((option) => option.chassis === chassis && option.variant === variant);
+            const tonnage = selected?.tonnage;
+            if (kind === "chassis") return Number.isFinite(tonnage) ? `${chassis} (${tonnage}t)` : chassis;
+            return Number.isFinite(tonnage) ? `${chassis} / ${variant} (${tonnage}t)` : `${chassis} / ${variant}`;
           }}
           onChange={(event) => {
             const token = String(event.target.value);
@@ -157,3 +169,16 @@ export const MechSelector: React.FC<MechSelectorProps> = ({
     </Stack>
   );
 };
+
+export const MechSelector = memo(MechSelectorComponent, (prev, next) => {
+  return (
+    prev.selectedMechId === next.selectedMechId &&
+    prev.selectedChassis === next.selectedChassis &&
+    prev.selectedVariant === next.selectedVariant &&
+    prev.disabled === next.disabled &&
+    prev.source === next.source &&
+    prev.allConfiguredMechs === next.allConfiguredMechs &&
+    prev.repositoryMechs === next.repositoryMechs &&
+    prev.repoIdToAllKey === next.repoIdToAllKey
+  );
+});
