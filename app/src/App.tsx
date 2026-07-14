@@ -16,6 +16,7 @@ const APP_BUILD_WATERMARK_OPACITY = 0.78;
 const APP_BUILD_WATERMARK_FONT_SIZE = "0.88rem";
 const APP_BUILD_WATERMARK_FONT_WEIGHT = 700;
 const APP_ROLE_TEAM_LEAD = "TL" as const;
+const APP_WATERMARK_VERSION = `v${__APP_VERSION__}`;
 
 function buildTheme(mode: ThemeMode) {
   return createTheme({
@@ -144,7 +145,7 @@ function AppContent() {
             fontWeight: APP_BUILD_WATERMARK_FONT_WEIGHT,
           }}
         >
-          {__APP_BUILD_INFO__}
+          {APP_WATERMARK_VERSION}
         </Typography>
       </Box>
     </ThemeProvider>
