@@ -16,7 +16,6 @@ export type DeckRowDoc = {
   variant?: string;
   weaponry?: string;
   equipmentText?: string;
-  codename?: string;
   buildUrl?: string;
   role?: string;
   loadout?: string;
@@ -145,7 +144,6 @@ export type MechDoc = {
   id: string;
   chassis: string;
   variant: string;
-  codename: string;
   link: string;
   skillCode: string;
   weaponry: string;
@@ -251,7 +249,6 @@ export type DropDeckRules = {
 export type CreateMechInput = {
   chassis: string;
   variant: string;
-  codename: string;
   link: string;
   weaponry: string;
   description: string;

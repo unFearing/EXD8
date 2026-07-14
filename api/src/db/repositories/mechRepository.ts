@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CreateMechInput, MechDoc, WeightClass } from "../../types/contracts.js";
+import { resolveConfigMech } from "../../data/mechsConfigCatalog.js";
 import { getMechsContainer } from "../cosmos.js";
 
 export type VariantSummary = {
@@ -176,14 +177,23 @@ export async function createMech(input: CreateMechInput, submittedBy?: string): 
     }
   }
 
-  const tonnage = input.tonnage ?? 50;
+  const resolved = resolveConfigMech(input.chassis, input.variant, input.tech);
+  if (resolved.status === "not_found") {
+    throw new Error("CONFIG_MECH_NOT_FOUND");
+  }
+  if (resolved.status === "ambiguous") {
+    throw new Error("CONFIG_MECH_AMBIGUOUS");
+  }
+
+  const tonnage = resolved.value.tonnage;
   const primaryRange = input.primaryRangeBracket ?? [input.metadata.ranges.idealMin, input.metadata.ranges.idealMax];
   const doc: MechDoc = {
     ...input,
-    codename: input.codename || `${input.chassis}-${input.variant}`,
+    chassis: resolved.value.chassis,
+    variant: resolved.value.variant,
     link: input.link || input.buildUrl || "",
-    class: input.class ?? inferWeightClass(tonnage),
-    tech: input.tech ?? "IS",
+    class: resolved.value.className,
+    tech: resolved.value.tech,
     tonnage,
     buildUrl: input.buildUrl || input.link || "",
     submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",
@@ -265,14 +275,23 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
     }
   }
 
-  const tonnage = input.tonnage ?? 50;
+  const resolved = resolveConfigMech(input.chassis, input.variant, input.tech);
+  if (resolved.status === "not_found") {
+    throw new Error("CONFIG_MECH_NOT_FOUND");
+  }
+  if (resolved.status === "ambiguous") {
+    throw new Error("CONFIG_MECH_AMBIGUOUS");
+  }
+
+  const tonnage = resolved.value.tonnage;
   const primaryRange = input.primaryRangeBracket ?? [input.metadata.ranges.idealMin, input.metadata.ranges.idealMax];
   const doc: MechDoc = {
     ...input,
-    codename: input.codename || `${input.chassis}-${input.variant}`,
+    chassis: resolved.value.chassis,
+    variant: resolved.value.variant,
     link: input.link || input.buildUrl || "",
-    class: input.class ?? inferWeightClass(tonnage),
-    tech: input.tech ?? "IS",
+    class: resolved.value.className,
+    tech: resolved.value.tech,
     tonnage,
     buildUrl: input.buildUrl || input.link || "",
     submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",

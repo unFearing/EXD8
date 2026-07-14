@@ -913,7 +913,6 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       tonnage,
       chassis,
       variant: variantLabel,
-      codename: `${chassis}-${variantLabel}`,
       link: sourceUrl,
       buildUrl: sourceUrl,
       skillCode: "pending",
@@ -986,7 +985,6 @@ export async function parseMechBuildHandler(request: HttpRequest) {
             export: publicExportCode,
           };
           result.metadata.extractedExportCode = true;
-          result.metadata.publicBuildVariant = publicBuild.variant ?? null;
         }
       } catch (error: unknown) {
         warnings.push(

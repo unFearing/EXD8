@@ -31,7 +31,6 @@ function defaultBuildDraft(): CreateMechInput {
   return {
     chassis: "",
     variant: "",
-    codename: "",
     link: "",
     weaponry: "",
     description: "",
@@ -126,20 +125,15 @@ function flattenChassisVariants(file: MechsConfigFile): Array<{ chassis: string;
 }
 
 async function loadChassisVariants(): Promise<Array<{ chassis: string; variant: string }>> {
-  const candidates = ["/mechs_config.json", "/mwo_docs/mechs_config.json"];
-  for (const path of candidates) {
-    try {
-      const response = await fetch(path);
-      if (!response.ok) continue;
-      const parsed = (await response.json()) as MechsConfigFile;
-      if (!parsed?.mechs) continue;
-      return flattenChassisVariants(parsed);
-    } catch {
-      // Try next source.
-    }
+  try {
+    const response = await fetch("/mechs_config.json");
+    if (!response.ok) return [];
+    const parsed = (await response.json()) as MechsConfigFile;
+    if (!parsed?.mechs) return [];
+    return flattenChassisVariants(parsed);
+  } catch {
+    return [];
   }
-
-  return [];
 }
 
 type AddBuildDialogProps = {
@@ -651,11 +645,11 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                   value={buildDraft.chassis}
                   onChange={(_, value) => {
                     const next = (value ?? "").trim();
-                    setBuildDraft((prev) => ({ ...prev, chassis: next, codename: `${next}-${prev.variant}` }));
+                    setBuildDraft((prev) => ({ ...prev, chassis: next }));
                   }}
                   onInputChange={(_, value) => {
                     const next = value.trim();
-                    setBuildDraft((prev) => ({ ...prev, chassis: next, codename: `${next}-${prev.variant}` }));
+                    setBuildDraft((prev) => ({ ...prev, chassis: next }));
                   }}
                   fullWidth
                   renderInput={(params) => <TextField {...params} label="Chassis" size="small" fullWidth />}
@@ -666,11 +660,11 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                   value={buildDraft.variant}
                   onChange={(_, value) => {
                     const next = (value ?? "").trim();
-                    setBuildDraft((prev) => ({ ...prev, variant: next, codename: `${prev.chassis}-${next}` }));
+                    setBuildDraft((prev) => ({ ...prev, variant: next }));
                   }}
                   onInputChange={(_, value) => {
                     const next = value.trim();
-                    setBuildDraft((prev) => ({ ...prev, variant: next, codename: `${prev.chassis}-${next}` }));
+                    setBuildDraft((prev) => ({ ...prev, variant: next }));
                   }}
                   fullWidth
                   renderInput={(params) => <TextField {...params} label="Variant" size="small" fullWidth />}

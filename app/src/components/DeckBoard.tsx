@@ -69,7 +69,6 @@ type DeckRow = {
   variant: string;
   weaponry: string;
   equipmentText: string;
-  codename: string;
   buildUrl: string;
   role?: string;
   loadout?: string;
@@ -248,23 +247,23 @@ const LIVE_EDITOR_WINDOW_MS = 60000;
 const TABLE_HEADERS = ["Primary", "Alternates", "Lance", "Mech", "Class", "Tonnage", "Role", "Build", "Export Code", "Skill Tree", ""];
 
 const PILOT_OPTIONS = [
-  "Extra_Better",
+  "Ex",
   "Saikyou",
-  "GrillSquad",
-  "Xiphias",
-  "Rabbid0Squirrel",
-  "NeirSolon",
-  "unFearing",
+  "Grill",
+  "Xiph",
+  "Ra",
+  "Neir",
+  "unF",
   "Acerg",
-  "Heavenwarrior",
-  "Valk1r",
-  "CaLL Me GiL",
+  "Heaven",
+  "V",
+  "GiL",
   "P4TCHY",
   "Bux",
-  "HydroKyle240",
-  "Itsalrightwithme",
-  "ChapDude",
-  "Awesomeguyzzz"
+  "Hydro",
+  "Itsy",
+  "Chap",
+  "Awes"
 ];
 
 const getPilotShortcode = (pilotName: string): string => {
@@ -314,7 +313,6 @@ function createEmptyRow(slot: number): DeckRow {
     variant: "",
     weaponry: "",
     equipmentText: "",
-    codename: "",
     buildUrl: "",
     role: "",
     buildCode: "",
@@ -380,7 +378,6 @@ function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
     variant: row?.variant ?? "",
     weaponry: row?.weaponry ?? "",
     equipmentText: row?.equipmentText ?? "",
-    codename: row?.codename ?? "",
     buildUrl: row?.buildUrl ?? "",
     role: row?.role ?? "",
     buildCode: row?.buildCode ?? "",
@@ -499,20 +496,15 @@ function flattenMechsConfig(file: MechsConfigFile): ConfigMech[] {
 }
 
 async function loadMechsConfig(): Promise<ConfigMech[]> {
-  const candidates = ["/mwo_docs/mechs_config.json", "/mechs_config.json"];
-  for (const path of candidates) {
-    try {
-      const response = await fetch(path);
-      if (!response.ok) continue;
-      const parsed = (await response.json()) as MechsConfigFile;
-      if (!parsed?.mechs) continue;
-      return flattenMechsConfig(parsed);
-    } catch {
-      // Try next location.
-    }
+  try {
+    const response = await fetch("/mechs_config.json");
+    if (!response.ok) return [];
+    const parsed = (await response.json()) as MechsConfigFile;
+    if (!parsed?.mechs) return [];
+    return flattenMechsConfig(parsed);
+  } catch {
+    return [];
   }
-
-  return [];
 }
 
 function formatUpdatedAt(value?: string): string {
@@ -564,7 +556,6 @@ function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
       variant: row.variant,
       weaponry: row.weaponry,
       equipmentText: row.equipmentText,
-      codename: row.codename,
       buildUrl: row.buildUrl,
       role: row.role ?? "",
       buildCode: row.buildCode ?? "",
@@ -807,8 +798,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const options: Array<{ label: string; code: string }> = [];
       for (const doc of docs) {
         const preferredCode = getPreferredBuildCode(doc.buildCodes);
-        const labelBase = doc.weaponry?.trim() || doc.codename?.trim() || doc.id;
-        const label = doc.codename?.trim() ? `${labelBase} | ${doc.codename.trim()}` : labelBase;
+        const label = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
         const dedupeKey = `${label}::${preferredCode}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -1076,7 +1066,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         chassis: value.chassis,
         variant: value.variant,
         weaponry: build?.weaponry ?? "",
-        codename: build?.codename ?? "",
         buildUrl: build?.link || build?.buildUrl || "",
         buildCode: build ? getPreferredBuildCode(build.buildCodes) : "",
         role: build?.role ?? row.role ?? "",
