@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ZERO_SHA="0000000000000000000000000000000000000000"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+PACKAGE_FILE="app/package.json"
+if [[ ! -f "$PACKAGE_FILE" ]]; then
+  exit 0
+fi
+
+last_subject="$(git log -1 --pretty=%s 2>/dev/null || true)"
+if [[ "$last_subject" =~ ^chore\(version\):\ bump\ app\ version\ to\  ]]; then
+  exit 0
+fi
+
+files_changed=0
+line_changes=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ "$local_sha" == "$ZERO_SHA" ]]; then
+    continue
+  fi
+
+  if [[ "$remote_sha" == "$ZERO_SHA" ]]; then
+    stats="$(git show --numstat --format= "$local_sha" || true)"
+  else
+    stats="$(git diff --numstat "$remote_sha..$local_sha" || true)"
+  fi
+
+  if [[ -z "$stats" ]]; then
+    continue
+  fi
+
+  while read -r added deleted _path; do
+    if [[ -z "$added" || "$added" == "-" || -z "$deleted" || "$deleted" == "-" ]]; then
+      continue
+    fi
+    files_changed=$((files_changed + 1))
+    line_changes=$((line_changes + added + deleted))
+  done <<< "$stats"
+done
+
+bump_part="patch"
+if (( files_changed >= 8 || line_changes >= 300 )); then
+  if [[ -t 1 && -e /dev/tty ]]; then
+    read -r -p "Substantial push detected (${files_changed} files, ${line_changes} changed lines). Increment MINOR instead of PATCH? [y/N] " response < /dev/tty
+    if [[ "$response" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+      bump_part="minor"
+    fi
+  fi
+fi
+
+new_version="$(node app/scripts/bumpVersion.mjs "$bump_part")"
+
+git add "$PACKAGE_FILE"
+git commit --no-verify -m "chore(version): bump app version to ${new_version}" >/dev/null
+
+echo "Created version bump commit (${new_version})."
+echo "Push halted so the new version commit can be included. Run git push again."
+exit 1

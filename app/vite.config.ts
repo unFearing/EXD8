@@ -25,6 +25,7 @@ export default defineConfig({
   plugins: [react()],
   define: {
     __APP_VERSION__: JSON.stringify(getAppVersion()),
+    __APP_BUILD_EPOCH_MS__: Date.now(),
     __APP_BUILD_INFO__: JSON.stringify(getBuildInfo()),
   },
   server: {

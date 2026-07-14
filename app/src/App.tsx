@@ -18,6 +18,23 @@ const APP_BUILD_WATERMARK_FONT_WEIGHT = 700;
 const APP_ROLE_TEAM_LEAD = "TL" as const;
 const APP_WATERMARK_VERSION = `v${__APP_VERSION__}`;
 
+function formatBuildTimestamp(buildEpochMs: number): string {
+  const buildDate = new Date(buildEpochMs);
+  if (Number.isNaN(buildDate.getTime())) {
+    return "build time unavailable";
+  }
+
+  return buildDate.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
 function buildTheme(mode: ThemeMode) {
   return createTheme({
     palette: {
@@ -57,6 +74,10 @@ function AppContent() {
   const [viewMode, setViewMode] = useState<ViewMode>("edit");
 
   const theme = useMemo(() => buildTheme(mode), [mode]);
+  const watermarkBuildTimestamp = useMemo(
+    () => formatBuildTimestamp(__APP_BUILD_EPOCH_MS__),
+    [],
+  );
   const auth = useDiscordAuth();
   const bypassDiscordAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
 
@@ -145,7 +166,7 @@ function AppContent() {
             fontWeight: APP_BUILD_WATERMARK_FONT_WEIGHT,
           }}
         >
-          {APP_WATERMARK_VERSION}
+          {`${APP_WATERMARK_VERSION} • ${watermarkBuildTimestamp}`}
         </Typography>
       </Box>
     </ThemeProvider>
