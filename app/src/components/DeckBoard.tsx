@@ -53,6 +53,7 @@ import type {
   SelectorSource,
   WeightClass,
 } from "../types/contracts";
+import { resolveAppRole } from "../utils/discordRoles";
 
 type EditMode = "view" | "edit";
 type MapTileMode = "static" | "iframe";
@@ -367,6 +368,25 @@ function normalizeTemplateName(name: string, map: DeckMap, side: TeamSide): stri
   return `${map} ${toTemplateToken(side)} v${parsed.version}`;
 }
 
+function getDuplicateTemplateName(name: string, templates: DeckTemplate[]): string {
+  const existing = new Set(templates.map((template) => template.name.trim().toLowerCase()));
+  const base = `${name} (Copy)`;
+  if (!existing.has(base.trim().toLowerCase())) {
+    return base;
+  }
+
+  let counter = 2;
+  while (counter < 1000) {
+    const candidate = `${name} (Copy ${counter})`;
+    if (!existing.has(candidate.trim().toLowerCase())) {
+      return candidate;
+    }
+    counter += 1;
+  }
+
+  return `${name} (Copy ${Date.now()})`;
+}
+
 function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
   return {
     slot,
@@ -584,7 +604,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_FALLBACK_OPTIONS[0]);
   const [mapTileMode, setMapTileMode] = useState<MapTileMode>("static");
   const [showGridOverlay, setShowGridOverlay] = useState(false);
-  const [iframeZoom, setIframeZoom] = useState(1);
+  const [iframeZoom, setIframeZoom] = useState(0.8);
   const [iframeOffsetX, setIframeOffsetX] = useState(0);
   const [iframeOffsetY, setIframeOffsetY] = useState(0);
   const [templates, setTemplates] = useState<DeckTemplate[]>([]);
@@ -608,7 +628,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const textInputDebounceRef = useRef<Map<string, number>>(new Map());
 
   void hasRole;
-  const canDelete = user?.appRole === "TL";
+  const canDelete = resolveAppRole(user?.roles ?? [], user?.appRole) === "TL";
   const { error } = useMatchNightApi();
 
   const mapOptions = useMemo<DeckMap[]>(() => {
@@ -661,7 +681,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   }, [mapTileMode, editMode, selectedMap]);
 
   useEffect(() => {
-    setIframeZoom(1);
+    setIframeZoom(0.8);
     setIframeOffsetX(0);
     setIframeOffsetY(0);
   }, [selectedMap]);
@@ -805,6 +825,28 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         options.push({ label, code: preferredCode });
       }
       map.set(key, options);
+    }
+    return map;
+  }, [mechsByNormalizedPair]);
+  const buildOptionsByChassis = useMemo(() => {
+    const map = new Map<string, Array<{ label: string; code: string }>>();
+    for (const docs of mechsByNormalizedPair.values()) {
+      if (!docs.length) continue;
+      const chassisKey = normalizeChassisToken(docs[0].chassis);
+      const list = map.get(chassisKey) ?? [];
+      const seen = new Set(list.map((entry) => `${entry.label}::${entry.code}`));
+
+      for (const doc of docs) {
+        const preferredCode = getPreferredBuildCode(doc.buildCodes);
+        const buildLabel = doc.weaponry?.trim() || doc.variant;
+        const label = `${doc.variant} | ${buildLabel}`;
+        const dedupeKey = `${label}::${preferredCode}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        list.push({ label, code: preferredCode });
+      }
+
+      map.set(chassisKey, list);
     }
     return map;
   }, [mechsByNormalizedPair]);
@@ -1135,11 +1177,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     void persistQuickslots(next);
   };
 
-  const ensureDeckIdForQuickslot = async (deckId?: string): Promise<string | undefined> => {
+  const ensureDeckIdForQuickslot = async (
+    deckId?: string,
+    localTemplateOverride?: DeckTemplate,
+  ): Promise<string | undefined> => {
     if (!deckId) return undefined;
     if (isUuid(deckId)) return deckId;
 
-    const localTemplate = templates.find((template) => template.id === deckId);
+    const localTemplate =
+      localTemplateOverride?.id === deckId
+        ? localTemplateOverride
+        : templates.find((template) => template.id === deckId);
     if (!localTemplate) return deckId;
 
     if (countFilledSlots(localTemplate) < MIN_FILLED_SLOTS_TO_SAVE) {
@@ -1176,9 +1224,13 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     }
   };
 
-  const setQuickslotDeck = async (slot: QuickslotKey, deckId?: string) => {
+  const setQuickslotDeck = async (
+    slot: QuickslotKey,
+    deckId?: string,
+    localTemplateOverride?: DeckTemplate,
+  ) => {
     try {
-      const resolvedDeckId = await ensureDeckIdForQuickslot(deckId);
+      const resolvedDeckId = await ensureDeckIdForQuickslot(deckId, localTemplateOverride);
       if (resolvedDeckId) {
         const duplicate = quickslots.some(
           (entry) => entry.map === selectedMap && entry.slot !== slot && entry.deckId === resolvedDeckId,
@@ -1218,19 +1270,32 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     void persistQuickslots(next);
   };
 
-  const addQuickslotForMap = () => {
-    if (mapQuickslots.length >= MAX_VISIBLE_DECKS_PER_MAP) return;
-    const nextSlot = QUICKSLOT_KEYS.find((key) => !mapQuickslotLookup.get(key)?.deckId);
-    if (!nextSlot) return;
-    const assignedDeckIds = new Set(
-      fixedMapQuickslots.map((entry) => entry.deckId).filter((value): value is string => Boolean(value)),
-    );
-    const fallbackDeck = templatesForSelection.find((template) => isUuid(template.id) && !assignedDeckIds.has(template.id));
-    void setQuickslotDeck(nextSlot, fallbackDeck?.id);
-  };
-
   const clearQuickslotDeck = (slot: QuickslotKey) => {
     void setQuickslotDeck(slot, undefined);
+  };
+
+  const duplicateDeck = (template: DeckTemplate) => {
+    const duplicate: DeckTemplate = {
+      ...template,
+      id: crypto.randomUUID(),
+      name: getDuplicateTemplateName(template.name, templatesForSelection),
+      revision: undefined,
+      updatedAt: undefined,
+      updatedBy: undefined,
+      rows: template.rows.map((row) => ({
+        ...row,
+        primary: [...row.primary],
+        alternates: [...row.alternates],
+      })),
+    };
+
+    setTemplates((previous) => [...previous, duplicate]);
+    setSelectedTemplateId(duplicate.id);
+    const nextOpenQuickslot = fixedMapQuickslots.find((entry) => !entry.deckId)?.slot;
+    if (nextOpenQuickslot) {
+      void setQuickslotDeck(nextOpenQuickslot, duplicate.id, duplicate);
+    }
+    setDeckError("");
   };
 
   const onMapChange = (map: DeckMap) => {
@@ -1628,22 +1693,24 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           Static
                         </Button>
                         <Button
+                          variant={mapTileMode === "iframe" ? "contained" : "outlined"}
+                          size="small"
+                          onClick={() => setMapTileMode("iframe")}
+                          sx={{ textTransform: "none" }}
+                        >
+                          Maproom
+                        </Button>
+                      </ButtonGroup>
+                      {mapTileMode === "static" && (
+                        <Button
                           variant={showGridOverlay ? "contained" : "outlined"}
                           onClick={() => setShowGridOverlay((prev) => !prev)}
-                          disabled={mapTileMode !== "static" || !hasGridOverlay}
+                          disabled={!hasGridOverlay}
                           sx={{ textTransform: "none" }}
                         >
                           {showGridOverlay ? "Grid On" : "Grid Off"}
                         </Button>
-                      </ButtonGroup>
-                      <Button
-                        variant={mapTileMode === "iframe" ? "contained" : "outlined"}
-                        size="small"
-                        onClick={() => setMapTileMode("iframe")}
-                        sx={{ textTransform: "none" }}
-                      >
-                        Maproom
-                      </Button>
+                      )}
                       {mapTileMode === "iframe" && (
                         <>
                           <TextField
@@ -1825,14 +1892,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>
                     QUICKSLOTS ({selectedMap})
                   </Typography>
-                  <Button variant="outlined" size="small" onClick={addQuickslotForMap} disabled={mapQuickslots.length >= MAX_VISIBLE_DECKS_PER_MAP}>
-                    + Add Deck Slot
-                  </Button>
                 </Stack>
                 <Stack spacing={1}>
                   {mapQuickslots.length === 0 && (
                     <Typography variant="body2" sx={{ color: isLight ? "#60779d" : "#a9bfef" }}>
-                      No deck slots yet for this map. Click + Add Deck Slot.
+                      No decks assigned yet for this map. Use the deck selector below to assign or create one.
                     </Typography>
                   )}
                   {fixedMapQuickslots.map((entry) => (
@@ -1940,14 +2004,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               const cs26Validation = validateTemplateCs26(template);
               const updatedAtMs = template.updatedAt ? Date.parse(template.updatedAt) : Number.NaN;
               const recentlyUpdated = Number.isFinite(updatedAtMs) && Date.now() - updatedAtMs < LIVE_EDITOR_WINDOW_MS;
-              const normalizedUpdatedBy = (template.updatedBy ?? "").trim().toLowerCase();
+              const updatedByLabel = (template.updatedBy ?? "").trim();
+              const normalizedUpdatedBy = updatedByLabel.toLowerCase();
               const remoteEditor =
                 recentlyUpdated &&
-                Boolean(template.updatedBy) &&
+                Boolean(updatedByLabel) &&
                 !currentUserIdentitySet.has(normalizedUpdatedBy)
-                  ? isLikelyDiscordSnowflake(template.updatedBy ?? "")
+                  ? isLikelyDiscordSnowflake(updatedByLabel)
                     ? "a teammate"
-                    : template.updatedBy
+                    : updatedByLabel
                   : null;
 
               return (
@@ -2100,6 +2165,14 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             </Stack>
                           );
                         })()}
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ContentCopyIcon fontSize="small" />}
+                          onClick={() => duplicateDeck(template)}
+                        >
+                          Duplicate Deck
+                        </Button>
                         {canDelete && (
                           <Button
                             variant="outlined"
@@ -2153,7 +2226,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             const normalizedVariant = normalizeVariantToken(rowVariant);
                             const selectedConfigMech = resolveConfigMechByRowSelection(rowChassis, rowVariant);
                             const buildOptions = (() => {
-                              const options = [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])];
+                              const options = normalizedVariant
+                                ? [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])]
+                                : [...(buildOptionsByChassis.get(normalizedChassis) ?? [])];
 
                               if (!options.length && mech?.buildCodes) {
                                 const seen = new Set(options.map((option) => `${option.label}::${option.code}`));

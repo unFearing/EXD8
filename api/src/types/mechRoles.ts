@@ -2,6 +2,7 @@ export const MECH_ROLE_VALUES = [
     "Juggernaut",
   "Striker",
   "Skirmisher",
+  "Lock-on",
   "Brawler",
   "DPS",
   "Trader (Forward)",

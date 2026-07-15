@@ -13,12 +13,14 @@ import type {
   ParsedMechBuild,
   WeightClassSummary,
 } from "../types/contracts";
+import { normalizeDiscordUser } from "../utils/discordRoles";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 type StoredDiscordUser = {
   id: string;
   username?: string;
+  roles?: string[];
   appRole?: "TL" | "Pilot";
 };
 
@@ -45,7 +47,7 @@ function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
   }
 
   try {
-    const user = JSON.parse(rawUser) as StoredDiscordUser;
+    const user = normalizeDiscordUser(JSON.parse(rawUser) as StoredDiscordUser);
     return {
       "x-team-id": teamId,
       "x-user-role": user.appRole ?? fallbackRole,

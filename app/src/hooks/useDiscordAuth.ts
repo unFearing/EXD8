@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { normalizeDiscordUser } from "../utils/discordRoles";
 
 export interface DiscordUser {
   id: string;
@@ -18,18 +19,39 @@ export interface AuthState {
 const DISCORD_REDIRECT_URI = `${window.location.origin}/auth/callback`;
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 
+function getCachedAuthState(): AuthState {
+  try {
+    const token = localStorage.getItem("discord_token");
+    const cachedUserRaw = localStorage.getItem("discord_user");
+    const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+
+    if (token && cachedUser) {
+      return {
+        isLoading: true,
+        isAuthed: true,
+        user: cachedUser,
+        error: null,
+      };
+    }
+  } catch {
+    // Fall back to a fresh auth check if cached state is unreadable.
+  }
+
+  return {
+    isLoading: true,
+    isAuthed: false,
+    user: null,
+    error: null,
+  };
+}
+
 export function useDiscordAuth(): AuthState & {
   login: () => void;
   logout: () => void;
   hasRole: (roleId: string) => boolean;
 } {
   const [discordClientId, setDiscordClientId] = useState("");
-  const [state, setState] = useState<AuthState>({
-    isLoading: true,
-    isAuthed: false,
-    user: null,
-    error: null,
-  });
+  const [state, setState] = useState<AuthState>(getCachedAuthState);
 
   const loadDiscordClientId = async (): Promise<string> => {
     if (discordClientId) return discordClientId;
@@ -51,7 +73,7 @@ export function useDiscordAuth(): AuthState & {
       try {
         const token = localStorage.getItem("discord_token");
         const cachedUserRaw = localStorage.getItem("discord_user");
-        const cachedUser = cachedUserRaw ? (JSON.parse(cachedUserRaw) as DiscordUser) : null;
+        const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
 
         if (cachedUser && token) {
           setState({
@@ -90,7 +112,7 @@ export function useDiscordAuth(): AuthState & {
           return;
         }
 
-        const user = payload.data;
+        const user = normalizeDiscordUser(payload.data);
         localStorage.setItem("discord_user", JSON.stringify(user));
         setState({
           isLoading: false,
@@ -101,7 +123,7 @@ export function useDiscordAuth(): AuthState & {
       } catch (err) {
         console.error("Auth check failed:", err);
         const cachedUserRaw = localStorage.getItem("discord_user");
-        const cachedUser = cachedUserRaw ? (JSON.parse(cachedUserRaw) as DiscordUser) : null;
+        const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
         if (cachedUser) {
           setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
         } else {

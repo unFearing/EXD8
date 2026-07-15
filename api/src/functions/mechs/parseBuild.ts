@@ -52,6 +52,9 @@ type NavAlphaEquipmentItem = {
   id_code?: string;
   item_type?: string;
   fixed?: boolean | number | string;
+  short_name?: string;
+  name?: string;
+  display_name?: string;
 };
 
 type NavAlphaOmnipodItem = {
@@ -368,6 +371,82 @@ async function computePublicNavAlphaExportCode(sharedBuild: NavAlphaSharedBuild,
   return code.startsWith("A") ? code : null;
 }
 
+async function parseBuildFromPublicNavAlphaLoadout(
+  sharedBuild: NavAlphaSharedBuild,
+  refererUrl: string,
+): Promise<{ weaponry: string; equipment: string[] } | null> {
+  if (!sharedBuild.loadout) return null;
+
+  let loadout: NavAlphaExportLoadout;
+  try {
+    loadout = JSON.parse(sharedBuild.loadout) as NavAlphaExportLoadout;
+  } catch {
+    return null;
+  }
+
+  const equipmentItems = await fetchNavAlphaEquipmentCatalog(refererUrl);
+  const itemsById = new Map<number, NavAlphaEquipmentItem>();
+  for (const item of equipmentItems) {
+    const id = Number(item.id);
+    if (Number.isFinite(id)) {
+      itemsById.set(id, item);
+    }
+  }
+
+  const weaponCounts = new Map<string, number>();
+  const equipmentCounts = new Map<string, number>();
+  const itemsByComponent = loadout.items ?? {};
+
+  for (const itemIds of Object.values(itemsByComponent)) {
+    for (const itemId of itemIds ?? []) {
+      const item = itemsById.get(Number(itemId));
+      if (!item) continue;
+
+      const name =
+        item.short_name?.trim() ||
+        item.name?.trim() ||
+        item.display_name?.trim() ||
+        item.id_code?.trim() ||
+        (typeof item.id === "number" ? String(item.id) : "");
+      if (!name) continue;
+
+      const itemType = (item.item_type ?? "").toLowerCase();
+      if (itemType === "weapon") {
+        weaponCounts.set(name, (weaponCounts.get(name) ?? 0) + 1);
+        continue;
+      }
+
+      if (
+        itemType === "ammo" ||
+        itemType === "engine" ||
+        itemType === "internal" ||
+        itemType === "sensor" ||
+        itemType === "targeting_computer" ||
+        itemType === "masc" ||
+        itemType === "misc" ||
+        itemType === "jump_jet" ||
+        itemType === "ecm" ||
+        itemType === "heat_sink"
+      ) {
+        equipmentCounts.set(name, (equipmentCounts.get(name) ?? 0) + 1);
+      }
+    }
+  }
+
+  const toLine = ([itemName, qty]: [string, number]) => (qty > 1 ? `${qty}x ${itemName}` : itemName);
+  const weaponLines = Array.from(weaponCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
+  const equipmentLines = Array.from(equipmentCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
+
+  if (!weaponLines.length && !equipmentLines.length) {
+    return null;
+  }
+
+  return {
+    weaponry: weaponLines.join(" | "),
+    equipment: equipmentLines,
+  };
+}
+
 function loadMechsConfigCatalog(): MechsConfigCatalog {
   const candidates = [
     process.env.MECHS_CONFIG_PATH?.trim(),
@@ -574,7 +653,6 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
   let heatSinksFromStats: number | null = null;
   let inQuirksSection = false;
 
-  const weaponPattern = /(ac\/?\d+|uac|lbx|gauss|ppc|laser|flamer|machine gun|srm|lrm|atm|hag|rifle|narc|tag|snub)/i;
   const equipmentPattern = /(ammo|engine|heat\s*sink|probe|ecm|jump\s*jet|tcomp|targeting computer|sensor|masc|endo|ferro|stealth|dhs)/i;
   const splitTokensPattern = /\s{2,}|\s+(?=Armor|Structure|RIGHT|LEFT|CENTER|HEAD|Shoulder|Upper|Lower|Hand|Hip|Foot|Life|Sensors|Cockpit|Gyro|Clan XL Engine|XL Engine|Light Engine|Std Engine|Ammo|C-Double Heat Sink)/i;
 
@@ -629,7 +707,7 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
       }
 
       const nextToken = tokens[index + 1] ?? "";
-      if (weaponPattern.test(token) && /^ammo$/i.test(nextToken)) {
+      if (/^ammo$/i.test(nextToken)) {
         addEquipment(`${token} Ammo`);
         matchedToken = true;
         index += 1;
@@ -641,10 +719,9 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
         matchedToken = true;
         continue;
       }
-      if (weaponPattern.test(token)) {
-        addWeapon(token);
-        matchedToken = true;
-      }
+
+      addWeapon(token);
+      matchedToken = true;
     }
 
     if (matchedToken) {
@@ -656,9 +733,7 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
       continue;
     }
 
-    if (weaponPattern.test(line)) {
-      addWeapon(line);
-    }
+    addWeapon(line);
   }
 
   const toLine = ([name, qty]: [string, number]) => (qty > 1 ? `${qty}x ${name}` : name);
@@ -978,13 +1053,41 @@ export async function parseMechBuildHandler(request: HttpRequest) {
     if (buildToken) {
       try {
         const publicBuild = await fetchBuildFromPublicNavAlpha(buildToken, parsedUrl.toString());
-        const publicExportCode = await computePublicNavAlphaExportCode(publicBuild, parsedUrl.toString());
-        if (publicExportCode) {
-          result.draft.buildCodes = {
-            ...result.draft.buildCodes,
-            export: publicExportCode,
-          };
-          result.metadata.extractedExportCode = true;
+        try {
+          const parsedPublic = await parseBuildFromPublicNavAlphaLoadout(publicBuild, parsedUrl.toString());
+          if (parsedPublic?.weaponry) {
+            result.draft.weaponry = parsedPublic.weaponry;
+            result.metadata.extractedWeaponLines = parsedPublic.weaponry.split("|").length;
+            result.metadata.parseMode = "public-nav-alpha";
+          }
+          if (parsedPublic?.equipment.length) {
+            result.draft.metadata.equipment = parsedPublic.equipment;
+            result.draft.equipment = parsedPublic.equipment;
+            result.metadata.extractedEquipmentLines = parsedPublic.equipment.length;
+          }
+        } catch (error: unknown) {
+          warnings.push(
+            error instanceof Error
+              ? `Public NAV-Alpha loadout parse failed: ${error.message}`
+              : "Public NAV-Alpha loadout parse failed",
+          );
+        }
+
+        try {
+          const publicExportCode = await computePublicNavAlphaExportCode(publicBuild, parsedUrl.toString());
+          if (publicExportCode) {
+            result.draft.buildCodes = {
+              ...result.draft.buildCodes,
+              export: publicExportCode,
+            };
+            result.metadata.extractedExportCode = true;
+          }
+        } catch (error: unknown) {
+          warnings.push(
+            error instanceof Error
+              ? `Public NAV-Alpha export-code parse failed: ${error.message}`
+              : "Public NAV-Alpha export-code parse failed",
+          );
         }
       } catch (error: unknown) {
         warnings.push(
@@ -993,33 +1096,35 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    try {
-      const renderedText = await fetchRenderedBuildText(parsedUrl.toString());
-      const parsed = parseBuildFromRenderedText(renderedText);
-      if (parsed?.weaponry) {
-        result.draft.weaponry = parsed.weaponry;
-        result.metadata.extractedWeaponLines = parsed.weaponry.split("|").length;
-        result.metadata.parseMode = "rendered-sidebar";
+    if (!result.metadata.extractedWeaponLines || !result.metadata.extractedEquipmentLines) {
+      try {
+        const renderedText = await fetchRenderedBuildText(parsedUrl.toString());
+        const parsed = parseBuildFromRenderedText(renderedText);
+        if (parsed?.weaponry) {
+          result.draft.weaponry = parsed.weaponry;
+          result.metadata.extractedWeaponLines = parsed.weaponry.split("|").length;
+          result.metadata.parseMode = "rendered-sidebar";
+        }
+        if (parsed?.equipment.length) {
+          result.draft.metadata.equipment = parsed.equipment;
+          result.draft.equipment = parsed.equipment;
+          result.metadata.extractedEquipmentLines = parsed.equipment.length;
+        }
+        if (parsed?.quirks.length) {
+          result.metadata.extractedQuirkLines = parsed.quirks.length;
+        }
+        if (parsed?.exportCode) {
+          result.draft.buildCodes = {
+            ...result.draft.buildCodes,
+            export: parsed.exportCode,
+          };
+          result.metadata.extractedExportCode = true;
+        }
+      } catch (error: unknown) {
+        warnings.push(
+          error instanceof Error ? `Rendered scrape failed: ${error.message}` : "Rendered scrape failed"
+        );
       }
-      if (parsed?.equipment.length) {
-        result.draft.metadata.equipment = parsed.equipment;
-        result.draft.equipment = parsed.equipment;
-        result.metadata.extractedEquipmentLines = parsed.equipment.length;
-      }
-      if (parsed?.quirks.length) {
-        result.metadata.extractedQuirkLines = parsed.quirks.length;
-      }
-      if (parsed?.exportCode) {
-        result.draft.buildCodes = {
-          ...result.draft.buildCodes,
-          export: parsed.exportCode,
-        };
-        result.metadata.extractedExportCode = true;
-      }
-    } catch (error: unknown) {
-      warnings.push(
-        error instanceof Error ? `Rendered scrape failed: ${error.message}` : "Rendered scrape failed"
-      );
     }
 
     if ((!result.draft.weaponry || result.draft.weaponry.startsWith("Parsed from link")) && navApiKey && buildToken) {

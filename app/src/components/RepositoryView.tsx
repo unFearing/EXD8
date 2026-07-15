@@ -1,4 +1,4 @@
-import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
+import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -12,9 +12,10 @@ import { Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MechDoc, WeightClassSummary } from "../types/contracts";
-import { deleteMech, getMechHierarchy, getMechs, updateMech } from "../api/client";
+import { deleteMech, getMechHierarchy, getMechs, parseMechBuild, updateMech } from "../api/client";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import { AddBuildDialog } from "./AddBuildDialog";
+import { resolveAppRole } from "../utils/discordRoles";
 
 type EditMode = "view" | "edit";
 
@@ -32,8 +33,29 @@ const APP_ROLE_TEAM_LEAD = "TL";
 const ERROR_DELETE_PERMISSION = "You can only delete your own builds unless you have TL role.";
 const ERROR_DELETE_PERMISSION_NO_PERIOD = "You can only delete your own builds unless you have TL role";
 const ERROR_SAVE_PERMISSION = "Only TL can edit builds.";
+const ERROR_REPARSE_PERMISSION = "Only TL can re-run the parser.";
 const TECH_ALL = "All";
 const WEIGHT_CLASS_DEFAULT: "Light" | "Medium" | "Heavy" | "Assault" = "Light";
+
+type ParserReviewState = {
+  mechId: string;
+  sourceUrl: string;
+  parsedDraft: MechDoc;
+  differences: Array<{
+    label: string;
+    currentValue: string | string[];
+    nextValue: string | string[];
+  }>;
+};
+
+function formatReviewValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value.length ? value.join(", ") : "(empty)";
+  }
+
+  const text = (value ?? "").trim();
+  return text || "(empty)";
+}
 
 export function RepositoryView({
   mode,
@@ -62,7 +84,9 @@ export function RepositoryView({
   const [markdownDrafts, setMarkdownDrafts] = useState<Record<string, string>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
   const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
-  const canManageBuilds = user?.appRole === APP_ROLE_TEAM_LEAD;
+  const [parserReview, setParserReview] = useState<ParserReviewState | null>(null);
+  const [parsingMechId, setParsingMechId] = useState<string | null>(null);
+  const canManageBuilds = resolveAppRole(user?.roles ?? [], user?.appRole) === APP_ROLE_TEAM_LEAD;
   const normalizedUserName = (user?.username ?? "").trim().toLowerCase();
 
   const canDeleteBuild = (build: MechDoc): boolean => {
@@ -227,6 +251,79 @@ export function RepositoryView({
       await loadHierarchy();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save markdown");
+    } finally {
+      setSavingMechId(null);
+    }
+  };
+
+  const handleReparseBuild = async (id: string) => {
+    if (!canManageBuilds) {
+      setError(ERROR_REPARSE_PERMISSION);
+      return;
+    }
+
+    const source = mechsById[id];
+    if (!source) {
+      setError("Could not find build source document to re-run parser.");
+      return;
+    }
+
+    const sourceUrl = (source.buildUrl ?? source.link ?? "").trim();
+    if (!sourceUrl) {
+      setError("This build does not have a source URL to re-run the parser against.");
+      return;
+    }
+
+    try {
+      setParsingMechId(id);
+      setError("");
+      const parsed = await parseMechBuild(sourceUrl);
+      const differences = [
+        { label: "Role", currentValue: source.role, nextValue: parsed.draft.role },
+        { label: "Weaponry", currentValue: source.weaponry, nextValue: parsed.draft.weaponry },
+        { label: "Skill Code", currentValue: source.skillCode, nextValue: parsed.draft.skillCode },
+        { label: "Build URL", currentValue: source.buildUrl ?? source.link, nextValue: parsed.draft.buildUrl ?? parsed.draft.link },
+        {
+          label: "Export Code",
+          currentValue: source.buildCodes?.export ?? "",
+          nextValue: parsed.draft.buildCodes?.export ?? "",
+        },
+        {
+          label: "Equipment",
+          currentValue: source.equipment ?? source.metadata?.equipment ?? [],
+          nextValue: parsed.draft.equipment ?? parsed.draft.metadata.equipment ?? [],
+        },
+      ].filter((entry) => formatReviewValue(entry.currentValue) !== formatReviewValue(entry.nextValue));
+      setParserReview({
+        mechId: id,
+        sourceUrl,
+        parsedDraft: {
+          ...source,
+          ...parsed.draft,
+          buildUrl: parsed.draft.buildUrl || source.buildUrl || source.link,
+          link: parsed.draft.link || source.link,
+        },
+        differences,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to re-run parser");
+    } finally {
+      setParsingMechId(null);
+    }
+  };
+
+  const applyParsedMarkdown = async () => {
+    if (!parserReview) return;
+
+    try {
+      setSavingMechId(parserReview.mechId);
+      await updateMech(parserReview.mechId, {
+        ...parserReview.parsedDraft,
+      });
+      setParserReview(null);
+      await loadHierarchy();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to apply parsed build");
     } finally {
       setSavingMechId(null);
     }
@@ -583,17 +680,29 @@ export function RepositoryView({
                                     {editMode === "edit" && (
                                       <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
                                         {canManageBuilds ? (
-                                          <Button
-                                            variant="contained"
-                                            size="small"
-                                            startIcon={<SaveIcon fontSize="small" />}
-                                            disabled={savingMechId === build.id}
-                                            onClick={() => {
-                                              void handleSaveMarkdown(build.id);
-                                            }}
-                                          >
-                                            {savingMechId === build.id ? "Saving..." : "Save Markdown"}
-                                          </Button>
+                                          <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                                            <Button
+                                              variant="outlined"
+                                              size="small"
+                                              disabled={parsingMechId === build.id || savingMechId === build.id}
+                                              onClick={() => {
+                                                void handleReparseBuild(build.id);
+                                              }}
+                                            >
+                                              {parsingMechId === build.id ? "Re-parsing..." : "Re-run parser"}
+                                            </Button>
+                                            <Button
+                                              variant="contained"
+                                              size="small"
+                                              startIcon={<SaveIcon fontSize="small" />}
+                                              disabled={savingMechId === build.id}
+                                              onClick={() => {
+                                                void handleSaveMarkdown(build.id);
+                                              }}
+                                            >
+                                              {savingMechId === build.id ? "Saving..." : "Save Markdown"}
+                                            </Button>
+                                          </Stack>
                                         ) : (
                                           <Box />
                                         )}
@@ -643,6 +752,60 @@ export function RepositoryView({
         }}
         mode={mode}
       />
+
+      <Dialog open={Boolean(parserReview)} onClose={() => setParserReview(null)} maxWidth="lg" fullWidth>
+        <DialogTitle>Review re-parsed build</DialogTitle>
+        <DialogContent dividers>
+          {parserReview && (
+            <Stack spacing={2}>
+              <Alert severity="info">
+                Re-ran the parser against this build’s source URL. Review the changed fields below before applying the newer version.
+              </Alert>
+              <Typography variant="body2" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>
+                Source: {parserReview.sourceUrl}
+              </Typography>
+              {parserReview.differences.length === 0 ? (
+                <Alert severity="success">The re-parsed build did not change any tracked fields.</Alert>
+              ) : (
+                <Stack spacing={1}>
+                  {parserReview.differences.map((difference) => (
+                    <Paper
+                      key={difference.label}
+                      variant="outlined"
+                      sx={{
+                        p: 1.25,
+                        background: isLight ? "rgba(255,255,255,0.72)" : "rgba(8,14,28,0.72)",
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: 700, mb: 0.5 }}>{difference.label}</Typography>
+                      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
+                        <Stack spacing={0.4}>
+                          <Typography variant="caption" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>Current</Typography>
+                          <Typography component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: "0.82rem" }}>
+                            {formatReviewValue(difference.currentValue)}
+                          </Typography>
+                        </Stack>
+                        <Stack spacing={0.4}>
+                          <Typography variant="caption" sx={{ color: isLight ? "#556887" : "#bfd0ff" }}>Parsed</Typography>
+                          <Typography component="pre" sx={{ m: 0, whiteSpace: "pre-wrap", fontFamily: "monospace", fontSize: "0.82rem" }}>
+                            {formatReviewValue(difference.nextValue)}
+                          </Typography>
+                        </Stack>
+                      </Box>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setParserReview(null)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void applyParsedMarkdown()} disabled={!parserReview || savingMechId === parserReview.mechId}>
+            Apply newer parser version
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

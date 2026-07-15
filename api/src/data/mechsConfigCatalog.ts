@@ -50,6 +50,10 @@ function normalizeToken(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function normalizeVariantToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 function candidateConfigPaths(): string[] {
   return [
     process.env.MECHS_CONFIG_PATH?.trim(),
@@ -114,10 +118,15 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
   }
 
   const variantCandidates = [normVariant, ...(LEGACY_VARIANT_ALIASES[normVariant] ?? [])];
+  const normalizedVariantCandidates = new Set(variantCandidates.map((candidate) => normalizeVariantToken(candidate)));
 
   const exactMatches = entries.filter((entry) => {
     if (techHint && entry.tech !== techHint) return false;
-    return normalizeToken(entry.chassis) === normChassis && variantCandidates.includes(normalizeToken(entry.variant));
+    const entryVariant = normalizeToken(entry.variant);
+    return (
+      normalizeToken(entry.chassis) === normChassis &&
+      (variantCandidates.includes(entryVariant) || normalizedVariantCandidates.has(normalizeVariantToken(entryVariant)))
+    );
   });
 
   if (exactMatches.length === 1) {
@@ -129,7 +138,8 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
 
   const variantMatches = entries.filter((entry) => {
     if (techHint && entry.tech !== techHint) return false;
-    return variantCandidates.includes(normalizeToken(entry.variant));
+    const entryVariant = normalizeToken(entry.variant);
+    return variantCandidates.includes(entryVariant) || normalizedVariantCandidates.has(normalizeVariantToken(entryVariant));
   });
 
   if (variantMatches.length === 1) {
@@ -141,7 +151,11 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
 
   if (techHint) {
     const fallbackExact = entries.filter((entry) => {
-      return normalizeToken(entry.chassis) === normChassis && variantCandidates.includes(normalizeToken(entry.variant));
+      const entryVariant = normalizeToken(entry.variant);
+      return (
+        normalizeToken(entry.chassis) === normChassis &&
+        (variantCandidates.includes(entryVariant) || normalizedVariantCandidates.has(normalizeVariantToken(entryVariant)))
+      );
     });
     if (fallbackExact.length === 1) {
       return { status: "ok", value: fallbackExact[0] };
@@ -150,7 +164,10 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
       return { status: "ambiguous", candidates: fallbackExact };
     }
 
-    const fallbackVariant = entries.filter((entry) => variantCandidates.includes(normalizeToken(entry.variant)));
+    const fallbackVariant = entries.filter((entry) => {
+      const entryVariant = normalizeToken(entry.variant);
+      return variantCandidates.includes(entryVariant) || normalizedVariantCandidates.has(normalizeVariantToken(entryVariant));
+    });
     if (fallbackVariant.length === 1) {
       return { status: "ok", value: fallbackVariant[0] };
     }

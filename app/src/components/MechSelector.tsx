@@ -106,14 +106,9 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
     for (const group of grouped) {
       const chassisLabel = Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis;
       items.push({ token: `chassis|${group.chassis}`, label: chassisLabel, indent: false });
-      // To keep the menu responsive with large default catalogs, only expand variants
-      // for the currently selected chassis.
       if (normalizedChassis && group.chassis.toLowerCase() === normalizedChassis) {
         for (const variantEntry of group.variants) {
-          const variantLabel = Number.isFinite(variantEntry.tonnage)
-            ? `${variantEntry.variant} (${variantEntry.tonnage}t)`
-            : variantEntry.variant;
-          items.push({ token: `variant|${group.chassis}|${variantEntry.variant}`, label: variantLabel, indent: true });
+          items.push({ token: `variant|${group.chassis}|${variantEntry.variant}`, label: variantEntry.variant, indent: true });
         }
       }
     }
@@ -142,7 +137,7 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
             const selected = options.find((option) => option.chassis === chassis && option.variant === variant);
             const tonnage = selected?.tonnage;
             if (kind === "chassis") return Number.isFinite(tonnage) ? `${chassis} (${tonnage}t)` : chassis;
-            return Number.isFinite(tonnage) ? `${chassis} / ${variant} (${tonnage}t)` : `${chassis} / ${variant}`;
+            return `${chassis} / ${variant}`;
           }}
           onChange={(event) => {
             const token = String(event.target.value);

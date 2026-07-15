@@ -113,7 +113,9 @@ function AppContent() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {!bypassDiscordAuth && <AuthSplash state={effectiveAuth} onLogin={effectiveAuth.login} />}
+      {!bypassDiscordAuth && !effectiveAuth.isLoading && !effectiveAuth.isAuthed && (
+        <AuthSplash state={effectiveAuth} onLogin={effectiveAuth.login} />
+      )}
       {effectiveAuth.isAuthed && (
         <Routes>
           <Route
