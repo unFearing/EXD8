@@ -2073,32 +2073,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         <TextField
                           size="small"
                           label="Deck Name"
-                          defaultValue={template.name ?? ""}
+                          value={template.name ?? ""}
                           disabled={editMode !== "edit"}
                           onChange={(event) => {
                             const nextName = event.target.value;
-                            const commitKey = `deck-name-${template.id}`;
-                            scheduleTextInputCommit(commitKey, () => {
-                              updateTemplateById(template.id, (current) => {
-                                if ((current.name ?? "") === nextName) return current;
-                                return {
-                                  ...current,
-                                  name: nextName,
-                                };
-                              });
-                            });
-                          }}
-                          onBlur={(event) => {
-                            const nextName = event.target.value;
-                            const commitKey = `deck-name-${template.id}`;
-                            flushTextInputCommit(commitKey, () => {
-                              updateTemplateById(template.id, (current) => {
-                                if ((current.name ?? "") === nextName) return current;
-                                return {
-                                  ...current,
-                                  name: nextName,
-                                };
-                              });
+                            updateTemplateById(template.id, (current) => {
+                              if ((current.name ?? "") === nextName) return current;
+                              return {
+                                ...current,
+                                name: nextName,
+                              };
                             });
                           }}
                           sx={{ minWidth: 220 }}
