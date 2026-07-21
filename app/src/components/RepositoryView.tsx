@@ -33,6 +33,7 @@ const ERROR_DELETE_PERMISSION_NO_PERIOD = "You can only delete your own builds u
 const ERROR_SAVE_PERMISSION = "Only TL can edit builds.";
 const ERROR_REPARSE_PERMISSION = "Only TL can re-run the parser.";
 const TECH_ALL = "All";
+const FILTER_ALL = "All";
 const WEIGHT_CLASS_DEFAULT: "Light" | "Medium" | "Heavy" | "Assault" = "Light";
 const MOXIE_BLUE = "#2f4f96";
 const MOXIE_PAPER = "#f8b397";
@@ -62,6 +63,23 @@ function formatReviewValue(value: string | string[] | undefined): string {
   return text || "(empty)";
 }
 
+function getDisplayBuildCodes(codes: Record<string, string> | undefined): Array<[string, string]> {
+  if (!codes) return [];
+  const entries = Object.entries(codes)
+    .filter(([key, value]) => key !== "imported" && Boolean((value ?? "").trim()))
+    .map(([key, value]) => [key, value.trim()] as const);
+
+  const seenValues = new Set<string>();
+  const deduped: Array<[string, string]> = [];
+  for (const [key, value] of entries) {
+    const normalized = value.toLowerCase();
+    if (seenValues.has(normalized)) continue;
+    seenValues.add(normalized);
+    deduped.push([key, value]);
+  }
+  return deduped;
+}
+
 export function RepositoryView({
   mode,
   onToggleMode,
@@ -82,6 +100,8 @@ export function RepositoryView({
   const [savingMechId, setSavingMechId] = useState<string | null>(null);
   const [selectedWeightClass, setSelectedWeightClass] = useState<"Light" | "Medium" | "Heavy" | "Assault">(WEIGHT_CLASS_DEFAULT);
   const [selectedTech, setSelectedTech] = useState<"All" | "IS" | "Clan">(TECH_ALL);
+  const [selectedTonnage, setSelectedTonnage] = useState<string>(FILTER_ALL);
+  const [selectedRole, setSelectedRole] = useState<string>(FILTER_ALL);
   const [selectedSubmitter, setSelectedSubmitter] = useState<string>(TECH_ALL);
   const [weaponrySearch, setWeaponrySearch] = useState("");
   const editMode = viewMode;
@@ -365,6 +385,36 @@ export function RepositoryView({
     return values.sort((a, b) => a.localeCompare(b));
   }, [mechsById]);
 
+  const classScopedMechs = useMemo(
+    () => Object.values(mechsById).filter((mech) => mech.class === selectedWeightClass),
+    [mechsById, selectedWeightClass],
+  );
+
+  const tonnageOptions = useMemo(() => {
+    const values = Array.from(new Set(classScopedMechs.map((mech) => Number(mech.tonnage)).filter((tonnage) => Number.isFinite(tonnage) && tonnage > 0)));
+    values.sort((a, b) => a - b);
+    return values;
+  }, [classScopedMechs]);
+
+  const roleOptions = useMemo(() => {
+    const values = Array.from(new Set(classScopedMechs.map((mech) => (mech.role ?? "").trim()).filter(Boolean)));
+    return values.sort((a, b) => a.localeCompare(b));
+  }, [classScopedMechs]);
+
+  useEffect(() => {
+    if (selectedTonnage === FILTER_ALL) return;
+    if (!tonnageOptions.some((tonnage) => String(tonnage) === selectedTonnage)) {
+      setSelectedTonnage(FILTER_ALL);
+    }
+  }, [selectedTonnage, tonnageOptions]);
+
+  useEffect(() => {
+    if (selectedRole === FILTER_ALL) return;
+    if (!roleOptions.includes(selectedRole)) {
+      setSelectedRole(FILTER_ALL);
+    }
+  }, [roleOptions, selectedRole]);
+
   const matchesFilters = (buildId: string): boolean => {
     const mech = mechsById[buildId];
     if (!mech) return false;
@@ -374,6 +424,14 @@ export function RepositoryView({
     }
 
     if (selectedSubmitter !== TECH_ALL && (mech.submittedBy ?? "") !== selectedSubmitter) {
+      return false;
+    }
+
+    if (selectedTonnage !== FILTER_ALL && String(mech.tonnage ?? "") !== selectedTonnage) {
+      return false;
+    }
+
+    if (selectedRole !== FILTER_ALL && (mech.role ?? "").trim() !== selectedRole) {
       return false;
     }
 
@@ -613,6 +671,26 @@ export function RepositoryView({
                   </Select>
                 </FormControl>
 
+                <FormControl size="small" sx={{ minWidth: 130 }}>
+                  <InputLabel>Tonnage</InputLabel>
+                  <Select label="Tonnage" value={selectedTonnage} onChange={(event) => setSelectedTonnage(event.target.value)}>
+                    <MenuItem value={FILTER_ALL}>{FILTER_ALL}</MenuItem>
+                    {tonnageOptions.map((tonnage) => (
+                      <MenuItem key={tonnage} value={String(tonnage)}>{`${tonnage}t`}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Role</InputLabel>
+                  <Select label="Role" value={selectedRole} onChange={(event) => setSelectedRole(event.target.value)}>
+                    <MenuItem value={FILTER_ALL}>{FILTER_ALL}</MenuItem>
+                    {roleOptions.map((role) => (
+                      <MenuItem key={role} value={role}>{role}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
                 <FormControl size="small" sx={{ minWidth: 180 }}>
                   <InputLabel>Submitter</InputLabel>
                   <Select label="Submitter" value={selectedSubmitter} onChange={(event) => setSelectedSubmitter(event.target.value)}>
@@ -640,19 +718,46 @@ export function RepositoryView({
                     <Typography variant="h6" sx={{ color: isLight ? "#2f3f59" : MOXIE_NIGHT_TEXT }}>
                       {weightClass.class} ({weightClass.buildCount})
                     </Typography>
-                    {weightClass.chassis.map((chassis) => (
-                      <Paper
-                        key={`${weightClass.class}-${chassis.chassis}`}
-                        variant="outlined"
-                        sx={{
-                          p: 1.25,
-                          borderColor: isLight ? `${MOXIE_BLUE}70` : `${MOXIE_NIGHT_LINE}90`,
-                          background: isLight ? "rgba(252, 236, 223, 0.72)" : "rgba(21, 33, 62, 0.72)",
-                        }}
-                      >
-                        <Typography sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
-                          {chassis.chassis} ({chassis.buildCount})
-                        </Typography>
+                    {weightClass.chassis.map((chassis) => {
+                      const chassisBuildDocs = chassis.variants
+                        .flatMap((variantEntry) => variantEntry.builds)
+                        .map((build) => mechsById[build.id])
+                        .filter((mech): mech is MechDoc => Boolean(mech));
+                      const chassisTechs = Array.from(new Set(chassisBuildDocs.map((mech) => (mech.tech ?? "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+                      const chassisTonnages = Array.from(
+                        new Set(chassisBuildDocs.map((mech) => Number(mech.tonnage)).filter((tonnage) => Number.isFinite(tonnage) && tonnage > 0)),
+                      ).sort((a, b) => a - b);
+                      const chassisTechLabel = chassisTechs.length ? chassisTechs.join(" / ") : "-";
+                      const chassisTonnageLabel = chassisTonnages.length ? chassisTonnages.map((tonnage) => `${tonnage}t`).join(" / ") : "-";
+
+                      return (
+                        <Paper
+                          key={`${weightClass.class}-${chassis.chassis}`}
+                          variant="outlined"
+                          sx={{
+                            p: 1.25,
+                            borderColor: isLight ? `${MOXIE_BLUE}70` : `${MOXIE_NIGHT_LINE}90`,
+                            borderWidth: "1px 0 0 0",
+                            background: isLight ? "rgba(252, 236, 223, 0.72)" : "rgba(21, 33, 62, 0.72)",
+                          }}
+                        >
+                          <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
+                            <Typography sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 700 }}>
+                              {chassis.chassis} ({chassis.buildCount})
+                            </Typography>
+                            <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap" }}>
+                              <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
+                                <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
+                                  Tech: {chassisTechLabel}
+                                </Typography>
+                              </Box>
+                              <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
+                                <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>
+                                  Tonnage: {chassisTonnageLabel}
+                                </Typography>
+                              </Box>
+                            </Stack>
+                          </Stack>
                         <Box
                           sx={{
                             mt: 1,
@@ -665,7 +770,7 @@ export function RepositoryView({
                             variant.builds.map((build) => {
                               const sourceBuild = mechsById[build.id];
                               const equipment = sourceBuild?.equipment ?? sourceBuild?.metadata?.equipment ?? [];
-                              const buildCodes = Object.entries(sourceBuild?.buildCodes ?? {}).filter(([, code]) => Boolean((code ?? "").trim()));
+                              const buildCodes = getDisplayBuildCodes(sourceBuild?.buildCodes);
                               const descriptionValue = descriptionDrafts[build.id] ?? sourceBuild?.description ?? "";
                               const canonicalUrl = sourceBuild?.buildUrl ?? sourceBuild?.link ?? "";
                               const title = (sourceBuild?.variant ?? variant.variant).trim() || variant.variant;
@@ -678,6 +783,7 @@ export function RepositoryView({
                                   sx={{
                                     p: { xs: 1.2, md: 1.5 },
                                     borderColor: isLight ? `${MOXIE_BLUE}88` : `${MOXIE_NIGHT_LINE}88`,
+                                    borderWidth: "1px 0 0 0",
                                     background:
                                       highlightedMechId === build.id
                                         ? isLight
@@ -713,18 +819,10 @@ export function RepositoryView({
                                       </Typography>
                                       <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap" }}>
                                         <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
-                                          <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{sourceBuild?.tech ?? "Unknown Tech"}</Typography>
-                                        </Box>
-                                        <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
-                                          <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{sourceBuild?.tonnage ? `${sourceBuild.tonnage}t` : "-"}</Typography>
-                                        </Box>
-                                        <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
                                           <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{sourceBuild?.role ?? "No Role"}</Typography>
                                         </Box>
                                       </Stack>
                                     </Stack>
-
-                                    <Divider sx={{ borderColor: isLight ? `${MOXIE_BLUE}66` : `${MOXIE_NIGHT_LINE}77` }} />
 
                                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 1, md: 1.5 } }}>
                                       <Box>
@@ -761,27 +859,27 @@ export function RepositoryView({
                                         <Typography sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, whiteSpace: "pre-wrap" }}>
                                           {(sourceBuild?.weaponry ?? "").trim() || "Not specified."}
                                         </Typography>
-                                        <Divider sx={{ my: 1, borderColor: isLight ? `${MOXIE_BLUE}55` : `${MOXIE_NIGHT_LINE}66` }} />
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                                          Build Details
+                                          Codes
                                         </Typography>
                                         <Stack spacing={0.4} sx={{ mt: 0.65 }}>
                                           <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
                                             Skill Code: {(sourceBuild?.skillCode ?? "").trim() || "-"}
                                           </Typography>
-                                          <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                            Submitted By: {(sourceBuild?.submittedBy ?? "").trim() || "-"}
-                                          </Typography>
-                                          {canonicalUrl && (
-                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
-                                              Link: <a href={canonicalUrl} target="_blank" rel="noopener noreferrer">Open NAV build</a>
+                                          {buildCodes.length ? (
+                                            buildCodes.map(([codeType, codeValue]) => (
+                                              <Typography key={codeType} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
+                                                {codeType}: {codeValue}
+                                              </Typography>
+                                            ))
+                                          ) : (
+                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                              No build codes listed.
                                             </Typography>
                                           )}
                                         </Stack>
                                       </Box>
                                     </Box>
-
-                                    <Divider sx={{ borderColor: isLight ? `${MOXIE_BLUE}66` : `${MOXIE_NIGHT_LINE}77` }} />
 
                                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 1, md: 1.5 } }}>
                                       <Box>
@@ -805,20 +903,31 @@ export function RepositoryView({
 
                                       <Box>
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                                          Build Codes
+                                          Source
                                         </Typography>
-                                        {buildCodes.length ? (
-                                          <Stack spacing={0.45} sx={{ mt: 0.65 }}>
-                                            {buildCodes.map(([codeType, codeValue]) => (
-                                              <Typography key={codeType} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
-                                                {codeType}: {codeValue}
-                                              </Typography>
-                                            ))}
-                                          </Stack>
-                                        ) : (
-                                          <Typography sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                            No build codes listed.
+                                        <Stack spacing={0.45} sx={{ mt: 0.65 }}>
+                                          <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                            Submitted By: {(sourceBuild?.submittedBy ?? "").trim() || "-"}
                                           </Typography>
+                                          {canonicalUrl ? (
+                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
+                                              Link: <a href={canonicalUrl} target="_blank" rel="noopener noreferrer">Open NAV build</a>
+                                            </Typography>
+                                          ) : (
+                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                              Link: -
+                                            </Typography>
+                                          )}
+                                        </Stack>
+                                        {buildCodes.length > 1 && (
+                                          <Stack spacing={0.45} sx={{ mt: 0.65 }}>
+                                            <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                                              Variants
+                                            </Typography>
+                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                              Multiple non-duplicate code values are available in Codes.
+                                            </Typography>
+                                          </Stack>
                                         )}
                                       </Box>
                                     </Box>
@@ -876,8 +985,9 @@ export function RepositoryView({
                             }),
                           )}
                         </Box>
-                      </Paper>
-                    ))}
+                        </Paper>
+                      );
+                    })}
                   </Stack>
                 ))}
               </Stack>

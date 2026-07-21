@@ -107,6 +107,21 @@ function parseBuildCodesText(value: string): Record<string, string> {
   return Object.fromEntries(pairs);
 }
 
+function mergeBuildCodes(baseCodes: Record<string, string>, exportCodeText: string): Record<string, string> {
+  const merged: Record<string, string> = { ...baseCodes };
+  const exportCode = exportCodeText.trim();
+  if (!exportCode) return merged;
+
+  const hasEquivalentValue = Object.values(merged).some(
+    (value) => value.trim().toLowerCase() === exportCode.toLowerCase(),
+  );
+  if (!hasEquivalentValue) {
+    merged.export = exportCode;
+  }
+
+  return merged;
+}
+
 function flattenChassisVariants(file: MechsConfigFile): Array<{ chassis: string; variant: string }> {
   const rows: Array<{ chassis: string; variant: string }> = [];
   for (const tech of Object.keys(file.mechs) as Array<"IS" | "Clan">) {
@@ -469,10 +484,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
           equipment: parseListText(equipmentText),
         },
         equipment: parseListText(equipmentText),
-        buildCodes: {
-          ...parseBuildCodesText(buildCodeText),
-          ...(exportCodeText.trim() ? { export: exportCodeText.trim() } : {}),
-        },
+        buildCodes: mergeBuildCodes(parseBuildCodesText(buildCodeText), exportCodeText),
       };
       await createMech(payload);
       setNotice(`Build created for ${payload.chassis}-${payload.variant}.`);

@@ -402,15 +402,15 @@ async function parseBuildFromPublicNavAlphaLoadout(
       const item = itemsById.get(Number(itemId));
       if (!item) continue;
 
+      const itemType = (item.item_type ?? "").toLowerCase();
+      const longName = item.display_name?.trim() || item.name?.trim() || "";
+      const shortName = item.short_name?.trim() || "";
       const name =
-        item.short_name?.trim() ||
-        item.name?.trim() ||
-        item.display_name?.trim() ||
+        (itemType === "weapon" ? shortName || longName : longName || shortName) ||
         item.id_code?.trim() ||
         (typeof item.id === "number" ? String(item.id) : "");
       if (!name) continue;
 
-      const itemType = (item.item_type ?? "").toLowerCase();
       if (itemType === "weapon") {
         weaponCounts.set(name, (weaponCounts.get(name) ?? 0) + 1);
         continue;
