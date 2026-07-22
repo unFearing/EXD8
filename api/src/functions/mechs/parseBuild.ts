@@ -1,7 +1,8 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { fail, ok } from "../../middleware/http.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
 
@@ -448,8 +449,11 @@ async function parseBuildFromPublicNavAlphaLoadout(
 }
 
 function loadMechsConfigCatalog(): MechsConfigCatalog {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     process.env.MECHS_CONFIG_PATH?.trim(),
+    resolve(moduleDir, "../../mechs_config.json"),
+    resolve(process.cwd(), "dist/mechs_config.json"),
     resolve(process.cwd(), "../app/public/mechs_config.json"),
     resolve(process.cwd(), "app/public/mechs_config.json"),
   ].filter((value): value is string => Boolean(value));

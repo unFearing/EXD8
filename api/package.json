@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build:ts": "tsc -p tsconfig.json",
-    "build": "npm run build:ts",
+    "build": "npm run build:ts && node scripts/copyMechsConfig.cjs",
     "test": "vitest run",
     "validate:foam-mechs": "npm run build:ts && node dist/scripts/validateFoamMechs.js",
     "sync:foam-to-cosmos": "node dist/scripts/syncFoamToCosmos.js",

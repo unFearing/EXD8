@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 type ConfigTech = "IS" | "Clan";
 type ConfigClass = "LIGHT" | "MEDIUM" | "HEAVY" | "ASSAULT";
@@ -183,8 +184,11 @@ function pickBestRank(matches: Array<{ entry: CatalogEntry; rank: number }>): Ca
 }
 
 function candidateConfigPaths(): string[] {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
   return [
     process.env.MECHS_CONFIG_PATH?.trim(),
+    resolve(moduleDir, "../mechs_config.json"),
+    resolve(process.cwd(), "dist/mechs_config.json"),
     resolve(process.cwd(), "../app/public/mechs_config.json"),
     resolve(process.cwd(), "app/public/mechs_config.json"),
   ].filter((value): value is string => Boolean(value));
