@@ -102,6 +102,20 @@ function getVariantInitialisms(value: string): string[] {
   return Array.from(new Set([full, reduced].filter(Boolean)));
 }
 
+function getVariantSuffixToken(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const parts = trimmed.split("-").filter(Boolean);
+  if (!parts.length) return "";
+  return parts[parts.length - 1]?.toUpperCase() ?? "";
+}
+
+function entryMatchesChassis(entry: CatalogEntry, normChassis: string): boolean {
+  if (normalizeToken(entry.chassis) === normChassis) return true;
+  const code = normalizeToken(entry.chassisCode ?? "");
+  return Boolean(code) && code === normChassis;
+}
+
 function buildVariantAliases(entry: CatalogEntry): Set<string> {
   const aliases = new Set<string>();
   const variant = entry.variant.trim();
@@ -239,7 +253,7 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
 
   const exactMatches = pickBestRank(entries.map((entry) => {
     if (techHint && entry.tech !== techHint) return false;
-    if (normalizeToken(entry.chassis) !== normChassis) return false;
+    if (!entryMatchesChassis(entry, normChassis)) return false;
     return { entry, rank: getVariantMatchRank(entry, variantCandidates, normalizedVariantCandidates) };
   }).filter((value): value is { entry: CatalogEntry; rank: number } => Boolean(value)));
 
@@ -264,7 +278,7 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
 
   if (techHint) {
     const fallbackExact = pickBestRank(entries
-      .filter((entry) => normalizeToken(entry.chassis) === normChassis)
+      .filter((entry) => entryMatchesChassis(entry, normChassis))
       .map((entry) => ({
         entry,
         rank: getVariantMatchRank(entry, variantCandidates, normalizedVariantCandidates),
@@ -293,11 +307,32 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
   // variant string is not present in mechs_config.
   const chassisMatches = entries.filter((entry) => {
     if (techHint && entry.tech !== techHint) return false;
-    return normalizeToken(entry.chassis) === normChassis;
+    return entryMatchesChassis(entry, normChassis);
   });
   const chassisFallbackPool = chassisMatches.length
     ? chassisMatches
-    : entries.filter((entry) => normalizeToken(entry.chassis) === normChassis);
+    : entries.filter((entry) => entryMatchesChassis(entry, normChassis));
+
+  // Chassis-scoped shorthand fallback: ENF-GH should resolve to GHILLIE when
+  // the chassis is known and the suffix uniquely prefixes a canonical variant.
+  if (chassisFallbackPool.length) {
+    const suffixToken = getVariantSuffixToken(rawVariant);
+    if (suffixToken.length >= 2) {
+      const shorthandMatches = chassisFallbackPool.filter((entry) => {
+        if (techHint && entry.tech !== techHint) return false;
+        const canonical = normalizeVariantToken(entry.variant).toUpperCase();
+        return canonical.startsWith(suffixToken);
+      });
+
+      if (shorthandMatches.length === 1) {
+        return { status: "ok", value: shorthandMatches[0] };
+      }
+
+      if (shorthandMatches.length > 1) {
+        return { status: "ambiguous", candidates: shorthandMatches };
+      }
+    }
+  }
 
   if (chassisFallbackPool.length) {
     const variantCompact = normalizeVariantToken(rawVariant).toUpperCase();

@@ -496,7 +496,7 @@ function loadMechsConfigCatalog(): MechsConfigCatalog {
           const suffix = explicitCode && normalizedVariant.startsWith(`${explicitCode}-`)
             ? normalizedVariant.slice(explicitCode.length + 1)
             : normalizedVariant;
-          variantMap[suffix] = { tech: defaultTech };
+          variantMap[suffix] = { tech: defaultTech, label: normalizedVariant };
         }
 
         const codes = explicitCode ? [explicitCode] : [...inferredCodes];
@@ -533,6 +533,13 @@ function normalizeVariant(raw: string): string {
 
 function normalizeLookupToken(raw: string): string {
   return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function extractVariantSuffixToken(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  const parts = trimmed.split("-").filter(Boolean);
+  return parts[parts.length - 1]?.toUpperCase() ?? "";
 }
 
 function parseVariantFromUrl(url: URL): string | null {
@@ -964,9 +971,20 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
         )
         .find((entry): entry is [string, CachedVariant] => Boolean(entry))?.[1]
     : undefined;
+  const variantInfoFromPrefix = !variantInfo && catalog?.variants
+    ? (() => {
+        const suffixToken = extractVariantSuffixToken(variantCode);
+        if (suffixToken.length < 2) return undefined;
+        const candidates = Object.entries(catalog.variants).filter(([variantSuffix]) =>
+          normalizeLookupToken(variantSuffix).startsWith(suffixToken),
+        );
+        return candidates.length === 1 ? candidates[0]?.[1] : undefined;
+      })()
+    : undefined;
+  const resolvedVariantInfo = variantInfo ?? variantInfoFromPrefix;
   const tonnage = catalog?.tonnage ?? 50;
-  const tech = variantInfo?.tech ?? catalog?.defaultTech ?? "IS";
-  const variantLabel = variantInfo?.label ? `${variantCode} (${variantInfo.label})` : variantCode;
+  const tech = resolvedVariantInfo?.tech ?? catalog?.defaultTech ?? "IS";
+  const variantLabel = resolvedVariantInfo?.label ? `${variantCode} (${resolvedVariantInfo.label})` : variantCode;
 
   if (!catalog) {
     warnings.push(`No mechs_config chassis mapping found for code ${chassisCode}; using generic fallback values.`);
@@ -979,7 +997,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       variantCode,
       chassisCode,
       cachedChassis: catalog?.chassis ?? null,
-      cachedVariantLabel: variantInfo?.label ?? null,
+      cachedVariantLabel: resolvedVariantInfo?.label ?? null,
       parseMode: "url-and-mechs-config",
     },
     draft: {
