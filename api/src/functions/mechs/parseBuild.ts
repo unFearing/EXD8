@@ -988,7 +988,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
   const resolvedVariantInfo = variantInfo ?? variantInfoFromPrefix;
   const tonnage = catalog?.tonnage ?? 50;
   const tech = resolvedVariantInfo?.tech ?? catalog?.defaultTech ?? "IS";
-  const variantLabel = resolvedVariantInfo?.label ? `${variantCode} (${resolvedVariantInfo.label})` : variantCode;
+  const variantLabel = resolvedVariantInfo?.label ?? variantCode;
 
   if (!catalog) {
     warnings.push(`No mechs_config chassis mapping found for code ${chassisCode}; using generic fallback values.`);

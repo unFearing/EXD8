@@ -60,6 +60,10 @@ function normalizeVariantToken(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function normalizeSubmittedVariant(value: string): string {
+  return value.replace(/\s*\([^)]*\)\s*$/g, "").trim();
+}
+
 function isCodeLikeVariant(value: string): boolean {
   return /^[a-z0-9]+(?:-[a-z0-9()]+)+$/i.test(value.trim());
 }
@@ -244,8 +248,8 @@ function loadConfigEntries(): CatalogEntry[] {
 
 export function resolveConfigMech(chassis: string, variant: string, techHint?: ConfigTech): ResolveResult {
   const normChassis = normalizeToken(chassis);
-  const normVariant = normalizeToken(variant);
-  const rawVariant = variant.trim();
+  const rawVariant = normalizeSubmittedVariant(variant);
+  const normVariant = normalizeToken(rawVariant);
   const entries = loadConfigEntries();
 
   if (!normChassis || !normVariant || !rawVariant || !entries.length) {

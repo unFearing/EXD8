@@ -39,3 +39,6 @@ pnpm-debug.log*
 *.suo
 *.sln
 api/local.settings.json
+api/local.settings.example.json
+discord secrets.txt
+IMG_*.jpeg
