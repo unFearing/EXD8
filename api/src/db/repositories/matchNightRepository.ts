@@ -35,6 +35,7 @@ function cloneEditable(value: DropDeckEditable): DropDeckEditable {
       weaponry: slot.weaponry ?? "",
       equipmentText: slot.equipmentText ?? "",
       buildUrl: slot.buildUrl ?? "",
+      buildCode: slot.buildCode ?? "",
       role: slot.role ?? "",
       skillTree: slot.skillTree ?? "",
     })),
@@ -106,6 +107,7 @@ function mergeEditable(
     "weaponry",
     "equipmentText",
     "buildUrl",
+    "buildCode",
     "role",
     "skillTree",
   ];
@@ -122,6 +124,7 @@ function mergeEditable(
       weaponry: "",
       equipmentText: "",
       buildUrl: "",
+      buildCode: "",
       role: "",
       skillTree: "",
     };

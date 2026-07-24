@@ -76,6 +76,7 @@ export const deckSlotSchema = z.object({
   weaponry: z.string().default(""),
   equipmentText: z.string().default(""),
   buildUrl: z.string().default(""),
+  buildCode: z.string().default(""),
   role: z.string().default(""),
   skillTree: z.string().default(""),
 });
