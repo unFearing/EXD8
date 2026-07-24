@@ -1930,10 +1930,20 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           onChange={(event) => {
                             const value = String(event.target.value);
                             if (value === "__new__") {
+                              // Create and immediately assign fresh deck in one batched operation
                               const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", templatesForSelection.length + 1);
+                              
+                              // Build the quickslot assignment for this fresh deck
+                              const rest = quickslots.filter((qslot) => !(qslot.map === selectedMap && qslot.slot === entry.slot));
+                              const newQuickslots = [...rest, { map: selectedMap, slot: entry.slot, deckId: fresh.id }];
+                              
+                              // All updates batched together
                               setTemplates((previous) => [...previous, fresh]);
                               setSelectedTemplateId(fresh.id);
-                              setQuickslotDeck(entry.slot, fresh.id);
+                              setQuickslots(sortQuickslots(newQuickslots));
+                              
+                              // Now save to server
+                              void persistQuickslots(newQuickslots);
                               return;
                             }
                             const alreadyAssigned = fixedMapQuickslots.some((slotEntry) => slotEntry.slot !== entry.slot && slotEntry.deckId === value);
