@@ -815,10 +815,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const key = getPairLookupKey(docs[0].chassis, docs[0].variant);
       const seen = new Set<string>();
       const options: Array<{ label: string; code: string }> = [];
+      
+      console.log(`[buildOptionsByPair] Processing ${docs.length} docs for key: ${key}`);
+      
       for (const doc of docs) {
         // Include all build codes for this mech, not just the preferred one
         const buildEntries = getBuildCodeEntries(doc.buildCodes);
         const baseLabel = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
+        
+        console.log(`  Doc ${doc.id}: weaponry="${baseLabel}", buildEntries.length=${buildEntries.length}`, buildEntries);
         
         if (buildEntries.length > 0) {
           // Add each build code as a separate option
@@ -827,8 +832,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               ? baseLabel 
               : `${baseLabel} [${buildKey}]`;
             const dedupeKey = `${label}::${code}`;
-            if (seen.has(dedupeKey)) continue;
+            if (seen.has(dedupeKey)) {
+              console.log(`    Skipping duplicate: ${dedupeKey}`);
+              continue;
+            }
             seen.add(dedupeKey);
+            console.log(`    Adding: ${label} (${code})`);
             options.push({ label, code });
           }
         } else {
@@ -840,6 +849,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
           }
         }
       }
+      console.log(`  Final options count: ${options.length}`, options);
       map.set(key, options);
     }
     return map;
@@ -2242,6 +2252,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 ? [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])]
                                 : [...(buildOptionsByChassis.get(normalizedChassis) ?? [])];
 
+                              if (normalizedVariant) {
+                                console.log(`[buildOptions] Row ${row.slot}: normalized="${normalizedChassis}|${normalizedVariant}", got ${options.length} options from pair`);
+                              } else {
+                                console.log(`[buildOptions] Row ${row.slot}: normalized="${normalizedChassis}", got ${options.length} options from chassis`);
+                              }
+
                               if (!options.length && mech?.buildCodes) {
                                 const seen = new Set(options.map((option) => `${option.label}::${option.code}`));
                                 for (const { key, code, label } of getBuildCodeEntries(mech.buildCodes)) {
@@ -2250,6 +2266,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   seen.add(dedupeKey);
                                   options.push({ label: `${key}: ${label}`, code });
                                 }
+                                console.log(`[buildOptions] Added ${options.length} fallback options from mech.buildCodes`);
                               }
 
                               return options;
