@@ -155,6 +155,10 @@ function BuildAutocompleteField({
       options={options}
       inputValue={localValue}
       openOnFocus
+      filterOptions={(opts) => {
+        // Always show all options; let user filter by typing
+        return opts;
+      }}
       onFocus={() => {
         focusedRef.current = true;
       }}
@@ -597,6 +601,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const isLight = mode === "light";
   const syncedSignaturesRef = useRef<Map<string, string>>(new Map());
   const syncedTemplatesRef = useRef<Map<string, DeckTemplate>>(new Map());
+  const localOnlyTemplateIdsRef = useRef<Set<string>>(new Set());
 
   const editMode = viewMode;
   const [mapConfigs, setMapConfigs] = useState<MapConfigDoc[]>([]);
@@ -806,6 +811,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       list.push(mech);
       map.set(key, list);
     }
+    
     return map;
   }, [mechs]);
   const buildOptionsByPair = useMemo(() => {
@@ -816,40 +822,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const seen = new Set<string>();
       const options: Array<{ label: string; code: string }> = [];
       
-      console.log(`[buildOptionsByPair] Processing ${docs.length} docs for key: ${key}`);
-      
       for (const doc of docs) {
-        // Include all build codes for this mech, not just the preferred one
-        const buildEntries = getBuildCodeEntries(doc.buildCodes);
-        const baseLabel = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
-        
-        console.log(`  Doc ${doc.id}: weaponry="${baseLabel}", buildEntries.length=${buildEntries.length}`, buildEntries);
-        
-        if (buildEntries.length > 0) {
-          // Add each build code as a separate option
-          for (const { key: buildKey, code } of buildEntries) {
-            const label = buildEntries.length === 1 
-              ? baseLabel 
-              : `${baseLabel} [${buildKey}]`;
-            const dedupeKey = `${label}::${code}`;
-            if (seen.has(dedupeKey)) {
-              console.log(`    Skipping duplicate: ${dedupeKey}`);
-              continue;
-            }
-            seen.add(dedupeKey);
-            console.log(`    Adding: ${label} (${code})`);
-            options.push({ label, code });
-          }
-        } else {
-          // Fallback for mech with no build codes
-          const dedupeKey = `${baseLabel}::`;
-          if (!seen.has(dedupeKey)) {
-            seen.add(dedupeKey);
-            options.push({ label: baseLabel, code: "" });
-          }
-        }
+        // Pick only the preferred build code for this mech variant
+        // Different builds (different weaponry) are separate docs, so each gets one option
+        const preferredCode = getPreferredBuildCode(doc.buildCodes);
+        const label = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
+        const dedupeKey = `${label}::${preferredCode}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        options.push({ label, code: preferredCode });
       }
-      console.log(`  Final options count: ${options.length}`, options);
       map.set(key, options);
     }
     return map;
@@ -863,28 +845,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const seen = new Set(list.map((entry) => `${entry.label}::${entry.code}`));
 
       for (const doc of docs) {
-        // Include all build codes for this mech, not just the preferred one
-        const buildEntries = getBuildCodeEntries(doc.buildCodes);
+        // Pick only the preferred build code for this mech variant
+        const preferredCode = getPreferredBuildCode(doc.buildCodes);
         const baseLabel = doc.weaponry?.trim() || doc.variant;
+        const label = `${doc.variant} | ${baseLabel}`;
+        const dedupeKey = `${label}::${preferredCode}`;
         
-        if (buildEntries.length > 0) {
-          // Add each build code as a separate option
-          for (const { key: buildKey, code } of buildEntries) {
-            const label = `${doc.variant} | ${baseLabel}${buildEntries.length === 1 ? '' : ` [${buildKey}]`}`;
-            const dedupeKey = `${label}::${code}`;
-            if (seen.has(dedupeKey)) continue;
-            seen.add(dedupeKey);
-            list.push({ label, code });
-          }
-        } else {
-          // Fallback for mech with no build codes
-          const label = `${doc.variant} | ${baseLabel}`;
-          const dedupeKey = `${label}::`;
-          if (!seen.has(dedupeKey)) {
-            seen.add(dedupeKey);
-            list.push({ label, code: "" });
-          }
-        }
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        list.push({ label, code: preferredCode });
       }
 
       map.set(chassisKey, list);
@@ -999,7 +968,13 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   useEffect(() => {
     if (!templatesForSelection.length) return;
     const exists = templatesForSelection.some((template) => template.id === selectedTemplateId);
-    if (!exists) setSelectedTemplateId(templatesForSelection[0].id);
+    if (!exists) {
+      if (localOnlyTemplateIdsRef.current.has(selectedTemplateId)) {
+        // Local-only template not yet in templatesForSelection - don't clobber
+        return;
+      }
+      setSelectedTemplateId(templatesForSelection[0].id);
+    }
   }, [templatesForSelection, selectedTemplateId]);
 
   const activeTemplate =
@@ -1228,19 +1203,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   };
 
   const persistQuickslots = async (entries: QuickslotEntry[]) => {
-    const sorted = sortQuickslots(entries).slice(0, 5);
+    const sorted = sortQuickslots(entries);
     setQuickslots(sorted);
     setQuickslotSaving(true);
     try {
-      console.log("Saving quickslots:", sorted);
       const saved = await saveQuickslots({ id: quickslotId, slots: sorted });
-      console.log("Quickslots saved successfully:", saved);
       setQuickslotId(saved.id || quickslotId);
       setQuickslots(sortQuickslots(saved.slots || []));
       setDeckError("");
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Failed to save quickslots";
-      console.error("Quickslots save failed:", errorMsg, err);
+      setDeckError(errorMsg);
       setDeckError(errorMsg);
     } finally {
       setQuickslotSaving(false);
@@ -1424,6 +1397,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         const savedTemplate = toTemplate(savedDoc);
         syncedSignaturesRef.current.set(savedTemplate.id, templateSignature(savedTemplate));
         syncedTemplatesRef.current.set(savedTemplate.id, savedTemplate);
+        const wasLocalOnly = localOnlyTemplateIdsRef.current.has(dirtyTemplate.id);
+        localOnlyTemplateIdsRef.current.delete(dirtyTemplate.id);
 
         if (savedTemplate.id !== dirtyTemplate.id) {
           syncedSignaturesRef.current.delete(dirtyTemplate.id);
@@ -1432,6 +1407,14 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
           if (selectedTemplateId === dirtyTemplate.id) {
             setSelectedTemplateId(savedTemplate.id);
           }
+        }
+
+        // If this was a local-only template, now persist the quickslot assignment server-side
+        if (wasLocalOnly) {
+          const updatedQuickslots = quickslots.map(
+            (qs) => qs.deckId === dirtyTemplate.id ? { ...qs, deckId: savedTemplate.id } : qs
+          );
+          void persistQuickslots(updatedQuickslots);
         }
 
         setTemplates((previous) =>
@@ -1499,8 +1482,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
         syncedSignaturesRef.current = nextSignatures;
         syncedTemplatesRef.current = new Map(mapped.map((template) => [template.id, template]));
-        setTemplates(mapped);
-        setSelectedTemplateId((previous) => (mapped.some((template) => template.id === previous) ? previous : mapped[0]?.id ?? ""));
+        // Preserve local-only templates (fresh decks not yet saved to server)
+        setTemplates((previous) => {
+          const localOnly = previous.filter(t => localOnlyTemplateIdsRef.current.has(t.id));
+          return [...mapped, ...localOnly];
+        });
+        setSelectedTemplateId((previous) => {
+          // Keep selection if it's still on server OR is a local-only (unsaved) template
+          if (mapped.some((template) => template.id === previous)) return previous;
+          if (localOnlyTemplateIdsRef.current.has(previous)) return previous;
+          return mapped[0]?.id ?? "";
+        });
       } catch {
         // Keep stale data on screen until the next successful poll.
       }
@@ -1976,23 +1968,20 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           onChange={(event) => {
                             const value = String(event.target.value);
                             if (value === "__new__") {
-                              // Create and immediately assign fresh deck in one batched operation
+                              // Create fresh deck locally only - do NOT persist the quickslot yet
+                              // (server rejects decks with < 5 filled slots; quickslot will be saved
+                              // by the autosave after the deck is filled and saved to the server)
                               const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", templatesForSelection.length + 1);
-                              console.log("Creating fresh template:", fresh.id, "for slot:", entry.slot);
                               
-                              // Build the quickslot assignment for this fresh deck
+                              // Build the local quickslot assignment for this fresh deck
                               const rest = quickslots.filter((qslot) => !(qslot.map === selectedMap && qslot.slot === entry.slot));
                               const newQuickslots = [...rest, { map: selectedMap, slot: entry.slot, deckId: fresh.id }];
                               
-                              // All updates batched together
+                              // Track as local-only so polls don't drop it
+                              localOnlyTemplateIdsRef.current.add(fresh.id);
                               setTemplates((previous) => [...previous, fresh]);
                               setSelectedTemplateId(fresh.id);
                               setQuickslots(sortQuickslots(newQuickslots));
-                              
-                              // Now save to server
-                              persistQuickslots(newQuickslots).catch(err => {
-                                console.error("Failed to persist fresh deck quickslot:", err);
-                              });
                               return;
                             }
                             const alreadyAssigned = fixedMapQuickslots.some((slotEntry) => slotEntry.slot !== entry.slot && slotEntry.deckId === value);
@@ -2000,10 +1989,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               setDeckError("That deck is already assigned to another quickslot for this map.");
                               return;
                             }
-                            console.log("Assigning deck:", value, "to slot:", entry.slot);
-                            setQuickslotDeck(entry.slot, value || undefined).catch(err => {
-                              console.error("Failed to assign quickslot:", err);
-                            });
+                            setQuickslotDeck(entry.slot, value || undefined).catch(() => {});
                             if (value) setSelectedTemplateId(value);
                           }}
                         >
@@ -2252,12 +2238,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 ? [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])]
                                 : [...(buildOptionsByChassis.get(normalizedChassis) ?? [])];
 
-                              if (normalizedVariant) {
-                                console.log(`[buildOptions] Row ${row.slot}: normalized="${normalizedChassis}|${normalizedVariant}", got ${options.length} options from pair`);
-                              } else {
-                                console.log(`[buildOptions] Row ${row.slot}: normalized="${normalizedChassis}", got ${options.length} options from chassis`);
-                              }
-
                               if (!options.length && mech?.buildCodes) {
                                 const seen = new Set(options.map((option) => `${option.label}::${option.code}`));
                                 for (const { key, code, label } of getBuildCodeEntries(mech.buildCodes)) {
@@ -2266,7 +2246,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   seen.add(dedupeKey);
                                   options.push({ label: `${key}: ${label}`, code });
                                 }
-                                console.log(`[buildOptions] Added ${options.length} fallback options from mech.buildCodes`);
                               }
 
                               return options;
@@ -2459,8 +2438,24 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                         if (!option) return entry;
                                         const nextBuildCode = option.code.trim();
                                         if ((entry.weaponry ?? "") === option.label && (entry.buildCode ?? "") === nextBuildCode) return entry;
+                                        
+                                        // When selecting a build, also find and set the mech ID
+                                        let nextMechId = entry.mech;
+                                        if (rowChassis && rowVariant) {
+                                          const key = getPairLookupKey(rowChassis, rowVariant);
+                                          const docsForPair = mechsByNormalizedPair.get(key);
+                                          if (docsForPair && docsForPair.length > 0) {
+                                            // Find the mech that matches this build's weaponry
+                                            const matchingMech = docsForPair.find(doc => doc.weaponry?.trim() === option.label);
+                                            if (matchingMech) {
+                                              nextMechId = matchingMech.id;
+                                            }
+                                          }
+                                        }
+                                        
                                         return {
                                           ...entry,
+                                          mech: nextMechId,
                                           weaponry: option.label,
                                           buildCode: nextBuildCode,
                                         };

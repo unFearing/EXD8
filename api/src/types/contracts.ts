@@ -134,7 +134,7 @@ export const quickslotEntrySchema = z.object({
 
 export const quickslotDocSchema = z.object({
   id: z.string().min(1),
-  slots: z.array(quickslotEntrySchema).max(5),
+  slots: z.array(quickslotEntrySchema).max(25),
   updatedAt: z.string().datetime(),
   updatedBy: z.string().min(1),
   schemaVersion: z.literal("1.0.0"),
@@ -143,7 +143,7 @@ export const quickslotDocSchema = z.object({
 
 export const quickslotUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
-  slots: z.array(quickslotEntrySchema).max(5),
+  slots: z.array(quickslotEntrySchema).max(25),
 });
 
 export const mapConfigDocSchema = z.object({
