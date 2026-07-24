@@ -1190,12 +1190,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     setQuickslots(sorted);
     setQuickslotSaving(true);
     try {
+      console.log("Saving quickslots:", sorted);
       const saved = await saveQuickslots({ id: quickslotId, slots: sorted });
+      console.log("Quickslots saved successfully:", saved);
       setQuickslotId(saved.id || quickslotId);
       setQuickslots(sortQuickslots(saved.slots || []));
       setDeckError("");
     } catch (err: unknown) {
-      setDeckError(err instanceof Error ? err.message : "Failed to save quickslots");
+      const errorMsg = err instanceof Error ? err.message : "Failed to save quickslots";
+      console.error("Quickslots save failed:", errorMsg, err);
+      setDeckError(errorMsg);
     } finally {
       setQuickslotSaving(false);
     }
@@ -1932,6 +1936,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             if (value === "__new__") {
                               // Create and immediately assign fresh deck in one batched operation
                               const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", templatesForSelection.length + 1);
+                              console.log("Creating fresh template:", fresh.id, "for slot:", entry.slot);
                               
                               // Build the quickslot assignment for this fresh deck
                               const rest = quickslots.filter((qslot) => !(qslot.map === selectedMap && qslot.slot === entry.slot));
@@ -1943,7 +1948,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               setQuickslots(sortQuickslots(newQuickslots));
                               
                               // Now save to server
-                              void persistQuickslots(newQuickslots);
+                              persistQuickslots(newQuickslots).catch(err => {
+                                console.error("Failed to persist fresh deck quickslot:", err);
+                              });
                               return;
                             }
                             const alreadyAssigned = fixedMapQuickslots.some((slotEntry) => slotEntry.slot !== entry.slot && slotEntry.deckId === value);
@@ -1951,7 +1958,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               setDeckError("That deck is already assigned to another quickslot for this map.");
                               return;
                             }
-                            setQuickslotDeck(entry.slot, value || undefined);
+                            console.log("Assigning deck:", value, "to slot:", entry.slot);
+                            setQuickslotDeck(entry.slot, value || undefined).catch(err => {
+                              console.error("Failed to assign quickslot:", err);
+                            });
                             if (value) setSelectedTemplateId(value);
                           }}
                         >
