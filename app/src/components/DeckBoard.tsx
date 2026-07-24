@@ -816,12 +816,29 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const seen = new Set<string>();
       const options: Array<{ label: string; code: string }> = [];
       for (const doc of docs) {
-        const preferredCode = getPreferredBuildCode(doc.buildCodes);
-        const label = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
-        const dedupeKey = `${label}::${preferredCode}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-        options.push({ label, code: preferredCode });
+        // Include all build codes for this mech, not just the preferred one
+        const buildEntries = getBuildCodeEntries(doc.buildCodes);
+        const baseLabel = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
+        
+        if (buildEntries.length > 0) {
+          // Add each build code as a separate option
+          for (const { key: buildKey, code } of buildEntries) {
+            const label = buildEntries.length === 1 
+              ? baseLabel 
+              : `${baseLabel} [${buildKey}]`;
+            const dedupeKey = `${label}::${code}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            options.push({ label, code });
+          }
+        } else {
+          // Fallback for mech with no build codes
+          const dedupeKey = `${baseLabel}::`;
+          if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey);
+            options.push({ label: baseLabel, code: "" });
+          }
+        }
       }
       map.set(key, options);
     }
@@ -836,13 +853,28 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       const seen = new Set(list.map((entry) => `${entry.label}::${entry.code}`));
 
       for (const doc of docs) {
-        const preferredCode = getPreferredBuildCode(doc.buildCodes);
-        const buildLabel = doc.weaponry?.trim() || doc.variant;
-        const label = `${doc.variant} | ${buildLabel}`;
-        const dedupeKey = `${label}::${preferredCode}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-        list.push({ label, code: preferredCode });
+        // Include all build codes for this mech, not just the preferred one
+        const buildEntries = getBuildCodeEntries(doc.buildCodes);
+        const baseLabel = doc.weaponry?.trim() || doc.variant;
+        
+        if (buildEntries.length > 0) {
+          // Add each build code as a separate option
+          for (const { key: buildKey, code } of buildEntries) {
+            const label = `${doc.variant} | ${baseLabel}${buildEntries.length === 1 ? '' : ` [${buildKey}]`}`;
+            const dedupeKey = `${label}::${code}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+            list.push({ label, code });
+          }
+        } else {
+          // Fallback for mech with no build codes
+          const label = `${doc.variant} | ${baseLabel}`;
+          const dedupeKey = `${label}::`;
+          if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey);
+            list.push({ label, code: "" });
+          }
+        }
       }
 
       map.set(chassisKey, list);
