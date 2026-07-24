@@ -107,6 +107,9 @@ export function RepositoryView({
   const editMode = viewMode;
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
+  const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
+  const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
+  const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
   const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
   const [parserReview, setParserReview] = useState<ParserReviewState | null>(null);
@@ -266,18 +269,48 @@ export function RepositoryView({
     }
 
     const description = (descriptionDrafts[id] ?? source.description ?? "").trim();
+    const weaponry = (weaponryDrafts[id] ?? source.weaponry ?? "").trim();
+    const skillCode = (skillCodeDrafts[id] ?? source.skillCode ?? "").trim();
+    const buildCodes = buildCodesDrafts[id] ?? source.buildCodes ?? {};
 
     try {
       setSavingMechId(id);
       const saved = await updateMech(id, {
         ...source,
         description,
+        weaponry,
+        skillCode,
+        buildCodes,
       });
       setMechsById((previous) => ({
         ...previous,
         [saved.id]: saved,
       }));
       setDescriptionDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setWeaponryDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setSkillCodeDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setBuildCodesDrafts((previous) => {
         if (!(id in previous)) {
           return previous;
         }
@@ -856,28 +889,86 @@ export function RepositoryView({
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Weaponry
                                         </Typography>
-                                        <Typography sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, whiteSpace: "pre-wrap" }}>
-                                          {(sourceBuild?.weaponry ?? "").trim() || "Not specified."}
-                                        </Typography>
-                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                                        {editMode === "edit" && canManageBuilds ? (
+                                          <TextField
+                                            multiline
+                                            minRows={3}
+                                            fullWidth
+                                            size="small"
+                                            value={weaponryDrafts[build.id] ?? sourceBuild?.weaponry ?? ""}
+                                            onChange={(event) => {
+                                              const next = event.target.value;
+                                              setWeaponryDrafts((previous) => ({
+                                                ...previous,
+                                                [build.id]: next,
+                                              }));
+                                            }}
+                                            sx={{ mt: 0.7 }}
+                                          />
+                                        ) : (
+                                          <Typography sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, whiteSpace: "pre-wrap" }}>
+                                            {(sourceBuild?.weaponry ?? "").trim() || "Not specified."}
+                                          </Typography>
+                                        )}
+                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em", mt: 1.2 }}>
                                           Codes
                                         </Typography>
-                                        <Stack spacing={0.4} sx={{ mt: 0.65 }}>
-                                          <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                            Skill Code: {(sourceBuild?.skillCode ?? "").trim() || "-"}
-                                          </Typography>
-                                          {buildCodes.length ? (
-                                            buildCodes.map(([codeType, codeValue]) => (
-                                              <Typography key={codeType} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
-                                                {codeType}: {codeValue}
-                                              </Typography>
-                                            ))
-                                          ) : (
+                                        {editMode === "edit" && canManageBuilds ? (
+                                          <Stack spacing={0.6} sx={{ mt: 0.7 }}>
+                                            <TextField
+                                              label="Skill Code"
+                                              size="small"
+                                              fullWidth
+                                              value={skillCodeDrafts[build.id] ?? sourceBuild?.skillCode ?? ""}
+                                              onChange={(event) => {
+                                                const next = event.target.value;
+                                                setSkillCodeDrafts((previous) => ({
+                                                  ...previous,
+                                                  [build.id]: next,
+                                                }));
+                                              }}
+                                            />
+                                            <TextField
+                                              label="Build Codes (key: value per line)"
+                                              multiline
+                                              minRows={2}
+                                              size="small"
+                                              fullWidth
+                                              value={(buildCodesDrafts[build.id] ? Object.entries(buildCodesDrafts[build.id]).map(([k, v]) => `${k}: ${v}`).join("\n") : Object.entries(sourceBuild?.buildCodes ?? {}).map(([k, v]) => `${k}: ${v}`).join("\n"))}
+                                              onChange={(event) => {
+                                                const value = event.target.value;
+                                                const codes: Record<string, string> = {};
+                                                value.split("\n").forEach((line) => {
+                                                  const [key, ...valueParts] = line.split(":");
+                                                  if (key.trim() && valueParts.length) {
+                                                    codes[key.trim()] = valueParts.join(":").trim();
+                                                  }
+                                                });
+                                                setBuildCodesDrafts((previous) => ({
+                                                  ...previous,
+                                                  [build.id]: codes,
+                                                }));
+                                              }}
+                                            />
+                                          </Stack>
+                                        ) : (
+                                          <Stack spacing={0.4} sx={{ mt: 0.65 }}>
                                             <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                              No build codes listed.
+                                              Skill Code: {(sourceBuild?.skillCode ?? "").trim() || "-"}
                                             </Typography>
-                                          )}
-                                        </Stack>
+                                            {buildCodes.length ? (
+                                              buildCodes.map(([codeType, codeValue]) => (
+                                                <Typography key={codeType} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
+                                                  {codeType}: {codeValue}
+                                                </Typography>
+                                              ))
+                                            ) : (
+                                              <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                                No build codes listed.
+                                              </Typography>
+                                            )}
+                                          </Stack>
+                                        )}
                                       </Box>
                                     </Box>
 
