@@ -1189,6 +1189,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         : templates.find((template) => template.id === deckId);
     if (!localTemplate) return deckId;
 
+    // For fresh/empty decks, allow assigning to quickslot without requiring filled slots
+    // The 5-slot minimum will be enforced by autosave later
+    if (countFilledSlots(localTemplate) === 0) {
+      return deckId;
+    }
+
     if (countFilledSlots(localTemplate) < MIN_FILLED_SLOTS_TO_SAVE) {
       setDeckError(`Deck must have at least ${MIN_FILLED_SLOTS_TO_SAVE} filled slots before saving.`);
       return undefined;
