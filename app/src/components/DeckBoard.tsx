@@ -1229,15 +1229,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     localTemplateOverride?: DeckTemplate,
   ) => {
     try {
-      // For fresh/empty decks, just update the local state without trying to persist to server
-      const localTemplate =
-        localTemplateOverride?.id === deckId
-          ? localTemplateOverride
-          : templates.find((template) => template.id === deckId);
-      
-      if (localTemplate && countFilledSlots(localTemplate) === 0) {
-        // Empty deck: just select it locally, don't save to quickslots yet
-        setSelectedTemplateId(localTemplate.id);
+      // Handle fresh deck creation locally only
+      if (deckId === "__new__") {
+        const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", templatesForSelection.length + 1);
+        setTemplates((previous) => [...previous, fresh]);
+        setSelectedTemplateId(fresh.id);
         setDeckError("");
         return;
       }
