@@ -19,10 +19,8 @@ export default defineConfig({
     },
   ],
 
-  webServer: {
-    command: "npm run dev",
-    cwd: "./app",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
+  // Note: Requires manual setup before running tests:
+  // 1. In one terminal: cd api && npm run build && func start (or ./dev-local.sh)
+  // 2. In another terminal: cd app && npm run dev
+  // Then run: npx playwright test
 });
