@@ -1178,33 +1178,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
   const ensureDeckIdForQuickslot = async (
     deckId?: string,
-    localTemplateOverride?: DeckTemplate,
   ): Promise<string | undefined> => {
     if (!deckId) return undefined;
-    if (isUuid(deckId)) return deckId;
-
-    const localTemplate =
-      localTemplateOverride?.id === deckId
-        ? localTemplateOverride
-        : templates.find((template) => template.id === deckId);
-    if (!localTemplate) return deckId;
-
-    if (countFilledSlots(localTemplate) < MIN_FILLED_SLOTS_TO_SAVE) {
-      setDeckError(`Deck must have at least ${MIN_FILLED_SLOTS_TO_SAVE} filled slots before saving.`);
-      return undefined;
-    }
-
-    const savedDoc = await saveDropDeck(toDropDeckUpsertInput(localTemplate));
-    const savedTemplate = toTemplate(savedDoc);
-    syncedSignaturesRef.current.set(savedTemplate.id, templateSignature(savedTemplate));
-    syncedTemplatesRef.current.set(savedTemplate.id, savedTemplate);
-    setTemplates((previous) =>
-      previous.map((template) => (template.id === localTemplate.id ? savedTemplate : template)),
-    );
-    if (selectedTemplateId === localTemplate.id) {
-      setSelectedTemplateId(savedTemplate.id);
-    }
-    return savedTemplate.id;
+    // Just return the ID - it's a UUID, same whether saved or local
+    // Autosave will handle persistence when 5+ slots are filled
+    return deckId;
   };
 
   const persistQuickslots = async (entries: QuickslotEntry[]) => {
@@ -1226,19 +1204,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const setQuickslotDeck = async (
     slot: QuickslotKey,
     deckId?: string,
-    localTemplateOverride?: DeckTemplate,
   ) => {
     try {
-      // Handle fresh deck creation locally only
-      if (deckId === "__new__") {
-        const fresh = createTemplate(selectedMap, activeTemplate?.side ?? "either", templatesForSelection.length + 1);
-        setTemplates((previous) => [...previous, fresh]);
-        setSelectedTemplateId(fresh.id);
-        setDeckError("");
-        return;
-      }
-
-      const resolvedDeckId = await ensureDeckIdForQuickslot(deckId, localTemplateOverride);
+      const resolvedDeckId = await ensureDeckIdForQuickslot(deckId);
       if (resolvedDeckId) {
         const duplicate = quickslots.some(
           (entry) => entry.map === selectedMap && entry.slot !== slot && entry.deckId === resolvedDeckId,
@@ -1301,7 +1269,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     setSelectedTemplateId(duplicate.id);
     const nextOpenQuickslot = fixedMapQuickslots.find((entry) => !entry.deckId)?.slot;
     if (nextOpenQuickslot) {
-      void setQuickslotDeck(nextOpenQuickslot, duplicate.id, duplicate);
+      void setQuickslotDeck(nextOpenQuickslot, duplicate.id);
     }
     setDeckError("");
   };
