@@ -241,7 +241,6 @@ const DECK_POLL_INTERVAL_MS = 10000;
 const MIN_FILLED_SLOTS_TO_SAVE = 5;
 const TEXT_INPUT_AUTOSAVE_DELAY_MS = 450;
 const QUICKSLOT_KEYS: QuickslotKey[] = ["A", "B", "C", "D", "E"];
-const MAX_VISIBLE_DECKS_PER_MAP = 3;
 const DEFAULT_MAPROOM_URL = "https://maps.mwocomp.com/mwo2?room=IvLEFS2M7dVmsG";
 const CS26_MIN_TONNAGE = 300;
 const LIVE_EDITOR_WINDOW_MS = 60000;
@@ -951,7 +950,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   );
 
   const mapQuickslots = useMemo(
-    () => fixedMapQuickslots.filter((entry) => entry.deckId).slice(0, MAX_VISIBLE_DECKS_PER_MAP),
+    () => fixedMapQuickslots.filter((entry) => entry.deckId),
     [fixedMapQuickslots],
   );
 
