@@ -201,13 +201,16 @@ export async function getMatchNightById(id: string, teamId: string): Promise<Mat
 export async function listDropDecks(): Promise<DropDeckDoc[]> {
   const container = getMatchNightsContainer();
   const { resources } = await container.items
-    .query<DropDeckDoc>({
-      query: "SELECT * FROM c WHERE c.docType = @docType AND c.comp = @comp ORDER BY c.updatedAt DESC",
-      parameters: [
-        { name: "@docType", value: "dropDeck" },
-        { name: "@comp", value: DROP_DECK_COMP },
-      ],
-    })
+    .query<DropDeckDoc>(
+      {
+        query: "SELECT * FROM c WHERE c.docType = @docType AND c.comp = @comp ORDER BY c.updatedAt DESC",
+        parameters: [
+          { name: "@docType", value: "dropDeck" },
+          { name: "@comp", value: DROP_DECK_COMP },
+        ],
+      },
+      { maxItemCount: -1 }, // -1 means unlimited (no page size limit)
+    )
     .fetchAll();
 
   return resources;
