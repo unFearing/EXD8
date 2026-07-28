@@ -325,8 +325,8 @@ async function computePublicNavAlphaExportCode(sharedBuild: NavAlphaSharedBuild,
     code += ":";
   }
 
-  const componentOrder = ["ct", "lt", "rt", "la", "ra", "ll", "rl", "hd"] as const;
-  const separators = ["s", "r", "t", "q", "u", "v", "w", "p"] as const;
+  const componentOrder = ["ct", "rt", "lt", "la", "ra", "ll", "rl", "hd"] as const;
+  const separators = ["p", "q", "r", "s", "t", "u", "v", "w"] as const;
   const itemsByComponent = mergedLoadout.items ?? {};
   const armorByComponent = mergedLoadout.armor ?? {};
   const omnipodsByComponent = mergedLoadout.omnipods ?? {};
