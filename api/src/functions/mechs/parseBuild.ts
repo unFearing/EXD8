@@ -325,8 +325,8 @@ async function computePublicNavAlphaExportCode(sharedBuild: NavAlphaSharedBuild,
     code += ":";
   }
 
-  const componentOrder = ["hd", "la", "lt", "ct", "rt", "ra", "ll", "rl"] as const;
-  const separators = ["p", "q", "r", "s", "t", "u", "v", "w"] as const;
+  const componentOrder = ["ct", "lt", "rt", "la", "ra", "ll", "rl", "hd"] as const;
+  const separators = ["s", "r", "t", "q", "u", "v", "w", "p"] as const;
   const itemsByComponent = mergedLoadout.items ?? {};
   const armorByComponent = mergedLoadout.armor ?? {};
   const omnipodsByComponent = mergedLoadout.omnipods ?? {};
@@ -1135,7 +1135,9 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.quirks.length) {
           result.metadata.extractedQuirkLines = parsed.quirks.length;
         }
-        if (parsed?.exportCode) {
+        // Only use rendered export code if we don't have one from public NAV-Alpha yet
+        // HTML-based extraction can be corrupted by CSS rendering or reordering
+        if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
             export: parsed.exportCode,
@@ -1163,7 +1165,9 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           result.draft.equipment = parsed.equipment;
           result.metadata.extractedEquipmentLines = parsed.equipment.length;
         }
-        if (parsed?.exportCode) {
+        // Only use API export code if we don't have one from public NAV-Alpha
+        // Public computed export is more authoritative than API-extracted export
+        if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
             export: parsed.exportCode,
