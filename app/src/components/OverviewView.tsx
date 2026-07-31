@@ -7,7 +7,9 @@ import {
   Checkbox,
   Container,
   FormControlLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Tab,
   Tabs,
@@ -25,9 +27,9 @@ import CircleIcon from "@mui/icons-material/Circle";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import DownloadIcon from "@mui/icons-material/Download";
 import LightModeIcon from "@mui/icons-material/LightMode";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import { useNavigate } from "react-router-dom";
 import { getDropDecks, getQuickslots } from "../api/client";
+import { CS26_COMPETITION } from "../constants/competition";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import type { DeckRowDoc, DropDeckDoc, QuickslotEntry } from "../types/contracts";
 
@@ -64,7 +66,11 @@ type PilotAssignment = {
   isAlternate: boolean;
   mechLabel: string;
   hasRepositoryData: boolean;
-  repositoryUrl: string;
+};
+
+type MapDeckColumn = {
+  map: string;
+  decks: DeckColumn[];
 };
 
 const PILOT_OPTIONS = [
@@ -87,9 +93,10 @@ const PILOT_OPTIONS = [
   "Awes",
 ];
 
-const MATRIX_PRIMARY_COL_WIDTH = 140;
-const MATRIX_ALT_COL_WIDTH = 140;
-const MATRIX_ACTIONS_COL_WIDTH = 180;
+const MATRIX_PRIMARY_COL_WIDTH = 110;
+const MATRIX_ALT_COL_WIDTH = 110;
+const MATRIX_STATUS_COL_WIDTH = 130;
+const MATRIX_PACK_COL_WIDTH = 54;
 
 function normalizeDeckSide(side: DropDeckDoc["side"]): TeamSide {
   if (side === "Team 1") return "1";
@@ -104,12 +111,26 @@ function sideLabel(side: TeamSide): string {
   return "Either";
 }
 
-function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function normalizeChassisName(value: string): string {
   return value.trim().toLowerCase().replace(/^clan\s+/, "").replace(/^inner sphere\s+/, "");
+}
+
+function configuredVariantCode(variants: string[]): string {
+  const codedVariants = variants.map((variant) => variant.trim()).filter((variant) => variant.includes("-"));
+  if (!codedVariants.length) return "";
+
+  let prefix = codedVariants[0];
+  for (const variant of codedVariants.slice(1)) {
+    while (prefix && !variant.startsWith(prefix)) prefix = prefix.slice(0, -1);
+  }
+  const code = prefix.replace(/-+$/, "");
+  return code.length >= 2 ? code : "";
+}
+
+function localDateForFilename(date: Date): string {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${month}-${day}-${date.getFullYear()}`;
 }
 
 function mechLabelForRow(row: DeckRowDoc, chassisCodeByName: Record<string, string>): string {
@@ -121,10 +142,7 @@ function mechLabelForRow(row: DeckRowDoc, chassisCodeByName: Record<string, stri
     const configCode = chassisCodeByName[normalizeChassisName(chassis)];
     if (configCode?.trim()) return configCode.trim();
 
-    const normalized = chassis.replace(/[^a-zA-Z0-9\s-]/g, " ").trim();
-    const firstToken = normalized.split(/\s+/)[0] ?? "";
-    if (firstToken.length <= 4) return firstToken.toUpperCase();
-    return firstToken.slice(0, 3).toUpperCase();
+    return chassis;
   }
 
   if (row.weaponry?.trim()) return row.weaponry.trim();
@@ -138,18 +156,6 @@ function hasRepositoryDataForRow(row: DeckRowDoc): boolean {
     row.skillTree?.trim() ||
     row.weaponry?.trim(),
   );
-}
-
-function repositoryUrlForRow(row: DeckRowDoc): string {
-  const params = new URLSearchParams();
-  params.set("view", "view");
-  if (row.mech && isUuid(row.mech)) {
-    params.set("focusMechId", row.mech);
-  } else {
-    if (row.chassis) params.set("focusChassis", row.chassis);
-    if (row.variant) params.set("focusVariant", row.variant);
-  }
-  return `/repository?${params.toString()}`;
 }
 
 function getDeckColumns(docs: DropDeckDoc[], quickslots: QuickslotEntry[]): DeckColumn[] {
@@ -197,7 +203,7 @@ function getDeckColumns(docs: DropDeckDoc[], quickslots: QuickslotEntry[]): Deck
       for (const tech of Object.values(parsed.mechs ?? {})) {
         for (const byClass of Object.values(tech ?? {})) {
           for (const chassis of Object.values(byClass ?? {})) {
-            const code = (chassis.chassis_code ?? "").trim();
+            const code = (chassis.chassis_code ?? "").trim() || configuredVariantCode(chassis.variants ?? []);
             if (!code) continue;
             chassisCodeByName[normalizeChassisName(chassis.chassis_name)] = code;
           }
@@ -227,9 +233,8 @@ export function OverviewView({
   const [quickslots, setQuickslots] = useState<QuickslotEntry[]>([]);
   const [chassisCodeByName, setChassisCodeByName] = useState<Record<string, string>>({});
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
-  const [presentPilots, setPresentPilots] = useState<Set<string>>(new Set());
+  const [slottedPilots, setSlottedPilots] = useState<Record<string, string>>({});
   const [showAssignedOnly, setShowAssignedOnly] = useState(true);
-  const [showPresentOnly, setShowPresentOnly] = useState(true);
 
   void hasRole;
   void viewMode;
@@ -311,18 +316,22 @@ export function OverviewView({
     [deckColumns, selectedDeckIds],
   );
 
-  const quickslotDeckIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          quickslots
-            .map((entry) => entry.deckId)
-            .filter((deckId): deckId is string => Boolean(deckId))
-            .filter((deckId) => deckColumns.some((column) => column.id === deckId)),
-        ),
-      ),
-    [deckColumns, quickslots],
-  );
+  const mapSelectorColumns = useMemo<MapDeckColumn[]>(() => (
+    CS26_COMPETITION.majorTabs.map((map) => ({
+      map,
+      decks: quickslots
+        .filter((entry) => entry.map === map && entry.deckId)
+        .sort((left, right) => left.slot.localeCompare(right.slot))
+        .map((entry) => deckColumns.find((deck) => deck.id === entry.deckId))
+        .filter((deck): deck is DeckColumn => Boolean(deck)),
+    }))
+  ), [deckColumns, quickslots]);
+
+  const selectedMapColumns = useMemo<MapDeckColumn[]>(() => (
+    CS26_COMPETITION.majorTabs
+      .map((map) => ({ map, decks: selectedDeckColumns.filter((deck) => deck.map === map) }))
+      .filter((column) => column.decks.length > 0)
+  ), [selectedDeckColumns]);
 
   const allPilots = useMemo(() => {
     const seen = new Set<string>();
@@ -352,16 +361,6 @@ export function OverviewView({
     return ordered;
   }, [selectedDeckColumns]);
 
-  useEffect(() => {
-    if (!allPilots.length || presentPilots.size > 0) return;
-    setPresentPilots(new Set(allPilots));
-  }, [allPilots, presentPilots.size]);
-
-  const presentPilotList = useMemo(
-    () => allPilots.filter((pilot) => presentPilots.has(pilot)),
-    [allPilots, presentPilots],
-  );
-
   const getPilotAssignments = (pilot: string): PilotAssignment[] => {
     const assignments: PilotAssignment[] = [];
 
@@ -378,7 +377,6 @@ export function OverviewView({
           isAlternate,
           mechLabel: mechLabelForRow(row, chassisCodeByName),
           hasRepositoryData: hasRepositoryDataForRow(row),
-          repositoryUrl: repositoryUrlForRow(row),
         });
       }
     }
@@ -395,27 +393,14 @@ export function OverviewView({
   }, [allPilots, chassisCodeByName, selectedDeckColumns]);
 
   const visiblePilotList = useMemo(() => {
-    const source = showPresentOnly ? presentPilotList : allPilots;
-    if (!showAssignedOnly) return source;
-    return source.filter((pilot) => (assignmentsByPilot.get(pilot)?.length ?? 0) > 0);
-  }, [allPilots, assignmentsByPilot, presentPilotList, showAssignedOnly, showPresentOnly]);
+    if (!showAssignedOnly) return allPilots;
+    return allPilots.filter((pilot) => (assignmentsByPilot.get(pilot)?.length ?? 0) > 0);
+  }, [allPilots, assignmentsByPilot, showAssignedOnly]);
 
   const totalAssignments = useMemo(
     () => visiblePilotList.reduce((sum, pilot) => sum + (assignmentsByPilot.get(pilot)?.length ?? 0), 0),
     [assignmentsByPilot, visiblePilotList],
   );
-
-  const togglePilotPresence = (pilot: string) => {
-    setPresentPilots((previous) => {
-      const next = new Set(previous);
-      if (next.has(pilot)) {
-        next.delete(pilot);
-      } else {
-        next.add(pilot);
-      }
-      return next;
-    });
-  };
 
   const toggleDeckInMatrix = (deckId: string) => {
     setSelectedDeckIds((previous) => {
@@ -432,7 +417,7 @@ export function OverviewView({
       `Pilot: ${pilot}`,
       `Generated: ${new Date().toLocaleString()}`,
       "",
-      "Night Build Pack",
+      "Build Pack",
       "",
     ];
 
@@ -460,7 +445,7 @@ export function OverviewView({
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${pilot.replace(/\s+/g, "-").toLowerCase()}-night-builds.txt`;
+    anchor.download = `${pilot.replace(/\s+/g, "-").toLowerCase()}-builds-${localDateForFilename(new Date())}.txt`;
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
@@ -471,6 +456,8 @@ export function OverviewView({
     <Box
       sx={{
         minHeight: "100vh",
+        maxWidth: "100vw",
+        overflowX: "hidden",
         background:
           isLight
             ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
@@ -593,140 +580,140 @@ export function OverviewView({
         </Box>
       </AppBar>
 
-      <Container maxWidth={false} sx={{ px: { xs: 1.5, md: 2.5 }, pt: 1.7 }}>
-        <Stack spacing={1.2}>
+      <Container maxWidth={false} sx={{ width: "100%", maxWidth: "100%", minWidth: 0, px: { xs: 1.5, md: 2.5 }, pt: 1.7 }}>
+        <Stack spacing={1.2} sx={{ minWidth: 0 }}>
           {error && <Alert severity="error">{error}</Alert>}
           {loading && <Alert severity="info">Loading overview...</Alert>}
 
           <Paper
             sx={{
-              p: 1.2,
+              px: 1.2,
+              py: 0.8,
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
               background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
             }}
           >
-            <Stack spacing={1.2}>
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ justifyContent: "space-between", alignItems: { xs: "flex-start", md: "center" } }}>
-                <Box>
-                  <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>
-                    Night Overview
+            <Stack spacing={0.55}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={0.7} sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}>
+                <Stack direction="row" spacing={1} sx={{ alignItems: "baseline", flexWrap: "wrap" }}>
+                  <Typography sx={{ color: isLight ? "#2f3f59" : "#eff4ff", fontWeight: 700 }}>Night Overview</Typography>
+                  <Typography variant="caption" sx={{ color: isLight ? "#5f7394" : "#aec2ee", fontWeight: 700 }}>
+                    {visiblePilotList.length} pilots · {selectedDeckColumns.length} decks · {totalAssignments} assignments
                   </Typography>
-                  <Typography variant="body2" sx={{ color: isLight ? "#5f7394" : "#aec2ee" }}>
-                    Cross-match who is present with tonight's deck plan, then open or export each pilot's build pack.
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={0.8} sx={{ flexWrap: "wrap" }}>
-                  <Box sx={{ px: 1, py: 0.6, borderRadius: 1, border: isLight ? "1px solid rgba(122, 143, 174, 0.3)" : "1px solid rgba(120, 146, 210, 0.3)" }}>
-                    <Typography variant="caption" sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700 }}>
-                      Present: {presentPilots.size}/{allPilots.length}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ px: 1, py: 0.6, borderRadius: 1, border: isLight ? "1px solid rgba(122, 143, 174, 0.3)" : "1px solid rgba(120, 146, 210, 0.3)" }}>
-                    <Typography variant="caption" sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700 }}>
-                      Deck Columns: {selectedDeckColumns.length}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ px: 1, py: 0.6, borderRadius: 1, border: isLight ? "1px solid rgba(122, 143, 174, 0.3)" : "1px solid rgba(120, 146, 210, 0.3)" }}>
-                    <Typography variant="caption" sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700 }}>
-                      Assignments: {totalAssignments}
-                    </Typography>
-                  </Box>
                 </Stack>
-              </Stack>
-
-              <Stack direction={{ xs: "column", md: "row" }} spacing={1.1} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", flexWrap: "wrap" }}>
-                <Stack direction="row" spacing={0.7} sx={{ flexWrap: "wrap", alignItems: "center" }}>
-                  <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}>
-                    Pilot Filters
-                  </Typography>
-                  <Button size="small" onClick={() => setPresentPilots(new Set(allPilots))} sx={{ textTransform: "none" }}>All Present</Button>
-                  <Button size="small" onClick={() => setPresentPilots(new Set())} sx={{ textTransform: "none" }}>None Present</Button>
-                  <Button
-                    size="small"
-                    variant={showPresentOnly ? "contained" : "outlined"}
-                    onClick={() => setShowPresentOnly((previous) => !previous)}
-                    sx={{ textTransform: "none" }}
-                  >
-                    {showPresentOnly ? "Present Only" : "All Pilots"}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={showAssignedOnly ? "contained" : "outlined"}
-                    onClick={() => setShowAssignedOnly((previous) => !previous)}
-                    sx={{ textTransform: "none" }}
-                  >
+                <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap" }}>
+                  <Button size="small" variant={showAssignedOnly ? "contained" : "outlined"} onClick={() => setShowAssignedOnly((previous) => !previous)} sx={{ textTransform: "none" }}>
                     {showAssignedOnly ? "Assigned Only" : "Include Unassigned"}
                   </Button>
                 </Stack>
-
-                <Box sx={{ minWidth: 0, flex: 1.1 }}>
-                  <Stack direction="row" spacing={0.7} sx={{ alignItems: "center", mb: 0.6, flexWrap: "wrap" }}>
-                    <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}>
-                      Tonight Deck Columns (Map + Side)
-                    </Typography>
-                    <Button
-                      size="small"
-                      onClick={() => setSelectedDeckIds(deckColumns.map((deck) => deck.id))}
-                      sx={{ textTransform: "none" }}
-                    >
-                      All
-                    </Button>
-                    <Button size="small" onClick={() => setSelectedDeckIds([])} sx={{ textTransform: "none" }}>
-                      None
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => setSelectedDeckIds(quickslotDeckIds)}
-                      sx={{ textTransform: "none" }}
-                    >
-                      Quickslot Set
-                    </Button>
-                  </Stack>
-                  <Stack spacing={0.2}>
-                    {deckColumns.map((deck) => (
-                      <FormControlLabel
-                        key={deck.id}
-                        control={<Checkbox size="small" checked={selectedDeckIds.includes(deck.id)} onChange={() => toggleDeckInMatrix(deck.id)} />}
-                        label={`${deck.map} | ${deck.sideLabel} | ${deck.name}${deck.quickslotLabel ? ` (${deck.quickslotLabel})` : ""}`}
-                        sx={{ mr: 0.2 }}
-                      />
-                    ))}
-                  </Stack>
-                </Box>
               </Stack>
+
+              <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", justifyContent: "space-between" }}>
+                <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}>Quickslots By Map</Typography>
+                <Stack direction="row" spacing={0.4}>
+                  <Button size="small" onClick={() => setSelectedDeckIds(Array.from(new Set(mapSelectorColumns.flatMap((column) => column.decks.map((deck) => deck.id)))))} sx={{ textTransform: "none" }}>Select All</Button>
+                  <Button size="small" onClick={() => setSelectedDeckIds([])} sx={{ textTransform: "none" }}>Clear</Button>
+                </Stack>
+              </Stack>
+
+              <Box
+                data-testid="quickslot-deck-grid"
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", md: "repeat(3, minmax(0, 1fr))", xl: "repeat(5, minmax(0, 1fr))" },
+                  borderTop: isLight ? "1px solid rgba(122, 143, 174, 0.24)" : "1px solid rgba(120, 146, 210, 0.24)",
+                  borderLeft: isLight ? "1px solid rgba(122, 143, 174, 0.24)" : "1px solid rgba(120, 146, 210, 0.24)",
+                }}
+              >
+                {mapSelectorColumns.map((column) => (
+                  <Box
+                    key={column.map}
+                    data-testid={`quickslot-map-${column.map}`}
+                    sx={{
+                      minWidth: 0,
+                      borderRight: isLight ? "1px solid rgba(122, 143, 174, 0.24)" : "1px solid rgba(120, 146, 210, 0.24)",
+                      borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.24)" : "1px solid rgba(120, 146, 210, 0.24)",
+                    }}
+                  >
+                    <Typography sx={{ px: 0.9, py: 0.55, fontSize: "0.82rem", fontWeight: 800, background: isLight ? "rgba(210, 222, 237, 0.58)" : "rgba(39, 57, 94, 0.42)" }}>{column.map}</Typography>
+                    {!column.decks.length && <Typography variant="caption" sx={{ display: "block", p: 0.9, opacity: 0.6 }}>No quickslots</Typography>}
+                    {column.decks.map((deck) => {
+                      const quickslot = quickslots.find((entry) => entry.map === column.map && entry.deckId === deck.id)?.slot;
+                      return (
+                        <Box key={deck.id} data-testid={`quickslot-deck-${deck.id}`} sx={{ px: 0.9, py: 0.6, borderTop: isLight ? "1px solid rgba(122, 143, 174, 0.2)" : "1px solid rgba(120, 146, 210, 0.2)", background: selectedDeckIds.includes(deck.id) ? (isLight ? "rgba(213, 226, 241, 0.4)" : "rgba(45, 66, 109, 0.2)") : "transparent" }}>
+                          <FormControlLabel
+                            control={<Checkbox size="small" checked={selectedDeckIds.includes(deck.id)} onChange={() => toggleDeckInMatrix(deck.id)} />}
+                            label={`${quickslot ?? "-"} · ${deck.name}`}
+                            sx={{ m: 0, width: "100%", "& .MuiFormControlLabel-label": { minWidth: 0, fontSize: "0.78rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
+                          />
+                          <Stack spacing={0.1} sx={{ pl: 3.8 }}>
+                            {deck.rows.map((row) => (
+                              <Typography key={row.slot} variant="caption" title={[row.chassis, row.variant].filter(Boolean).join(" ")} sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: isLight ? "#405675" : "#d5e1ff" }}>
+                                {mechLabelForRow(row, chassisCodeByName)}
+                              </Typography>
+                            ))}
+                          </Stack>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                ))}
+              </Box>
             </Stack>
           </Paper>
 
           <TableContainer
             component={Paper}
             sx={{
+              width: "100%",
+              maxWidth: "100%",
+              overflowX: "auto",
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
               background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
-              maxHeight: "68vh",
             }}
           >
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ position: "sticky", left: 0, zIndex: 5, width: MATRIX_PRIMARY_COL_WIDTH, minWidth: MATRIX_PRIMARY_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Primary</TableCell>
-                  <TableCell sx={{ position: "sticky", left: MATRIX_PRIMARY_COL_WIDTH, zIndex: 5, width: MATRIX_ALT_COL_WIDTH, minWidth: MATRIX_ALT_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Alternates</TableCell>
-                  <TableCell sx={{ position: "sticky", left: MATRIX_PRIMARY_COL_WIDTH + MATRIX_ALT_COL_WIDTH, zIndex: 5, width: MATRIX_ACTIONS_COL_WIDTH, minWidth: MATRIX_ACTIONS_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Actions</TableCell>
-                  {selectedDeckColumns.map((deck) => (
+                  <TableCell rowSpan={2} sx={{ position: "sticky", left: 0, zIndex: 6, width: MATRIX_PRIMARY_COL_WIDTH, minWidth: MATRIX_PRIMARY_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Pilots</TableCell>
+                  <TableCell rowSpan={2} sx={{ position: "sticky", left: MATRIX_PRIMARY_COL_WIDTH, zIndex: 6, width: MATRIX_ALT_COL_WIDTH, minWidth: MATRIX_ALT_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Alternates</TableCell>
+                  <TableCell rowSpan={2} sx={{ position: "sticky", left: MATRIX_PRIMARY_COL_WIDTH + MATRIX_ALT_COL_WIDTH, zIndex: 6, width: MATRIX_STATUS_COL_WIDTH, minWidth: MATRIX_STATUS_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Slotted</TableCell>
+                  <TableCell rowSpan={2} sx={{ position: "sticky", left: MATRIX_PRIMARY_COL_WIDTH + MATRIX_ALT_COL_WIDTH + MATRIX_STATUS_COL_WIDTH, zIndex: 6, width: MATRIX_PACK_COL_WIDTH, minWidth: MATRIX_PACK_COL_WIDTH, background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)", fontWeight: 700 }}>Pack</TableCell>
+                  {selectedMapColumns.map((column) => (
                     <TableCell
-                      key={deck.id}
+                      key={column.map}
+                      colSpan={column.decks.length}
+                      align="center"
                       sx={{
-                        minWidth: 250,
+                        py: 0.45,
                         background: isLight ? "rgba(227, 236, 247, 0.98)" : "rgba(15, 22, 43, 0.98)",
-                        fontWeight: 700,
+                        borderLeft: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
                       }}
                     >
-                      <Stack spacing={0}>
-                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{deck.map} | {deck.sideLabel}</Typography>
-                        <Typography variant="caption" sx={{ opacity: 0.8 }}>{deck.name}</Typography>
-                      </Stack>
+                      <Typography variant="caption" sx={{ fontWeight: 800 }}>{column.map}</Typography>
                     </TableCell>
                   ))}
+                </TableRow>
+                <TableRow>
+                  {selectedMapColumns.flatMap((column) => column.decks.map((deck) => {
+                    const quickslot = quickslots.find((entry) => entry.map === column.map && entry.deckId === deck.id)?.slot;
+                    return (
+                      <TableCell
+                        key={deck.id}
+                        sx={{
+                          top: 29,
+                          minWidth: 155,
+                          py: 0.45,
+                          background: isLight ? "rgba(220, 231, 243, 0.99)" : "rgba(19, 29, 53, 0.99)",
+                          borderLeft: isLight ? "1px solid rgba(114, 133, 162, 0.24)" : "1px solid rgba(130, 154, 217, 0.24)",
+                        }}
+                      >
+                        <Typography variant="caption" title={deck.name} sx={{ display: "block", maxWidth: 145, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {quickslot ?? "-"} · {deck.name}
+                        </Typography>
+                      </TableCell>
+                    );
+                  }))}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -734,10 +721,7 @@ export function OverviewView({
                   const allAssignments = assignmentsByPilot.get(pilot) ?? [];
                   const hasPrimary = allAssignments.some((entry) => entry.isPrimary);
                   const hasAlternate = allAssignments.some((entry) => entry.isAlternate);
-                  const pilotPresent = presentPilots.has(pilot);
-                  const stickyBg = pilotPresent
-                    ? (isLight ? "rgba(236, 242, 249, 0.98)" : "rgba(11, 16, 33, 0.96)")
-                    : (isLight ? "rgba(223, 231, 243, 0.74)" : "rgba(17, 25, 48, 0.75)");
+                  const stickyBg = isLight ? "rgba(236, 242, 249, 0.98)" : "rgba(11, 16, 33, 0.96)";
 
                   return (
                     <TableRow key={pilot} hover>
@@ -749,7 +733,6 @@ export function OverviewView({
                           background: stickyBg,
                           width: MATRIX_PRIMARY_COL_WIDTH,
                           minWidth: MATRIX_PRIMARY_COL_WIDTH,
-                          opacity: pilotPresent ? 1 : 0.72,
                         }}
                       >
                         {hasPrimary ? pilot : "-"}
@@ -762,7 +745,6 @@ export function OverviewView({
                           background: stickyBg,
                           width: MATRIX_ALT_COL_WIDTH,
                           minWidth: MATRIX_ALT_COL_WIDTH,
-                          opacity: pilotPresent ? 1 : 0.72,
                         }}
                       >
                         {hasAlternate ? pilot : "-"}
@@ -773,27 +755,42 @@ export function OverviewView({
                           left: MATRIX_PRIMARY_COL_WIDTH + MATRIX_ALT_COL_WIDTH,
                           zIndex: 4,
                           background: stickyBg,
-                          width: MATRIX_ACTIONS_COL_WIDTH,
-                          minWidth: MATRIX_ACTIONS_COL_WIDTH,
+                          width: MATRIX_STATUS_COL_WIDTH,
+                          minWidth: MATRIX_STATUS_COL_WIDTH,
                         }}
                       >
-                        <Stack direction="row" spacing={0.6}>
-                          <Checkbox
-                            size="small"
-                            checked={pilotPresent}
-                            onChange={() => togglePilotPresence(pilot)}
-                            sx={{ p: 0.3 }}
-                          />
-                          <Button size="small" variant="outlined" startIcon={<DownloadIcon fontSize="small" />} onClick={() => downloadPilotNightPack(pilot)} sx={{ textTransform: "none" }}>
-                            Export
+                        <Select
+                          size="small"
+                          fullWidth
+                          value={slottedPilots[pilot] ?? pilot}
+                          onChange={(event) => setSlottedPilots((previous) => ({ ...previous, [pilot]: event.target.value }))}
+                          inputProps={{ "aria-label": `Slotted pilot for ${pilot}` }}
+                          sx={{ fontSize: "0.78rem", "& .MuiSelect-select": { py: 0.55 } }}
+                        >
+                          {allPilots.map((option) => <MenuItem key={option} value={option}>{option}</MenuItem>)}
+                        </Select>
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          position: "sticky",
+                          left: MATRIX_PRIMARY_COL_WIDTH + MATRIX_ALT_COL_WIDTH + MATRIX_STATUS_COL_WIDTH,
+                          zIndex: 4,
+                          background: stickyBg,
+                          width: MATRIX_PACK_COL_WIDTH,
+                          minWidth: MATRIX_PACK_COL_WIDTH,
+                        }}
+                      >
+                        <Tooltip title={`Export ${pilot}'s build pack`}>
+                          <Button size="small" variant="outlined" onClick={() => downloadPilotNightPack(pilot)} sx={{ minWidth: 32, p: 0.45 }} aria-label={`Export ${pilot} build pack`}>
+                            <DownloadIcon fontSize="small" />
                           </Button>
-                        </Stack>
+                        </Tooltip>
                       </TableCell>
 
-                      {selectedDeckColumns.map((deck) => {
+                      {selectedMapColumns.flatMap((column) => column.decks.map((deck) => {
                         const deckAssignments = allAssignments.filter((entry) => entry.deck.id === deck.id);
                         return (
-                          <TableCell key={`${pilot}-${deck.id}`} sx={{ opacity: pilotPresent ? 1 : 0.72 }}>
+                          <TableCell key={`${pilot}-${deck.id}`} sx={{ minWidth: 155 }}>
                             {!deckAssignments.length ? (
                               <Typography variant="body2" sx={{ opacity: 0.58 }}>-</Typography>
                             ) : (
@@ -810,36 +807,27 @@ export function OverviewView({
                                       ? (isLight ? "#2f6fbd" : "#8ec2ff")
                                       : (isLight ? "#ba7a2d" : "#f2bf7c");
                                   return (
-                                    <Button
-                                      key={`${pilot}-${deck.id}-${entry.row.slot}-${entry.mechLabel}`}
-                                      size="small"
-                                      variant="text"
-                                      endIcon={<OpenInNewIcon fontSize="inherit" />}
-                                      onClick={() => window.open(entry.repositoryUrl, "_blank", "noopener,noreferrer")}
-                                      sx={{
-                                        justifyContent: "flex-start",
-                                        textTransform: "none",
-                                        px: 0,
-                                        minHeight: 26,
-                                      }}
+                                    <Stack
+                                      key={`${pilot}-${entry.deck.id}-${entry.row.slot}-${entry.mechLabel}`}
+                                      direction="row"
+                                      spacing={0.6}
+                                      sx={{ alignItems: "center", minWidth: 0, minHeight: 24 }}
                                     >
-                                      <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", minWidth: 0 }}>
-                                        <Tooltip title={roleTitle}>
-                                          <CircleIcon sx={{ fontSize: "0.54rem", color: roleColor, flexShrink: 0 }} />
-                                        </Tooltip>
-                                        <Typography variant="body2" sx={{ fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                          {`${entry.row.slot}. ${entry.mechLabel}`}
-                                          {!entry.hasRepositoryData ? " *" : ""}
-                                        </Typography>
-                                      </Stack>
-                                    </Button>
+                                      <Tooltip title={roleTitle}>
+                                        <CircleIcon sx={{ fontSize: "0.54rem", color: roleColor, flexShrink: 0 }} />
+                                      </Tooltip>
+                                      <Typography variant="body2" title={`${entry.deck.name} · ${entry.mechLabel}`} sx={{ fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {entry.mechLabel}
+                                        {!entry.hasRepositoryData ? " *" : ""}
+                                      </Typography>
+                                    </Stack>
                                   );
                                 })}
                               </Stack>
                             )}
                           </TableCell>
                         );
-                      })}
+                      }))}
                     </TableRow>
                   );
                 })}
