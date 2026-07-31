@@ -31,6 +31,7 @@ function defaultBuildDraft(): CreateMechInput {
   return {
     chassis: "",
     variant: "",
+    name: "",
     link: "",
     weaponry: "",
     description: "",
@@ -77,14 +78,9 @@ function listToText(items: string[]): string {
   return items.join("\n");
 }
 
-function buildCodesToText(codes: Record<string, string>, variant = ""): string {
-  const hasVariantAnnotation = /\([^)]*\)/.test(variant);
-  if (!hasVariantAnnotation && codes.export) {
-    return `default: ${codes.export}`;
-  }
-
+function buildCodesToText(codes: Record<string, string>): string {
   return Object.entries(codes)
-    .filter(([key]) => key !== "export")
+    .filter(([key, value]) => key.toLowerCase() !== "imported" && key.toLowerCase() !== "export" && Boolean((value ?? "").trim()))
     .map(([key, value]) => `${key}: ${value}`)
     .join("\n");
 }
@@ -99,27 +95,12 @@ function parseBuildCodesText(value: string): Record<string, string> {
       if (idx === -1) return null;
       const key = line.slice(0, idx).trim();
       const val = line.slice(idx + 1).trim();
-      if (!key || !val) return null;
+      if (!key || !val || key.toLowerCase() === "export") return null;
       return [key, val] as const;
     })
     .filter((entry): entry is readonly [string, string] => entry !== null);
 
   return Object.fromEntries(pairs);
-}
-
-function mergeBuildCodes(baseCodes: Record<string, string>, exportCodeText: string): Record<string, string> {
-  const merged: Record<string, string> = { ...baseCodes };
-  const exportCode = exportCodeText.trim();
-  if (!exportCode) return merged;
-
-  const hasEquivalentValue = Object.values(merged).some(
-    (value) => value.trim().toLowerCase() === exportCode.toLowerCase(),
-  );
-  if (!hasEquivalentValue) {
-    merged.export = exportCode;
-  }
-
-  return merged;
 }
 
 function flattenChassisVariants(file: MechsConfigFile): Array<{ chassis: string; variant: string }> {
@@ -192,7 +173,6 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
   const [buildDraft, setBuildDraft] = useState<CreateMechInput>(defaultBuildDraft());
   const [buildCodeText, setBuildCodeText] = useState("");
-  const [exportCodeText, setExportCodeText] = useState("");
   const [equipmentText, setEquipmentText] = useState("");
   const [buildMeta, setBuildMeta] = useState<Record<string, string | number | boolean | null>>({});
 
@@ -262,8 +242,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
       const parsed = await parseMechBuild(urlInput.trim());
       setBuildDraft(parsed.draft);
-      setBuildCodeText(buildCodesToText(parsed.draft.buildCodes, parsed.draft.variant));
-      setExportCodeText(parsed.draft.buildCodes.export ?? "");
+      setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
       setEquipmentText(listToText(parsed.draft.metadata.equipment ?? parsed.draft.equipment ?? []));
       setWarnings(parsed.warnings.filter((warning) => warning !== EXPORT_CODE_WARNING));
       setBuildMeta(parsed.metadata);
@@ -484,7 +463,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
           equipment: parseListText(equipmentText),
         },
         equipment: parseListText(equipmentText),
-        buildCodes: mergeBuildCodes(parseBuildCodesText(buildCodeText), exportCodeText),
+        buildCodes: parseBuildCodesText(buildCodeText),
       };
       await createMech(payload);
       setNotice(`Build created for ${payload.chassis}-${payload.variant}.`);
@@ -508,7 +487,6 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     setReviewBeforeSubmit(false);
     setBuildDraft(defaultBuildDraft());
     setBuildCodeText("");
-    setExportCodeText("");
     setEquipmentText("");
     setBuildMeta({});
     setError("");
@@ -690,6 +668,14 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                 />
               </Stack>
 
+              <TextField
+                label="Build Name (optional)"
+                size="small"
+                value={buildDraft.name ?? ""}
+                onChange={(e) => setBuildDraft((prev) => ({ ...prev, name: e.target.value }))}
+                helperText="Short label shown with the variant in Repository cards"
+              />
+
               <Stack direction="row" spacing={1}>
                 <FormControl size="small" fullWidth>
                   <InputLabel>Class</InputLabel>
@@ -776,16 +762,6 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                 <AccordionDetails sx={{ px: 0, pt: 0 }}>
                   <Stack spacing={1}>
                     <TextField
-                      label="MWO Export Code"
-                      multiline
-                      minRows={2}
-                      size="small"
-                      value={exportCodeText}
-                      onChange={(e) => setExportCodeText(e.target.value)}
-                      helperText="In NAV-Alpha: click Export, then paste the MWO Build Code here"
-                    />
-
-                    <TextField
                       label="Build Codes"
                       multiline
                       minRows={2}
@@ -796,7 +772,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                         setBuildCodeText(value);
                         setBuildDraft((prev) => ({ ...prev, buildCodes: parseBuildCodesText(value) }));
                       }}
-                      helperText="key: value per line"
+                      helperText='key: value per line ("default" is the parser-generated code key)'
                     />
 
                     <Stack direction="row" spacing={1}>

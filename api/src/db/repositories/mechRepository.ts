@@ -24,6 +24,41 @@ export type WeightClassSummary = {
   chassis: ChassisSummary[];
 };
 
+function normalizeBuildCodes(buildCodes: Record<string, string>): Record<string, string> {
+  const normalized: Record<string, string> = {};
+
+  for (const [rawKey, rawValue] of Object.entries(buildCodes)) {
+    const key = rawKey.trim();
+    const value = rawValue.trim();
+    if (!key || !value) continue;
+    if (key.toLowerCase() === "export") continue;
+    normalized[key] = value;
+  }
+
+  return normalized;
+}
+
+function normalizeBuildName(name: string | undefined): string | undefined {
+  const trimmed = (name ?? "").trim();
+  return trimmed || undefined;
+}
+
+export function normalizeMechInputForStorage(input: CreateMechInput): CreateMechInput {
+  const normalizedName = normalizeBuildName(input.name);
+  const normalized: CreateMechInput = {
+    ...input,
+    buildCodes: normalizeBuildCodes(input.buildCodes ?? {}),
+  };
+
+  if (normalizedName) {
+    normalized.name = normalizedName;
+  } else {
+    delete normalized.name;
+  }
+
+  return normalized;
+}
+
 function toBuildMarkdown(doc: MechDoc): string {
   if (doc.markdown && doc.markdown.trim()) {
     return doc.markdown;
@@ -165,7 +200,8 @@ function normalizeForHierarchy(doc: MechDoc): { className: WeightClass; chassisN
 }
 
 export async function createMech(input: CreateMechInput, submittedBy?: string): Promise<MechDoc> {
-  const candidateLink = canonicalizeBuildLink(input.link || input.buildUrl || "");
+  const normalizedInput = normalizeMechInputForStorage(input);
+  const candidateLink = canonicalizeBuildLink(normalizedInput.link || normalizedInput.buildUrl || "");
   if (candidateLink) {
     const existingDocs = await listMechs();
     const duplicate = existingDocs.find((doc) => {
@@ -177,7 +213,7 @@ export async function createMech(input: CreateMechInput, submittedBy?: string): 
     }
   }
 
-  const resolved = resolveConfigMech(input.chassis, input.variant, input.tech);
+  const resolved = resolveConfigMech(normalizedInput.chassis, normalizedInput.variant, normalizedInput.tech);
   if (resolved.status === "not_found") {
     throw new Error("CONFIG_MECH_NOT_FOUND");
   }
@@ -186,21 +222,21 @@ export async function createMech(input: CreateMechInput, submittedBy?: string): 
   }
 
   const tonnage = resolved.value.tonnage;
-  const primaryRange = input.primaryRangeBracket ?? [input.metadata.ranges.idealMin, input.metadata.ranges.idealMax];
+  const primaryRange = normalizedInput.primaryRangeBracket ?? [normalizedInput.metadata.ranges.idealMin, normalizedInput.metadata.ranges.idealMax];
   const doc: MechDoc = {
-    ...input,
+    ...normalizedInput,
     chassis: resolved.value.chassis,
     variant: resolved.value.variant,
-    link: input.link || input.buildUrl || "",
+    link: normalizedInput.link || normalizedInput.buildUrl || "",
     class: resolved.value.className,
     tech: resolved.value.tech,
     tonnage,
-    buildUrl: input.buildUrl || input.link || "",
-    submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",
-    equipment: input.equipment ?? input.metadata.equipment,
+    buildUrl: normalizedInput.buildUrl || normalizedInput.link || "",
+    submittedBy: submittedBy?.trim() || normalizedInput.submittedBy || "unknown",
+    equipment: normalizedInput.equipment ?? normalizedInput.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
-    optimalRange: input.optimalRange ?? input.metadata.ranges.optimal,
-    maxRange: input.maxRange ?? input.metadata.ranges.max,
+    optimalRange: normalizedInput.optimalRange ?? normalizedInput.metadata.ranges.optimal,
+    maxRange: normalizedInput.maxRange ?? normalizedInput.metadata.ranges.max,
     id: randomUUID(),
     schemaVersion: "1.0",
     docType: "mech",
@@ -262,7 +298,8 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
     throw new Error("INVALID_ID");
   }
 
-  const candidateLink = canonicalizeBuildLink(input.link || input.buildUrl || "");
+  const normalizedInput = normalizeMechInputForStorage(input);
+  const candidateLink = canonicalizeBuildLink(normalizedInput.link || normalizedInput.buildUrl || "");
   if (candidateLink) {
     const existingDocs = await listMechs();
     const duplicate = existingDocs.find((doc) => {
@@ -275,7 +312,7 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
     }
   }
 
-  const resolved = resolveConfigMech(input.chassis, input.variant, input.tech);
+  const resolved = resolveConfigMech(normalizedInput.chassis, normalizedInput.variant, normalizedInput.tech);
   if (resolved.status === "not_found") {
     throw new Error("CONFIG_MECH_NOT_FOUND");
   }
@@ -284,21 +321,21 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
   }
 
   const tonnage = resolved.value.tonnage;
-  const primaryRange = input.primaryRangeBracket ?? [input.metadata.ranges.idealMin, input.metadata.ranges.idealMax];
+  const primaryRange = normalizedInput.primaryRangeBracket ?? [normalizedInput.metadata.ranges.idealMin, normalizedInput.metadata.ranges.idealMax];
   const doc: MechDoc = {
-    ...input,
+    ...normalizedInput,
     chassis: resolved.value.chassis,
     variant: resolved.value.variant,
-    link: input.link || input.buildUrl || "",
+    link: normalizedInput.link || normalizedInput.buildUrl || "",
     class: resolved.value.className,
     tech: resolved.value.tech,
     tonnage,
-    buildUrl: input.buildUrl || input.link || "",
-    submittedBy: submittedBy?.trim() || input.submittedBy || "unknown",
-    equipment: input.equipment ?? input.metadata.equipment,
+    buildUrl: normalizedInput.buildUrl || normalizedInput.link || "",
+    submittedBy: submittedBy?.trim() || normalizedInput.submittedBy || "unknown",
+    equipment: normalizedInput.equipment ?? normalizedInput.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
-    optimalRange: input.optimalRange ?? input.metadata.ranges.optimal,
-    maxRange: input.maxRange ?? input.metadata.ranges.max,
+    optimalRange: normalizedInput.optimalRange ?? normalizedInput.metadata.ranges.optimal,
+    maxRange: normalizedInput.maxRange ?? normalizedInput.metadata.ranges.max,
     id,
     schemaVersion: "1.0",
     docType: "mech",

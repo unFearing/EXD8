@@ -65,19 +65,33 @@ function formatReviewValue(value: string | string[] | undefined): string {
 
 function getDisplayBuildCodes(codes: Record<string, string> | undefined): Array<[string, string]> {
   if (!codes) return [];
-  const entries = Object.entries(codes)
-    .filter(([key, value]) => key !== "imported" && Boolean((value ?? "").trim()))
-    .map(([key, value]) => [key, value.trim()] as const);
+  return Object.entries(codes)
+    .map(([key, value]) => [key.trim(), value.trim()] as [string, string])
+    .filter(([key, value]) => key.toLowerCase() !== "imported" && key.toLowerCase() !== "export" && Boolean(value));
+}
 
-  const seenValues = new Set<string>();
-  const deduped: Array<[string, string]> = [];
-  for (const [key, value] of entries) {
-    const normalized = value.toLowerCase();
-    if (seenValues.has(normalized)) continue;
-    seenValues.add(normalized);
-    deduped.push([key, value]);
+function getEditableBuildCodesText(codes: Record<string, string> | undefined): string {
+  return getDisplayBuildCodes(codes)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join("\n");
+}
+
+function parseBuildCodesText(value: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const line of value.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx < 0) continue;
+    const key = line.slice(0, idx).trim();
+    const codeValue = line.slice(idx + 1).trim();
+    if (!key || !codeValue || key.toLowerCase() === "export") continue;
+    parsed[key] = codeValue;
   }
-  return deduped;
+  return parsed;
+}
+
+function normalizeBuildName(name: string | undefined): string | undefined {
+  const trimmed = (name ?? "").trim();
+  return trimmed || undefined;
 }
 
 export function RepositoryView({
@@ -108,6 +122,7 @@ export function RepositoryView({
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
   const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
@@ -271,12 +286,20 @@ export function RepositoryView({
     const description = (descriptionDrafts[id] ?? source.description ?? "").trim();
     const weaponry = (weaponryDrafts[id] ?? source.weaponry ?? "").trim();
     const skillCode = (skillCodeDrafts[id] ?? source.skillCode ?? "").trim();
-    const buildCodes = buildCodesDrafts[id] ?? source.buildCodes ?? {};
+    const name = normalizeBuildName(nameDrafts[id] ?? source.name);
+    const buildCodes = getDisplayBuildCodes(buildCodesDrafts[id] ?? source.buildCodes ?? {}).reduce<Record<string, string>>(
+      (result, [key, value]) => {
+        result[key] = value;
+        return result;
+      },
+      {},
+    );
 
     try {
       setSavingMechId(id);
       const saved = await updateMech(id, {
         ...source,
+        name,
         description,
         weaponry,
         skillCode,
@@ -295,6 +318,14 @@ export function RepositoryView({
         return next;
       });
       setWeaponryDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setNameDrafts((previous) => {
         if (!(id in previous)) {
           return previous;
         }
@@ -351,13 +382,14 @@ export function RepositoryView({
       const parsed = await parseMechBuild(sourceUrl);
       const differences = [
         { label: "Role", currentValue: source.role, nextValue: parsed.draft.role },
+        { label: "Name", currentValue: source.name ?? "", nextValue: parsed.draft.name ?? "" },
         { label: "Weaponry", currentValue: source.weaponry, nextValue: parsed.draft.weaponry },
         { label: "Skill Code", currentValue: source.skillCode, nextValue: parsed.draft.skillCode },
         { label: "Build URL", currentValue: source.buildUrl ?? source.link, nextValue: parsed.draft.buildUrl ?? parsed.draft.link },
         {
-          label: "Export Code",
-          currentValue: source.buildCodes?.export ?? "",
-          nextValue: parsed.draft.buildCodes?.export ?? "",
+          label: "Default Code",
+          currentValue: source.buildCodes?.default ?? "",
+          nextValue: parsed.draft.buildCodes?.default ?? "",
         },
         {
           label: "Equipment",
@@ -809,8 +841,14 @@ export function RepositoryView({
                               const equipment = sourceBuild?.equipment ?? sourceBuild?.metadata?.equipment ?? [];
                               const buildCodes = getDisplayBuildCodes(sourceBuild?.buildCodes);
                               const descriptionValue = descriptionDrafts[build.id] ?? sourceBuild?.description ?? "";
+                              const normalizedDescription = descriptionValue.trim().toLowerCase();
+                              const showDescription =
+                                (editMode === "edit" && canManageBuilds) ||
+                                (Boolean(normalizedDescription) && normalizedDescription !== "imported from nav-alpha build link.");
                               const canonicalUrl = sourceBuild?.buildUrl ?? sourceBuild?.link ?? "";
                               const title = (sourceBuild?.variant ?? variant.variant).trim() || variant.variant;
+                              const nameValue = nameDrafts[build.id] ?? sourceBuild?.name ?? "";
+                              const trimmedNameValue = nameValue.trim();
 
                               return (
                                 <Paper
@@ -851,8 +889,9 @@ export function RepositoryView({
                                 >
                                   <Stack spacing={1.15}>
                                     <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
-                                      <Typography sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.16em", textTransform: "uppercase", fontWeight: 600, fontSize: { xs: "0.9rem", md: "0.98rem" } }}>
-                                        {title}
+                                      <Typography sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.16em", fontWeight: 600, fontSize: { xs: "0.9rem", md: "0.98rem" } }}>
+                                        <Box component="span" sx={{ textTransform: "uppercase" }}>{title}</Box>
+                                        {trimmedNameValue ? ` "${trimmedNameValue}"` : ""}
                                       </Typography>
                                       <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap" }}>
                                         <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
@@ -861,8 +900,38 @@ export function RepositoryView({
                                       </Stack>
                                     </Stack>
 
-                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 1, md: 1.5 } }}>
-                                      <Box>
+                                    <Box
+                                      sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" },
+                                        columnGap: { xs: 2, md: 4 },
+                                        rowGap: { xs: 2.5, md: 3 },
+                                      }}
+                                    >
+                                      {editMode === "edit" && canManageBuilds && (
+                                        <Box sx={{ gridColumn: "1 / -1" }}>
+                                          <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                                            Name
+                                          </Typography>
+                                          <TextField
+                                            fullWidth
+                                            size="small"
+                                            value={nameValue}
+                                            onChange={(event) => {
+                                              const next = event.target.value;
+                                              setNameDrafts((previous) => ({
+                                                ...previous,
+                                                [build.id]: next,
+                                              }));
+                                            }}
+                                            sx={{ mt: 0.7 }}
+                                            placeholder="Optional short name"
+                                          />
+                                        </Box>
+                                      )}
+
+                                      {showDescription && (
+                                      <Box sx={{ gridColumn: { md: 2 }, gridRow: { md: 2 } }}>
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Description
                                         </Typography>
@@ -888,8 +957,9 @@ export function RepositoryView({
                                           </Typography>
                                         )}
                                       </Box>
+                                      )}
 
-                                      <Box>
+                                      <Box sx={{ gridColumn: { md: 1 }, gridRow: { md: 1 } }}>
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Weaponry
                                         </Typography>
@@ -914,7 +984,29 @@ export function RepositoryView({
                                             {(sourceBuild?.weaponry ?? "").trim() || "Not specified."}
                                           </Typography>
                                         )}
-                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em", mt: 1.2 }}>
+                                      </Box>
+
+                                      <Box sx={{ gridColumn: { md: 2 }, gridRow: { md: 1 } }}>
+                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                                          Equipment
+                                        </Typography>
+                                        {equipment.length ? (
+                                          <Box component="ul" sx={{ mt: 0.8, mb: 0, pl: 2, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT }}>
+                                            {equipment.map((item) => (
+                                              <Typography component="li" key={item} variant="body2" sx={{ fontFamily: MOXIE_INK_FONT, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+                                                {item}
+                                              </Typography>
+                                            ))}
+                                          </Box>
+                                        ) : (
+                                          <Typography sx={{ mt: 0.8, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                            No equipment listed.
+                                          </Typography>
+                                        )}
+                                      </Box>
+
+                                      <Box sx={{ gridColumn: { md: 1 }, gridRow: { md: 2 } }}>
+                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Codes
                                         </Typography>
                                         {editMode === "edit" && canManageBuilds ? (
@@ -938,16 +1030,9 @@ export function RepositoryView({
                                               minRows={2}
                                               size="small"
                                               fullWidth
-                                              value={(buildCodesDrafts[build.id] ? Object.entries(buildCodesDrafts[build.id]).map(([k, v]) => `${k}: ${v}`).join("\n") : Object.entries(sourceBuild?.buildCodes ?? {}).map(([k, v]) => `${k}: ${v}`).join("\n"))}
+                                              value={buildCodesDrafts[build.id] ? getEditableBuildCodesText(buildCodesDrafts[build.id]) : getEditableBuildCodesText(sourceBuild?.buildCodes)}
                                               onChange={(event) => {
-                                                const value = event.target.value;
-                                                const codes: Record<string, string> = {};
-                                                value.split("\n").forEach((line) => {
-                                                  const [key, ...valueParts] = line.split(":");
-                                                  if (key.trim() && valueParts.length) {
-                                                    codes[key.trim()] = valueParts.join(":").trim();
-                                                  }
-                                                });
+                                                const codes = parseBuildCodesText(event.target.value);
                                                 setBuildCodesDrafts((previous) => ({
                                                   ...previous,
                                                   [build.id]: codes,
@@ -962,9 +1047,14 @@ export function RepositoryView({
                                             </Typography>
                                             {buildCodes.length ? (
                                               buildCodes.map(([codeType, codeValue]) => (
-                                                <Typography key={codeType} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
-                                                  {codeType}: {codeValue}
-                                                </Typography>
+                                                <Box key={codeType} sx={{ mt: 0.4 }}>
+                                                  <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", display: "block" }}>
+                                                    {codeType}
+                                                  </Typography>
+                                                  <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere", userSelect: "text" }}>
+                                                    {codeValue}
+                                                  </Typography>
+                                                </Box>
                                               ))
                                             ) : (
                                               <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
@@ -976,27 +1066,8 @@ export function RepositoryView({
                                       </Box>
                                     </Box>
 
-                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: { xs: 1, md: 1.5 } }}>
-                                      <Box>
-                                        <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
-                                          Equipment
-                                        </Typography>
-                                        {equipment.length ? (
-                                          <Box component="ul" sx={{ mt: 0.65, mb: 0, pl: 2, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT }}>
-                                            {equipment.map((item) => (
-                                              <Typography component="li" key={item} variant="body2" sx={{ fontFamily: MOXIE_INK_FONT, lineHeight: 1.4, overflowWrap: "anywhere" }}>
-                                                {item}
-                                              </Typography>
-                                            ))}
-                                          </Box>
-                                        ) : (
-                                          <Typography sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                            No equipment listed.
-                                          </Typography>
-                                        )}
-                                      </Box>
-
-                                      <Box>
+                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, columnGap: { md: 4 } }}>
+                                      <Box sx={{ gridColumn: { md: 2 } }}>
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Source
                                         </Typography>

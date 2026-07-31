@@ -2204,48 +2204,18 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         <Typography sx={{ color: isLight ? "#556887" : "#bfd0ff", fontWeight: 700 }}>
                           Total Tonnage: {computeTemplateTonnage(template)} t
                         </Typography>
-                        {(() => {
-                          if (!cs26Validation.issues.length) return null;
-                          return (
-                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { xs: "flex-start", sm: "center" } }}>
-                              <Stack direction="row" spacing={0.4} sx={{ alignItems: "center" }}>
-                                <WarningAmberIcon fontSize="small" sx={{ color: "#f59e0b" }} />
-                                <Typography variant="caption" sx={{ color: isLight ? "#8a5a00" : "#ffcf76", fontWeight: 700 }}>
-                                  CS26 Issues
-                                </Typography>
-                              </Stack>
-                              <Stack spacing={0.35} sx={{ minWidth: 280 }}>
-                                {cs26Validation.issues.map((issue, idx) => (
-                                  <Typography
-                                    key={`${issue.kind}-${idx}`}
-                                    variant="caption"
-                                    sx={{ color: isLight ? "#8a5a00" : "#ffcf76", fontWeight: 600, lineHeight: 1.35 }}
-                                  >
-                                    {issue.message}
-                                  </Typography>
-                                ))}
-                              </Stack>
-                            </Stack>
-                          );
-                        })()}
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<BackspaceIcon fontSize="small" />}
-                          disabled={editMode !== "edit"}
-                          onClick={() => clearPilotColumn(template.id, "primary")}
-                        >
-                          Clear Primary
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<BackspaceIcon fontSize="small" />}
-                          disabled={editMode !== "edit"}
-                          onClick={() => clearPilotColumn(template.id, "alternates")}
-                        >
-                          Clear Alternates
-                        </Button>
+                        <Box sx={{ width: 28, height: 28, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                          {cs26Validation.issues.length > 0 && (
+                            <Tooltip
+                              title={cs26Validation.issues.map((issue) => issue.message).join("\n")}
+                              slotProps={{ tooltip: { sx: { whiteSpace: "pre-line" } } }}
+                            >
+                              <IconButton size="small" aria-label="Show CS26 issues" sx={{ color: "#f59e0b", p: 0.25 }}>
+                                <WarningAmberIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                        </Box>
                         <Button
                           variant="outlined"
                           size="small"
@@ -2281,15 +2251,41 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.25)" : "1px solid rgba(120, 146, 210, 0.2)",
                           }}
                         >
-                          {TABLE_HEADERS.map((header) => (
-                            <Typography
-                              key={header}
-                              variant="caption"
-                              sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700, letterSpacing: "0.02em" }}
-                            >
-                              {header}
-                            </Typography>
-                          ))}
+                          {TABLE_HEADERS.map((header) => {
+                            const clearField = header === "Primary" ? "primary" : header === "Alternates" ? "alternates" : null;
+                            return (
+                              <Stack
+                                key={header}
+                                direction="row"
+                                spacing={0.35}
+                                sx={{
+                                  alignItems: "center",
+                                  justifyContent: clearField ? "space-between" : "flex-start",
+                                  minWidth: 0,
+                                  width: "100%",
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700, letterSpacing: "0.02em" }}
+                                >
+                                  {header}
+                                </Typography>
+                                {clearField && editMode === "edit" && (
+                                  <Tooltip title={`Clear ${clearField === "primary" ? "primary" : "alternate"} pilots`}>
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => clearPilotColumn(template.id, clearField)}
+                                      aria-label={`Clear ${clearField === "primary" ? "primary" : "alternate"} pilots`}
+                                      sx={{ color: isLight ? "#7d8fae" : "#9ab8ef", p: 0.25, mr: 0.5, flexShrink: 0 }}
+                                    >
+                                      <BackspaceIcon fontSize="inherit" />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
+                              </Stack>
+                            );
+                          })}
                         </Box>
 
                         <Stack spacing={0.6} sx={{ pt: 0.8 }}>

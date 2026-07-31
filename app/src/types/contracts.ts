@@ -144,6 +144,7 @@ export type MechDoc = {
   id: string;
   chassis: string;
   variant: string;
+  name?: string;
   link: string;
   skillCode: string;
   weaponry: string;
@@ -249,6 +250,7 @@ export type DropDeckRules = {
 export type CreateMechInput = {
   chassis: string;
   variant: string;
+  name?: string;
   link: string;
   weaponry: string;
   description: string;

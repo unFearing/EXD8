@@ -17,6 +17,7 @@
     "export:mechs-csv": "npm run build:ts && node dist/scripts/exportMechsToCsv.js",
     "migrate:mechs-config": "npm run build:ts && node dist/scripts/migrateMechsToConfig.js",
     "test:parse-links": "npm run build:ts && node dist/scripts/testParseBuildLinks.js",
+    "migrate:remove-export-codes": "npm run build:ts && node dist/scripts/removeExportBuildCodes.js",
     "migrate:strip-codename": "npm run build:ts && node dist/scripts/stripCodenameFromCosmos.js",
     "migrate:prune-stale-mechs": "npm run build:ts && node dist/scripts/pruneStaleMechDocs.js",
     "prestart": "npm run build",

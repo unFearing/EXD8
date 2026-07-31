@@ -201,6 +201,7 @@ const mechDocBaseSchema = z.object({
   id: z.string().uuid(),
   chassis: z.string().min(1),
   variant: z.string().min(1),
+  name: z.string().max(80).optional(),
   link: z.string().url().or(z.literal("")),
   skillCode: z.string().min(1),
   weaponry: z.string(),

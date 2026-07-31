@@ -1014,7 +1014,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       buildUrl: sourceUrl,
       skillCode: "pending",
       weaponry: "Parsed from link. Please review and update weapon details.",
-      description: "Imported from NAV-Alpha build link.",
+      description: "",
       role: tonnage >= 80 ? "Juggernaut" : tonnage >= 60 ? "Brawler" : "Skirmisher",
       buildCodes: {
         imported: variantCode,
@@ -1100,7 +1100,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           if (publicExportCode) {
             result.draft.buildCodes = {
               ...result.draft.buildCodes,
-              export: publicExportCode,
+              default: publicExportCode,
             };
             result.metadata.extractedExportCode = true;
           }
@@ -1140,7 +1140,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: parsed.exportCode,
+            default: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1170,7 +1170,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: parsed.exportCode,
+            default: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1197,7 +1197,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (htmlExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: htmlExportCode,
+            default: htmlExportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1206,7 +1206,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if (!result.draft.buildCodes.export) {
+    if (!result.draft.buildCodes.default) {
       warnings.push("Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.");
     }
 

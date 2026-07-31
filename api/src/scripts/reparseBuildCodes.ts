@@ -1,5 +1,5 @@
 /**
- * Re-parse export codes for all mechs that have a NAV-Alpha build link.
+ * Re-parse default build codes for all mechs that have a NAV-Alpha build link.
  *
  * Usage:
  *   npm run build && node dist/scripts/reparseBuildCodes.js          # dry-run
@@ -16,12 +16,12 @@ function parseArgs(argv: string[]): Args {
   return { apply: argv.includes("--apply") };
 }
 
-async function parseExportCode(url: string): Promise<string | null> {
+async function parseDefaultCode(url: string): Promise<string | null> {
   const request = { json: async () => ({ url }) };
   const response = await parseMechBuildHandler(request as never);
   if (response.status !== 200) return null;
   const body = response.jsonBody as { data?: { draft?: { buildCodes?: Record<string, string> } } };
-  return body?.data?.draft?.buildCodes?.export ?? null;
+  return body?.data?.draft?.buildCodes?.default ?? null;
 }
 
 async function main(): Promise<void> {
@@ -41,11 +41,11 @@ async function main(): Promise<void> {
 
   for (const mech of withLink) {
     const link = mech.link || mech.buildUrl || "";
-    const oldCode = mech.buildCodes?.export ?? "(none)";
+    const oldCode = mech.buildCodes?.default ?? "(none)";
 
     let newCode: string | null;
     try {
-      newCode = await parseExportCode(link);
+      newCode = await parseDefaultCode(link);
     } catch (err) {
       console.error(`  FAIL  ${mech.variant} (${mech.id}) — ${err instanceof Error ? err.message : String(err)}`);
       failed++;
@@ -53,7 +53,7 @@ async function main(): Promise<void> {
     }
 
     if (!newCode) {
-      console.log(`  SKIP  ${mech.variant} (${mech.id}) — no export code returned`);
+      console.log(`  SKIP  ${mech.variant} (${mech.id}) — no default code returned`);
       failed++;
       continue;
     }
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
     if (args.apply) {
       const updatedDoc = {
         ...mech,
-        buildCodes: { ...mech.buildCodes, export: newCode },
+        buildCodes: { ...mech.buildCodes, default: newCode },
       };
       const container = getMechsContainer();
       await container.items.upsert(updatedDoc);
