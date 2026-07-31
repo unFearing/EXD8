@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { DeckBoard } from "./components/DeckBoard";
 import { RepositoryView } from "./components/RepositoryView";
+import { OverviewView } from "./components/OverviewView";
 import { AuthSplash } from "./components/AuthSplash";
 import { useDiscordAuth } from "./hooks/useDiscordAuth";
 import "./App.css";
@@ -136,6 +137,20 @@ function AppContent() {
             path="/repository"
             element={
               <RepositoryView
+                mode={mode}
+                onToggleMode={toggleMode}
+                user={effectiveAuth.user}
+                onLogout={effectiveAuth.logout}
+                hasRole={effectiveAuth.hasRole}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
+              />
+            }
+          />
+          <Route
+            path="/overview"
+            element={
+              <OverviewView
                 mode={mode}
                 onToggleMode={toggleMode}
                 user={effectiveAuth.user}

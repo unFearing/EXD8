@@ -549,6 +549,9 @@ export function RepositoryView({
                   if (value === "dropDecks") {
                     navigate("/");
                   }
+                  if (value === "overview") {
+                    navigate("/overview");
+                  }
                 }}
                 variant="standard"
                 sx={{
@@ -559,6 +562,7 @@ export function RepositoryView({
               >
                 <Tab label="Drop Decks" value="dropDecks" />
                 <Tab label="Repository" value="repository" />
+                <Tab label="Overview" value="overview" />
               </Tabs>
 
               <Divider

@@ -252,7 +252,7 @@ const TABLE_HEADERS = ["Primary", "Alternates", "Lance", "Mech", "Class", "Tonna
 
 const PILOT_OPTIONS = [
   "Ex",
-  "Saikyou",
+  "Saik",
   "Grill",
   "Xiph",
   "Ra",
@@ -261,6 +261,8 @@ const PILOT_OPTIONS = [
   "Acerg",
   "Heaven",
   "V",
+  "Judas",
+  "Bitey",
   "GiL",
   "P4TCHY",
   "Bux",
@@ -270,13 +272,9 @@ const PILOT_OPTIONS = [
   "Awes"
 ];
 
-const getPilotShortcode = (pilotName: string): string => {
-  return pilotName.substring(0, 4).toUpperCase();
-};
-
 const formatPilotDisplay = (pilots: string[]): string => {
   if (!pilots.length) return "";
-  return pilots.map(getPilotShortcode).join(", ");
+  return pilots.join(", ");
 };
 
 const editSelectIconSx = {
@@ -286,6 +284,49 @@ const editSelectIconSx = {
 };
 
 const DECK_GRID_COLUMNS = "minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 0.55fr) minmax(0, 2fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 0.5fr)";
+
+type WeightClassLabel = "Light" | "Medium" | "Heavy" | "Assault";
+
+const WEIGHT_CLASS_GRADIENTS: Record<WeightClassLabel, {
+  lightGradient: string;
+  darkGradient: string;
+  lightFallback: string;
+  darkFallback: string;
+}> = {
+  Light: {
+    lightGradient: "linear-gradient(120deg, #1b56c7 0%, #2f8ff0 100%)",
+    darkGradient: "linear-gradient(120deg, #5a9af0 0%, #85bcff 100%)",
+    lightFallback: "#1f52ad",
+    darkFallback: "#89bcff",
+  },
+  Medium: {
+    lightGradient: "linear-gradient(120deg, #8f8a7a 0%, #c3ad91 100%)",
+    darkGradient: "linear-gradient(120deg, #9da8a6 0%, #c8b79f 100%)",
+    lightFallback: "#7d7666",
+    darkFallback: "#c8bead",
+  },
+  Heavy: {
+    lightGradient: "linear-gradient(120deg, #c97428 0%, #e39a4a 100%)",
+    darkGradient: "linear-gradient(120deg, #e3a261 0%, #f0bf87 100%)",
+    lightFallback: "#a76524",
+    darkFallback: "#efbf8f",
+  },
+  Assault: {
+    lightGradient: "linear-gradient(120deg, #bc3f3f 0%, #da5c5c 100%)",
+    darkGradient: "linear-gradient(120deg, #d97272 0%, #e89a9a 100%)",
+    lightFallback: "#9c3535",
+    darkFallback: "#e8a2a2",
+  },
+};
+
+function asWeightClassLabel(value: string): WeightClassLabel | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "light") return "Light";
+  if (normalized === "medium") return "Medium";
+  if (normalized === "heavy") return "Heavy";
+  if (normalized === "assault") return "Assault";
+  return null;
+}
 
 function getBuildCodeEntries(buildCodes?: Record<string, string>): Array<{ key: string; code: string; label: string }> {
   if (!buildCodes) return [];
@@ -1139,6 +1180,16 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     updateRow(templateId, rowIndex, (row) => normalizeRow(row.slot));
   };
 
+  const clearPilotColumn = (templateId: string, field: "primary" | "alternates") => {
+    updateTemplateById(templateId, (template) => ({
+      ...template,
+      rows: template.rows.map((row) => ({
+        ...row,
+        [field]: [],
+      })),
+    }));
+  };
+
   const copyBuildCode = async (value: string, templateId: string, slot: number) => {
     const code = value.trim();
     if (!code) return;
@@ -1536,6 +1587,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   if (value === "repository") {
                     navigate("/repository");
                   }
+                  if (value === "overview") {
+                    navigate("/overview");
+                  }
                 }}
                 variant="standard"
                 sx={{
@@ -1546,6 +1600,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               >
                 <Tab label="Drop Decks" value="dropDecks" />
                 <Tab label="Repository" value="repository" />
+                <Tab label="Overview" value="overview" />
               </Tabs>
 
               <Divider
@@ -2176,6 +2231,24 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         <Button
                           variant="outlined"
                           size="small"
+                          startIcon={<BackspaceIcon fontSize="small" />}
+                          disabled={editMode !== "edit"}
+                          onClick={() => clearPilotColumn(template.id, "primary")}
+                        >
+                          Clear Primary
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<BackspaceIcon fontSize="small" />}
+                          disabled={editMode !== "edit"}
+                          onClick={() => clearPilotColumn(template.id, "alternates")}
+                        >
+                          Clear Alternates
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
                           startIcon={<ContentCopyIcon fontSize="small" />}
                           onClick={() => duplicateDeck(template)}
                         >
@@ -2252,6 +2325,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             })();
                             const hasSelectedRepositoryBuild = Boolean(mech && row.mech && mech.id === row.mech && (row.weaponry ?? "") === (mech.weaponry ?? ""));
                             const rowClass = mech?.class ?? configMech?.class ?? selectedConfigMech?.class ?? "-";
+                            const rowClassLabel = asWeightClassLabel(rowClass);
+                            const rowClassTheme = rowClassLabel ? WEIGHT_CLASS_GRADIENTS[rowClassLabel] : null;
                             const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage;
                             const rowIssues = cs26Validation.rowIssuesBySlot.get(row.slot) ?? [];
 
@@ -2318,7 +2393,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     {PILOT_OPTIONS.map((pilot) => (
                                       <MenuItem key={pilot} value={pilot} dense>
                                         <Checkbox checked={row.primary.includes(pilot)} size="small" sx={{ mr: 0.6, py: 0.2 }} />
-                                        {getPilotShortcode(pilot)}
+                                        {pilot}
                                       </MenuItem>
                                     ))}
                                   </Select>
@@ -2351,7 +2426,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                     {PILOT_OPTIONS.map((pilot) => (
                                       <MenuItem key={pilot} value={pilot} dense>
                                         <Checkbox checked={getVisibleAlternates(row).includes(pilot)} size="small" sx={{ mr: 0.6, py: 0.2 }} />
-                                        {getPilotShortcode(pilot)}
+                                        {pilot}
                                       </MenuItem>
                                     ))}
                                   </Select>
@@ -2398,9 +2473,41 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   </Box>
                                 </Stack>
 
-                                <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.85rem" }}>
-                                  {rowClass}
-                                </Typography>
+                                {(() => {
+                                  if (!rowClassLabel || !rowClassTheme) {
+                                    return (
+                                      <Typography
+                                        variant="body2"
+                                        sx={{
+                                          color: isLight ? "#4f6282" : "#d3ddfc",
+                                          fontSize: "0.85rem",
+                                          letterSpacing: "0.01em",
+                                        }}
+                                      >
+                                        {rowClass}
+                                      </Typography>
+                                    );
+                                  }
+                                  return (
+                                    <Typography
+                                      variant="body2"
+                                      sx={{
+                                        fontSize: "0.85rem",
+                                        fontWeight: 700,
+                                        letterSpacing: "0.01em",
+                                        lineHeight: 1.2,
+                                        color: isLight ? rowClassTheme.lightFallback : rowClassTheme.darkFallback,
+                                        backgroundImage: isLight ? rowClassTheme.lightGradient : rowClassTheme.darkGradient,
+                                        WebkitBackgroundClip: "text",
+                                        backgroundClip: "text",
+                                        WebkitTextFillColor: "transparent",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {rowClassLabel}
+                                    </Typography>
+                                  );
+                                })()}
 
                                 <Typography variant="body2" sx={{ color: isLight ? "#4f6282" : "#d3ddfc", fontSize: "0.85rem" }}>
                                   {typeof rowTonnage === "number" ? `${rowTonnage} t` : "-"}
