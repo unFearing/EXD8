@@ -226,6 +226,15 @@ export function OverviewView({
   onViewModeChange,
 }: OverviewViewProps) {
   const navigate = useNavigate();
+    const openMechInRepository = (row: DeckRowDoc) => {
+      navigate("/repository", {
+        state: {
+          focusMechId: row.mech || undefined,
+          focusChassis: row.chassis || undefined,
+          focusVariant: row.variant || undefined,
+        },
+      });
+    };
   const isLight = mode === "light";
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -648,7 +657,28 @@ export function OverviewView({
                           />
                           <Stack spacing={0.1} sx={{ pl: 3.8 }}>
                             {deck.rows.map((row) => (
-                              <Typography key={row.slot} variant="caption" title={[row.chassis, row.variant].filter(Boolean).join(" ")} sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: isLight ? "#405675" : "#d5e1ff" }}>
+                              <Typography
+                                key={row.slot}
+                                component="button"
+                                type="button"
+                                variant="caption"
+                                title={[row.chassis, row.variant].filter(Boolean).join(" ")}
+                                onClick={() => openMechInRepository(row)}
+                                sx={{
+                                  minWidth: 0,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  color: isLight ? "#405675" : "#d5e1ff",
+                                  background: "none",
+                                  border: 0,
+                                  p: 0,
+                                  textAlign: "left",
+                                  cursor: "pointer",
+                                  font: "inherit",
+                                  "&:hover, &:focus-visible": { color: isLight ? "#b01859" : "#ff8ac5" },
+                                }}
+                              >
                                 {mechLabelForRow(row, chassisCodeByName)}
                               </Typography>
                             ))}
@@ -816,7 +846,28 @@ export function OverviewView({
                                       <Tooltip title={roleTitle}>
                                         <CircleIcon sx={{ fontSize: "0.54rem", color: roleColor, flexShrink: 0 }} />
                                       </Tooltip>
-                                      <Typography variant="body2" title={`${entry.deck.name} · ${entry.mechLabel}`} sx={{ fontSize: "0.78rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      <Typography
+                                        component="button"
+                                        type="button"
+                                        variant="body2"
+                                        title={`${entry.deck.name} · ${entry.mechLabel}`}
+                                        onClick={() => openMechInRepository(entry.row)}
+                                        sx={{
+                                          minWidth: 0,
+                                          fontSize: "0.78rem",
+                                          whiteSpace: "nowrap",
+                                          overflow: "hidden",
+                                          textOverflow: "ellipsis",
+                                          color: "inherit",
+                                          background: "none",
+                                          border: 0,
+                                          p: 0,
+                                          textAlign: "left",
+                                          cursor: "pointer",
+                                          font: "inherit",
+                                          "&:hover, &:focus-visible": { color: isLight ? "#b01859" : "#ff8ac5" },
+                                        }}
+                                      >
                                         {entry.mechLabel}
                                         {!entry.hasRepositoryData ? " *" : ""}
                                       </Typography>
