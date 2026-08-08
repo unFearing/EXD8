@@ -91,7 +91,7 @@ const PILOT_OPTIONS = [
   "GiL",
   "Chap",
   "Hydro",
-  "Awes",
+  "Awes"
 ];
 
 const MATRIX_PRIMARY_COL_WIDTH = 110;

@@ -252,23 +252,22 @@ const TABLE_HEADERS = ["Primary", "Alternates", "Lance", "Mech", "Class", "Tonna
 
 const PILOT_OPTIONS = [
   "Ex",
-  "Saik",
+  "Saikyou",
   "Grill",
   "Xiph",
   "Ra",
   "Neir",
   "unF",
-  "Acerg",
   "Heaven",
+  "GT",
   "V",
-  "Judas",
-  "Bitey",
-  "GiL",
   "P4TCHY",
   "Bux",
-  "Hydro",
   "Itsy",
+  "Acerg",
+  "GiL",
   "Chap",
+  "Hydro",
   "Awes"
 ];
 
