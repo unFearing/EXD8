@@ -15,7 +15,7 @@ describe("parseMechBuildHandler", () => {
       json: async () => ({
         url: `https://mwo.nav-alpha.com/mechlab?b=${buildToken}`,
       }),
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(200);
@@ -53,7 +53,7 @@ Heat Sinks: 10
       json: async () => ({
         url: "https://mwo.nav-alpha.com/mechlab?b=5eb157b1_FS9-FS",
       }),
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(200);

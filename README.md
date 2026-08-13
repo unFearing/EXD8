@@ -60,6 +60,7 @@ Most config files are location-sensitive and must stay where their toolchain exp
   - `api/tsconfig.json`
   - `api/local.settings.json` (local only, gitignored)
   - `api/package.json`
+  - Set `SESSION_SECRET` to a stable random value in local settings and Azure App Settings so Discord sessions remain valid across API restarts and deployments.
 - App config:
   - `app/vite.config.ts`
   - `app/tsconfig*.json`

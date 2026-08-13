@@ -21,19 +21,19 @@ describe("getMechHierarchyHandler", () => {
     ]);
 
     const response = await getMechHierarchyHandler({
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(200);
   });
 
-  it("returns 200 when auth headers are missing", async () => {
+  it("returns 403 when auth context is missing", async () => {
     getMechHierarchyMock.mockResolvedValueOnce([]);
 
     const response = await getMechHierarchyHandler({
       headers: new Headers(),
     } as never);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
   });
 });

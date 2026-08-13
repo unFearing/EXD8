@@ -2,7 +2,7 @@ import { app, type HttpRequest, type InvocationContext, type Timer } from "@azur
 import type { DropDeckDoc, MechDoc } from "../../types/contracts.js";
 import { listDropDecks } from "../../db/repositories/matchNightRepository.js";
 import { listMechs } from "../../db/repositories/mechRepository.js";
-import { assertCanWrite, getRequestContext } from "../../middleware/authGuard.js";
+import { authErrorResponse, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
 
 type DiscordMessageResponse = {
@@ -141,21 +141,13 @@ if (process.env.ENABLE_DAILY_BACKUP_TIMER === "true") {
 
 export async function manualDiscordBackupHandler(request: HttpRequest) {
   try {
-    const ctx = getRequestContext(request);
-    assertCanWrite(ctx);
+    getRequestContext(request, "write");
 
     const result = await runDiscordBackup();
     return ok(result);
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "MISSING_AUTH_CONTEXT") {
-      return fail(403, "FORBIDDEN", "Missing auth context headers");
-    }
-    if (error instanceof Error && error.message === "INVALID_ROLE") {
-      return fail(403, "FORBIDDEN", "Invalid user role header");
-    }
-    if (error instanceof Error && error.message === "FORBIDDEN_WRITE") {
-      return fail(403, "FORBIDDEN", "Write permission denied");
-    }
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     if (error instanceof Error && error.message === "MISSING_DISCORD_BACKUP_CONFIG") {
       return fail(500, "INTERNAL", "Missing Discord backup configuration");
     }

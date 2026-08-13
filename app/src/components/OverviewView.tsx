@@ -32,6 +32,7 @@ import { getDropDecks, getQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import type { DeckRowDoc, DropDeckDoc, QuickslotEntry } from "../types/contracts";
+import { resolveAppRole } from "../utils/discordRoles";
 
 type EditMode = "view" | "edit";
 type TeamSide = "1" | "2" | "either";
@@ -245,10 +246,9 @@ export function OverviewView({
   const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
   const [slottedPilots, setSlottedPilots] = useState<Record<string, string>>({});
   const [showAssignedOnly, setShowAssignedOnly] = useState(true);
+  const canManage = resolveAppRole(user?.roles ?? [], user?.appRole) === "TL";
 
   void hasRole;
-  void viewMode;
-  void onViewModeChange;
 
   useEffect(() => {
     let cancelled = false;
@@ -517,41 +517,45 @@ export function OverviewView({
                 </Typography>
               )}
 
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<AddIcon />}
-                onClick={() => navigate("/repository", { state: { openAddBuild: true } })}
-                sx={{
-                  background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
-                  color: isLight ? "#fff" : "#7fb3ff",
-                  textTransform: "none",
-                  borderRadius: 1,
-                  px: 2,
-                  minHeight: 38,
-                  fontWeight: 700,
-                  "&:hover": {
-                    background: isLight ? "rgba(58, 111, 189, 0.95)" : "rgba(127, 179, 255, 0.28)",
-                  },
-                }}
-              >
-                Add Build
-              </Button>
+              {canManage && (
+                <>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => navigate("/repository", { state: { openAddBuild: true } })}
+                    sx={{
+                      background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
+                      color: isLight ? "#fff" : "#7fb3ff",
+                      textTransform: "none",
+                      borderRadius: 1,
+                      px: 2,
+                      minHeight: 38,
+                      fontWeight: 700,
+                      "&:hover": {
+                        background: isLight ? "rgba(58, 111, 189, 0.95)" : "rgba(127, 179, 255, 0.28)",
+                      },
+                    }}
+                  >
+                    Add Build
+                  </Button>
 
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => onViewModeChange(viewMode === "edit" ? "view" : "edit")}
-                sx={{
-                  color: isLight ? "#4e6486" : "#c8d8ff",
-                  borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
-                  minHeight: 38,
-                  px: 1.6,
-                  textTransform: "none",
-                }}
-              >
-                {viewMode === "edit" ? "Editing" : "Viewing"}
-              </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => onViewModeChange(viewMode === "edit" ? "view" : "edit")}
+                    sx={{
+                      color: isLight ? "#4e6486" : "#c8d8ff",
+                      borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
+                      minHeight: 38,
+                      px: 1.6,
+                      textTransform: "none",
+                    }}
+                  >
+                    {viewMode === "edit" ? "Editing" : "Viewing"}
+                  </Button>
+                </>
+              )}
 
               <Tooltip title={isLight ? "Switch to dark mode" : "Switch to light mode"}>
                 <Button

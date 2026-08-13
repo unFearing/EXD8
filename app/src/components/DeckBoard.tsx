@@ -460,6 +460,36 @@ function normalizeVariantToken(value: string): string {
     .trim();
 }
 
+const CONFIG_VARIANT_ALIASES: Record<string, string[]> = {
+  "flea|romeo5000": ["r5k", "fler5k"],
+};
+
+function getConfigPairLookupKeys(mech: ConfigMech): string[] {
+  const canonicalKey = getPairLookupKey(mech.chassis, mech.variant);
+  const aliases = new Set(CONFIG_VARIANT_ALIASES[canonicalKey] ?? []);
+  const words = mech.variant.match(/[a-z0-9]+/gi) ?? [];
+
+  if (words.length > 1 && mech.chassisCode) {
+    const initialism = words.map((word) => word[0]).join("");
+    aliases.add(initialism);
+    aliases.add(`${mech.chassisCode}${initialism}`);
+  }
+
+  return [canonicalKey, ...Array.from(aliases, (alias) => getPairLookupKey(mech.chassis, alias))];
+}
+
+function inferConfigChassisCode(chassis: MechsConfigFile["mechs"]["IS"]["LIGHT"][string]): string {
+  if (chassis.chassis_code.trim()) return chassis.chassis_code.trim();
+
+  const counts = new Map<string, number>();
+  for (const variant of chassis.variants) {
+    const prefix = variant.match(/^([a-z0-9]+)-/i)?.[1]?.toUpperCase();
+    if (prefix) counts.set(prefix, (counts.get(prefix) ?? 0) + 1);
+  }
+
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+}
+
 function toTemplate(doc: DropDeckDoc): DeckTemplate {
   const normalizedSide = doc.side === "Team 1" ? "1" : doc.side === "Team 2" ? "2" : doc.side === "Agnostic" ? "either" : doc.side;
   const rows = Array.from({ length: ROW_COUNT }, (_, idx) => {
@@ -541,12 +571,14 @@ function flattenMechsConfig(file: MechsConfigFile): ConfigMech[] {
       const chassisRecords = byClass[classKey];
       for (const chassisName of Object.keys(chassisRecords)) {
         const chassis = chassisRecords[chassisName];
+        const chassisCode = inferConfigChassisCode(chassis);
         for (const variant of chassis.variants) {
           list.push({
             key: `${chassis.chassis_name}|${variant}`,
             tech,
             class: toWeightClassLabel(classKey),
             chassis: chassis.chassis_name,
+            chassisCode,
             variant,
             tonnage: chassis.tonnage,
           });
@@ -643,7 +675,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const syncedTemplatesRef = useRef<Map<string, DeckTemplate>>(new Map());
   const localOnlyTemplateIdsRef = useRef<Set<string>>(new Set());
 
-  const editMode = viewMode;
+  const canDelete = resolveAppRole(user?.roles ?? [], user?.appRole) === "TL";
+  const editMode = canDelete ? viewMode : "view";
   const [mapConfigs, setMapConfigs] = useState<MapConfigDoc[]>([]);
   const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_FALLBACK_OPTIONS[0]);
   const [mapTileMode, setMapTileMode] = useState<MapTileMode>("static");
@@ -672,7 +705,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const textInputDebounceRef = useRef<Map<string, number>>(new Map());
 
   void hasRole;
-  const canDelete = resolveAppRole(user?.roles ?? [], user?.appRole) === "TL";
   const { error } = useMatchNightApi();
 
   const mapOptions = useMemo<DeckMap[]>(() => {
@@ -830,7 +862,23 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const mechLookup = useMemo(() => new Map(mechs.map((mech) => [mech.id, mech])), [mechs]);
   const configuredByKey = useMemo(() => new Map(configuredMechs.map((mech) => [mech.key, mech])), [configuredMechs]);
   const configuredByNormalizedPair = useMemo(
-    () => new Map(configuredMechs.map((mech) => [getPairLookupKey(mech.chassis, mech.variant), mech])),
+    () => {
+      const map = new Map<string, ConfigMech>();
+      const ambiguousKeys = new Set<string>();
+      for (const mech of configuredMechs) {
+        for (const key of getConfigPairLookupKeys(mech)) {
+          if (ambiguousKeys.has(key)) continue;
+          const existing = map.get(key);
+          if (existing && existing.key !== mech.key) {
+            map.delete(key);
+            ambiguousKeys.add(key);
+            continue;
+          }
+          map.set(key, mech);
+        }
+      }
+      return map;
+    },
     [configuredMechs],
   );
   const configuredByNormalizedChassis = useMemo(() => {
@@ -846,19 +894,21 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const mechsByNormalizedPair = useMemo(() => {
     const map = new Map<string, MechDoc[]>();
     for (const mech of mechs) {
-      const key = getPairLookupKey(mech.chassis, mech.variant);
+      const configured = configuredByNormalizedPair.get(getPairLookupKey(mech.chassis, mech.variant));
+      const key = configured
+        ? getPairLookupKey(configured.chassis, configured.variant)
+        : getPairLookupKey(mech.chassis, mech.variant);
       const list = map.get(key) ?? [];
       list.push(mech);
       map.set(key, list);
     }
     
     return map;
-  }, [mechs]);
+  }, [configuredByNormalizedPair, mechs]);
   const buildOptionsByPair = useMemo(() => {
     const map = new Map<string, Array<{ label: string; code: string }>>();
-    for (const docs of mechsByNormalizedPair.values()) {
+    for (const [key, docs] of mechsByNormalizedPair.entries()) {
       if (!docs.length) continue;
-      const key = getPairLookupKey(docs[0].chassis, docs[0].variant);
       const seen = new Set<string>();
       const options: Array<{ label: string; code: string }> = [];
       
@@ -1385,7 +1435,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       return;
     }
 
-    const confirmed = window.confirm(`Delete deck \"${template.name}\"? This cannot be undone.`);
+    const confirmed = window.confirm(`Delete deck "${template.name}"? This cannot be undone.`);
     if (!confirmed) {
       return;
     }
@@ -1687,13 +1737,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                 >
                   View
                 </Button>
-                <Button
-                  startIcon={<EditIcon fontSize="small" />}
-                  variant={editMode === "edit" ? "contained" : "outlined"}
-                  onClick={() => onViewModeChange("edit")}
-                >
-                  Edit
-                </Button>
+                {canDelete && (
+                  <Button
+                    startIcon={<EditIcon fontSize="small" />}
+                    variant={editMode === "edit" ? "contained" : "outlined"}
+                    onClick={() => onViewModeChange("edit")}
+                  >
+                    Edit
+                  </Button>
+                )}
               </ButtonGroup>
 
               <Button

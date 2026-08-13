@@ -50,6 +50,9 @@ const LEGACY_VARIANT_ALIASES: Record<string, string[]> = {
   // Common shorthand for hero variants.
   "bsw-hr": ["high roller"],
   "high roller": ["bsw-hr"],
+  "fle-r5k": ["romeo 5000"],
+  r5k: ["romeo 5000"],
+  "romeo 5000": ["fle-r5k", "r5k"],
 };
 
 function normalizeToken(value: string): string {
@@ -105,6 +108,13 @@ function getVariantInitialisms(value: string): string[] {
   const reduced = noStopTokens.map((token) => token[0]).join("").toUpperCase();
 
   return Array.from(new Set([full, reduced].filter(Boolean)));
+}
+
+function getVariantAliasTokens(value: string): string[] {
+  return Array.from(new Set([
+    ...getVariantInitialisms(value),
+    normalizeVariantToken(value).toUpperCase(),
+  ].filter(Boolean)));
 }
 
 function getVariantSuffixToken(value: string): string {
@@ -329,7 +339,7 @@ export function resolveConfigMech(chassis: string, variant: string, techHint?: C
       const shorthandMatches = chassisFallbackPool.filter((entry) => {
         if (techHint && entry.tech !== techHint) return false;
         const canonical = normalizeVariantToken(entry.variant).toUpperCase();
-        return canonical.startsWith(suffixToken);
+        return canonical.startsWith(suffixToken) || getVariantAliasTokens(entry.variant).includes(suffixToken);
       });
 
       if (shorthandMatches.length === 1) {

@@ -13,20 +13,11 @@ import type {
   ParsedMechBuild,
   WeightClassSummary,
 } from "../types/contracts";
-import { normalizeDiscordUser } from "../utils/discordRoles";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
-type StoredDiscordUser = {
-  id: string;
-  username?: string;
-  roles?: string[];
-  appRole?: "TL" | "Pilot";
-};
-
 function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
   const fallbackUser = "ui-local-user";
-  const fallbackRole = "Pilot";
   const disableAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
 
   if (disableAuth) {
@@ -36,32 +27,7 @@ function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
       "x-user-id": fallbackUser,
     };
   }
-
-  const rawUser = localStorage.getItem("discord_user");
-  if (!rawUser) {
-    return {
-      "x-team-id": teamId,
-      "x-user-role": fallbackRole,
-      "x-user-id": fallbackUser,
-    };
-  }
-
-  try {
-    const user = normalizeDiscordUser(JSON.parse(rawUser) as StoredDiscordUser);
-    return {
-      "x-team-id": teamId,
-      "x-user-role": user.appRole ?? fallbackRole,
-      "x-user-id": user.id ?? fallbackUser,
-      "x-user-name": user.username ?? user.id ?? fallbackUser,
-    };
-  } catch {
-    return {
-      "x-team-id": teamId,
-      "x-user-role": fallbackRole,
-      "x-user-id": fallbackUser,
-      "x-user-name": fallbackUser,
-    };
-  }
+  return { "x-team-id": teamId };
 }
 
 async function parseResponse<T>(response: Response): Promise<ApiSuccess<T>> {
@@ -120,35 +86,35 @@ export async function getMatchNightById(id: string, teamId: string): Promise<Mat
 }
 
 export async function getMechHierarchy(): Promise<WeightClassSummary[]> {
-  const response = await fetch(`${API_BASE}/mechs/hierarchy`);
+  const response = await fetch(`${API_BASE}/mechs/hierarchy`, { headers: getAuthHeaders() });
 
   const parsed = await parseResponse<WeightClassSummary[]>(response);
   return parsed.data;
 }
 
 export async function getMechs(): Promise<MechDoc[]> {
-  const response = await fetch(`${API_BASE}/mechs`);
+  const response = await fetch(`${API_BASE}/mechs`, { headers: getAuthHeaders() });
 
   const parsed = await parseResponse<MechDoc[]>(response);
   return parsed.data;
 }
 
 export async function getDropDecks(): Promise<DropDeckDoc[]> {
-  const response = await fetch(`${API_BASE}/decks`);
+  const response = await fetch(`${API_BASE}/decks`, { headers: getAuthHeaders() });
 
   const parsed = await parseResponse<DropDeckDoc[]>(response);
   return parsed.data;
 }
 
 export async function getMapConfigs(): Promise<MapConfigDoc[]> {
-  const response = await fetch(`${API_BASE}/config/maps`);
+  const response = await fetch(`${API_BASE}/config/maps`, { headers: getAuthHeaders() });
 
   const parsed = await parseResponse<MapConfigDoc[]>(response);
   return parsed.data;
 }
 
 export async function getMechRoles(): Promise<string[]> {
-  const response = await fetch(`${API_BASE}/config/mech-roles`);
+  const response = await fetch(`${API_BASE}/config/mech-roles`, { headers: getAuthHeaders() });
   const parsed = await parseResponse<string[]>(response);
   return parsed.data;
 }
@@ -192,7 +158,7 @@ export async function deleteDropDeck(id: string): Promise<{ id: string; deleted:
 }
 
 export async function getQuickslots(id = "quickslots-default"): Promise<QuickslotDoc> {
-  const response = await fetch(`${API_BASE}/quickslots?id=${encodeURIComponent(id)}`);
+  const response = await fetch(`${API_BASE}/quickslots?id=${encodeURIComponent(id)}`, { headers: getAuthHeaders() });
   const parsed = await parseResponse<QuickslotDoc>(response);
   return parsed.data;
 }
@@ -254,6 +220,7 @@ export async function parseMechBuild(url: string): Promise<ParsedMechBuild> {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({ url }),
   });
@@ -263,7 +230,7 @@ export async function parseMechBuild(url: string): Promise<ParsedMechBuild> {
 }
 
 export async function checkMechLink(url: string): Promise<{ exists: boolean; mechId?: string; chassis?: string; variant?: string }> {
-  const response = await fetch(`${API_BASE}/mechs/checkLink?url=${encodeURIComponent(url)}`);
+  const response = await fetch(`${API_BASE}/mechs/checkLink?url=${encodeURIComponent(url)}`, { headers: getAuthHeaders() });
   const parsed = await parseResponse<{ exists: boolean; mechId?: string; chassis?: string; variant?: string }>(response);
   return parsed.data;
 }

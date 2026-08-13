@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { authErrorResponse, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
 
@@ -1047,6 +1048,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
 
 export async function parseMechBuildHandler(request: HttpRequest) {
   try {
+    getRequestContext(request);
     const payload = (await request.json()) as { url?: string };
     const urlValue = payload?.url?.trim();
     if (!urlValue) {
@@ -1211,7 +1213,9 @@ export async function parseMechBuildHandler(request: HttpRequest) {
     }
 
     return ok(result);
-  } catch {
+  } catch (error: unknown) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     return fail(500, "INTERNAL", "Unexpected server error");
   }
 }

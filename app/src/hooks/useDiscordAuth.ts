@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { normalizeDiscordUser } from "../utils/discordRoles";
 
 export interface DiscordUser {
@@ -18,14 +18,27 @@ export interface AuthState {
 
 const DISCORD_REDIRECT_URI = `${window.location.origin}/auth/callback`;
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
+const DISCORD_OAUTH_STATE_KEY = "discord_oauth_state";
+
+function createOAuthState(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function getCachedUser(): DiscordUser | null {
+  try {
+    const cachedUserRaw = localStorage.getItem("discord_user");
+    return cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+  } catch {
+    return null;
+  }
+}
 
 function getCachedAuthState(): AuthState {
   try {
-    const token = localStorage.getItem("discord_token");
-    const cachedUserRaw = localStorage.getItem("discord_user");
-    const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+    const cachedUser = getCachedUser();
 
-    if (token && cachedUser) {
+    if (cachedUser) {
       return {
         isLoading: true,
         isAuthed: true,
@@ -47,11 +60,12 @@ function getCachedAuthState(): AuthState {
 
 export function useDiscordAuth(): AuthState & {
   login: () => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   hasRole: (roleId: string) => boolean;
 } {
   const [discordClientId, setDiscordClientId] = useState("");
   const [state, setState] = useState<AuthState>(getCachedAuthState);
+  const authGenerationRef = useRef(0);
 
   const loadDiscordClientId = async (): Promise<string> => {
     if (discordClientId) return discordClientId;
@@ -69,13 +83,14 @@ export function useDiscordAuth(): AuthState & {
 
   // Check if already authenticated on mount
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("code")) return;
+    const generation = ++authGenerationRef.current;
+
     const checkAuth = async () => {
       try {
-        const token = localStorage.getItem("discord_token");
-        const cachedUserRaw = localStorage.getItem("discord_user");
-        const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+        const cachedUser = getCachedUser();
 
-        if (cachedUser && token) {
+        if (cachedUser) {
           setState({
             isLoading: true,
             isAuthed: true,
@@ -84,31 +99,36 @@ export function useDiscordAuth(): AuthState & {
           });
         }
 
-        if (!token) {
-          setState((prev) => ({ ...prev, isLoading: false }));
-          return;
-        }
-
         const response = await fetch("/api/auth/me", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
+        if (generation !== authGenerationRef.current) return;
 
         if (!response.ok) {
-          if (response.status >= 500 && cachedUser) {
+          if (response.status !== 401 && response.status !== 403 && cachedUser) {
             setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
             return;
           }
-          localStorage.removeItem("discord_token");
           localStorage.removeItem("discord_user");
-          setState((prev) => ({ ...prev, isLoading: false }));
+          setState({
+            isLoading: false,
+            isAuthed: false,
+            user: null,
+            error: null,
+          });
           return;
         }
 
         const payload = await response.json() as { ok: boolean; data: DiscordUser };
+        if (generation !== authGenerationRef.current) return;
         if (!payload.ok || !payload.data) {
-          localStorage.removeItem("discord_token");
           localStorage.removeItem("discord_user");
-          setState((prev) => ({ ...prev, isLoading: false }));
+          setState({
+            isLoading: false,
+            isAuthed: false,
+            user: null,
+            error: null,
+          });
           return;
         }
 
@@ -121,9 +141,9 @@ export function useDiscordAuth(): AuthState & {
           error: null,
         });
       } catch (err) {
+        if (generation !== authGenerationRef.current) return;
         console.error("Auth check failed:", err);
-        const cachedUserRaw = localStorage.getItem("discord_user");
-        const cachedUser = cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+        const cachedUser = getCachedUser();
         if (cachedUser) {
           setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
         } else {
@@ -146,6 +166,16 @@ export function useDiscordAuth(): AuthState & {
       const code = params.get("code");
 
       if (!code) return;
+      const generation = ++authGenerationRef.current;
+
+      const returnedState = params.get("state");
+      const expectedState = sessionStorage.getItem(DISCORD_OAUTH_STATE_KEY);
+      sessionStorage.removeItem(DISCORD_OAUTH_STATE_KEY);
+      if (!returnedState || !expectedState || returnedState !== expectedState) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setState((prev) => ({ ...prev, isLoading: false, error: "Invalid Discord login state. Please try again." }));
+        return;
+      }
 
       try {
         setState((prev) => ({ ...prev, isLoading: true }));
@@ -153,31 +183,35 @@ export function useDiscordAuth(): AuthState & {
         const response = await fetch("/api/auth/discord", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          credentials: "include",
           body: JSON.stringify({ code, redirectUri: DISCORD_REDIRECT_URI }),
         });
+        if (generation !== authGenerationRef.current) return;
 
         if (!response.ok) {
           const payload = await response.json().catch(() => null) as { ok?: boolean; error?: { message?: string } } | null;
           throw new Error(payload?.error?.message || "OAuth exchange failed");
         }
 
-        const payload = await response.json() as { ok: boolean; data: { token: string; user: DiscordUser } };
-        if (!payload.ok || !payload.data?.token || !payload.data?.user) {
+        const payload = await response.json() as { ok: boolean; data: { user: DiscordUser } };
+        if (generation !== authGenerationRef.current) return;
+        if (!payload.ok || !payload.data?.user) {
           throw new Error("OAuth exchange failed");
         }
-        localStorage.setItem("discord_token", payload.data.token);
-        localStorage.setItem("discord_user", JSON.stringify(payload.data.user));
+        const user = normalizeDiscordUser(payload.data.user);
+        localStorage.setItem("discord_user", JSON.stringify(user));
 
         setState({
           isLoading: false,
           isAuthed: true,
-          user: payload.data.user,
+          user,
           error: null,
         });
 
         // Clean up URL
         window.history.replaceState({}, document.title, window.location.pathname);
       } catch (err) {
+        if (generation !== authGenerationRef.current) return;
         console.error("OAuth callback failed:", err);
         setState((prev) => ({
           ...prev,
@@ -221,11 +255,14 @@ export function useDiscordAuth(): AuthState & {
         }
 
         const scope = "identify guilds.members.read";
+        const oauthState = createOAuthState();
+        sessionStorage.setItem(DISCORD_OAUTH_STATE_KEY, oauthState);
         const url = new URL("https://discord.com/api/oauth2/authorize");
         url.searchParams.set("client_id", clientId);
         url.searchParams.set("redirect_uri", DISCORD_REDIRECT_URI);
         url.searchParams.set("response_type", "code");
         url.searchParams.set("scope", scope);
+        url.searchParams.set("state", oauthState);
 
         window.location.href = url.toString();
       } catch {
@@ -238,8 +275,8 @@ export function useDiscordAuth(): AuthState & {
     })();
   };
 
-  const logout = () => {
-    localStorage.removeItem("discord_token");
+  const logout = async () => {
+    authGenerationRef.current += 1;
     localStorage.removeItem("discord_user");
     setState({
       isLoading: false,
@@ -247,6 +284,21 @@ export function useDiscordAuth(): AuthState & {
       user: null,
       error: null,
     });
+
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      });
+      if (!response.ok) throw new Error(`Logout failed (${response.status})`);
+    } catch (error) {
+      console.error("Logout request failed:", error);
+      setState((previous) => ({
+        ...previous,
+        error: "Logout could not be confirmed. Please try again before closing this browser.",
+      }));
+    }
   };
 
   const hasRole = (roleId: string): boolean => {

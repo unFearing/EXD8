@@ -1,6 +1,6 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { getMatchNightById } from "../../db/repositories/matchNightRepository.js";
-import { assertTeamAccess, getRequestContext } from "../../middleware/authGuard.js";
+import { assertTeamAccess, authErrorResponse, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
 
 export async function getMatchNightByIdHandler(request: HttpRequest) {
@@ -25,12 +25,8 @@ export async function getMatchNightByIdHandler(request: HttpRequest) {
 
     return ok(doc);
   } catch (error: unknown) {
-    if (error instanceof Error && error.message === "MISSING_AUTH_CONTEXT") {
-      return fail(403, "FORBIDDEN", "Missing auth context headers");
-    }
-    if (error instanceof Error && error.message === "INVALID_ROLE") {
-      return fail(403, "FORBIDDEN", "Invalid user role header");
-    }
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     if (error instanceof Error && error.message === "TEAM_MISMATCH") {
       return fail(409, "TEAM_MISMATCH", "Team partition mismatch");
     }

@@ -35,7 +35,9 @@ describe("upsertDropDeckHandler", () => {
     const response = await upsertDropDeckHandler({
       json: async () => validPayload(),
       headers: new Headers({
+        "x-team-id": "EXD8",
         "x-user-id": "user-1",
+        "x-user-role": "TL",
       }),
     } as never);
 
@@ -58,7 +60,7 @@ describe("upsertDropDeckHandler", () => {
 
     const response = await upsertDropDeckHandler({
       json: async () => validPayload(),
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "user-1", "x-user-role": "TL" }),
     } as never);
 
     expect(response.status).toBe(409);

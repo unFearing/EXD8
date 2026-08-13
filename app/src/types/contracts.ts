@@ -207,6 +207,7 @@ export type ConfigMech = {
   tech: MechsConfigTech;
   class: WeightClass;
   chassis: string;
+  chassisCode?: string;
   variant: string;
   tonnage: number;
 };

@@ -99,7 +99,6 @@ export function RepositoryView({
   onToggleMode,
   user,
   onLogout,
-  hasRole: _hasRole,
   viewMode,
   onViewModeChange,
 }: RepositoryViewProps) {
@@ -118,7 +117,6 @@ export function RepositoryView({
   const [selectedRole, setSelectedRole] = useState<string>(FILTER_ALL);
   const [selectedSubmitter, setSelectedSubmitter] = useState<string>(TECH_ALL);
   const [weaponrySearch, setWeaponrySearch] = useState("");
-  const editMode = viewMode;
   const [mechsById, setMechsById] = useState<Record<string, MechDoc>>({});
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
@@ -130,13 +128,9 @@ export function RepositoryView({
   const [parserReview, setParserReview] = useState<ParserReviewState | null>(null);
   const [parsingMechId, setParsingMechId] = useState<string | null>(null);
   const canManageBuilds = resolveAppRole(user?.roles ?? [], user?.appRole) === APP_ROLE_TEAM_LEAD;
-  const normalizedUserName = (user?.username ?? "").trim().toLowerCase();
+  const editMode = canManageBuilds ? viewMode : "view";
 
-  const canDeleteBuild = (build: MechDoc): boolean => {
-    if (canManageBuilds) return true;
-    const submitter = (build.submittedBy ?? "").trim().toLowerCase();
-    return Boolean(normalizedUserName) && submitter === normalizedUserName;
-  };
+  const canDeleteBuild = canManageBuilds;
 
   const loadHierarchy = async () => {
     setLoading(true);
@@ -235,7 +229,7 @@ export function RepositoryView({
 
   const handleDeleteMech = async (id: string) => {
     const build = mechsById[id];
-    if (!build || !canDeleteBuild(build)) {
+    if (!build || !canDeleteBuild) {
       setError(ERROR_DELETE_PERMISSION);
       return;
     }
@@ -683,13 +677,15 @@ export function RepositoryView({
                 >
                   View
                 </Button>
-                <Button
-                  startIcon={<EditIcon fontSize="small" />}
-                  variant={editMode === "edit" ? "contained" : "outlined"}
-                  onClick={() => onViewModeChange("edit")}
-                >
-                  Edit
-                </Button>
+                {canManageBuilds && (
+                  <Button
+                    startIcon={<EditIcon fontSize="small" />}
+                    variant={editMode === "edit" ? "contained" : "outlined"}
+                    onClick={() => onViewModeChange("edit")}
+                  >
+                    Edit
+                  </Button>
+                )}
               </ButtonGroup>
 
               <Button
@@ -1128,7 +1124,7 @@ export function RepositoryView({
                                           <Box />
                                         )}
                                         {(() => {
-                                          if (!sourceBuild || !canDeleteBuild(sourceBuild)) return null;
+                                          if (!sourceBuild || !canDeleteBuild) return null;
                                           return (
                                             <IconButton
                                               color="error"

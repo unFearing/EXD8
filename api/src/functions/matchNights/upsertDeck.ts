@@ -1,5 +1,6 @@
 import { app, type HttpRequest } from "@azure/functions";
 import { upsertDropDeck } from "../../db/repositories/matchNightRepository.js";
+import { authErrorResponse, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
 import { dropDeckUpsertInputSchema } from "../../types/contracts.js";
 
@@ -11,10 +12,12 @@ export async function upsertDropDeckHandler(request: HttpRequest) {
       return fail(400, "BAD_REQUEST", "Invalid payload", parsed.error.flatten());
     }
 
-    const updatedBy = request.headers.get("x-user-name") ?? request.headers.get("x-user-id") ?? "deckboard-ui";
-    const saved = await upsertDropDeck(parsed.data, updatedBy);
+    const ctx = getRequestContext(request, "write");
+    const saved = await upsertDropDeck(parsed.data, ctx.userName);
     return ok(saved);
   } catch (error: unknown) {
+    const authResponse = authErrorResponse(error);
+    if (authResponse) return authResponse;
     if (error instanceof Error && error.message === "MIN_FILLED_SLOTS") {
       return fail(400, "BAD_REQUEST", "Deck must have at least 5 filled slots before saving");
     }

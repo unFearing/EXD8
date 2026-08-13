@@ -8,33 +8,6 @@ vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
   deleteDropDeckById: deleteDropDeckByIdMock,
 }));
 
-vi.mock("../../../../src/middleware/authGuard.js", () => ({
-  getRequestContext: (request: { headers: Headers }) => {
-    const role = request.headers.get("x-user-role");
-    const teamId = request.headers.get("x-team-id");
-    const userId = request.headers.get("x-user-id");
-
-    if (!teamId || !userId || !role) {
-      throw new Error("MISSING_AUTH_CONTEXT");
-    }
-
-    if (role !== "TL" && role !== "Pilot") {
-      throw new Error("INVALID_ROLE");
-    }
-
-    if (role === "Pilot") {
-      throw new Error("FORBIDDEN_WRITE");
-    }
-
-    return { teamId, role, userId };
-  },
-  assertCanWrite: (ctx: { role: string }) => {
-    if (ctx.role !== "TL") {
-      throw new Error("FORBIDDEN_WRITE");
-    }
-  },
-}));
-
 import { deleteDropDeckHandler } from "../../../../src/functions/matchNights/deleteDeck.js";
 
 describe("deleteDropDeckHandler", () => {

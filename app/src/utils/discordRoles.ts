@@ -28,8 +28,11 @@ export function resolveAppRole(roles: string[], appRole?: AppRole): AppRole | nu
 
 export function normalizeDiscordUser<T extends DiscordUserLike>(user: T): T & { appRole: AppRole } {
   const resolvedRole = resolveAppRole(user.roles ?? [], user.appRole);
+  if (!resolvedRole) {
+    throw new Error("Discord user does not have a mapped application role");
+  }
   return {
     ...user,
-    appRole: resolvedRole ?? "Pilot",
+    appRole: resolvedRole,
   };
 }

@@ -20,7 +20,9 @@ describe("listMapConfigsHandler", () => {
       },
     ]);
 
-    const response = await listMapConfigsHandler();
+    const response = await listMapConfigsHandler({
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
+    } as never);
     expect(response.status).toBe(200);
   });
 });

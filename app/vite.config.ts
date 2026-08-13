@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET ?? "http://127.0.0.1:7071";
+
 function getAppVersion(): string {
   const packageJsonPath = new URL("./package.json", import.meta.url);
   const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { version?: string };
@@ -31,7 +33,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:7071',
+        target: apiProxyTarget,
         changeOrigin: true,
       },
     },

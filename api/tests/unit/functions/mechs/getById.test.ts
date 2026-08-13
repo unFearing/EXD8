@@ -16,7 +16,7 @@ describe("getMechByIdHandler", () => {
 
     const response = await getMechByIdHandler({
       params: { id: "missing" },
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(404);
@@ -27,13 +27,13 @@ describe("getMechByIdHandler", () => {
 
     const response = await getMechByIdHandler({
       params: { id: "mech-1" },
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(200);
   });
 
-  it("returns 404 when auth context headers are missing", async () => {
+  it("returns 403 when auth context is missing", async () => {
     getMechByIdMock.mockResolvedValueOnce(null);
 
     const response = await getMechByIdHandler({
@@ -41,13 +41,13 @@ describe("getMechByIdHandler", () => {
       headers: new Headers(),
     } as never);
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
   });
 
   it("returns 400 when id is missing", async () => {
     const response = await getMechByIdHandler({
       params: {},
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(400);

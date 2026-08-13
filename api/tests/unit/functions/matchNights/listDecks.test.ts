@@ -11,7 +11,7 @@ vi.mock("../../../../src/db/repositories/matchNightRepository.js", () => ({
 import { listDropDecksHandler } from "../../../../src/functions/matchNights/listDecks.js";
 
 describe("listDropDecksHandler", () => {
-  it("returns 200 when auth headers are missing", async () => {
+  it("returns 403 when auth context is missing", async () => {
     listDropDecksMock.mockResolvedValueOnce([]);
 
     const response = await listDropDecksHandler({
@@ -19,7 +19,7 @@ describe("listDropDecksHandler", () => {
       headers: new Headers(),
     } as never);
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(403);
   });
 
   it("returns 200 with drop decks", async () => {
@@ -35,7 +35,7 @@ describe("listDropDecksHandler", () => {
 
     const response = await listDropDecksHandler({
       query: new URLSearchParams(),
-      headers: new Headers(),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
     } as never);
 
     expect(response.status).toBe(200);
