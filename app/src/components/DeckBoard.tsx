@@ -53,6 +53,8 @@ import type {
   WeightClass,
 } from "../types/contracts";
 import { resolveAppRole } from "../utils/discordRoles";
+import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL } from "../constants/viewPalette";
+import { getMechSkillTreeCode } from "../utils/skillTree";
 
 type EditMode = "view" | "edit";
 type MapTileMode = "static" | "iframe";
@@ -99,6 +101,7 @@ type CopiedCell = {
 type BuildOption = {
   label: string;
   code: string;
+  skillTreeCode: string;
   mechId: string;
   mechLabel: string;
   submittedAt?: string;
@@ -939,6 +942,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         options.push({
           label,
           code: preferredCode,
+          skillTreeCode: getMechSkillTreeCode(doc),
           mechId: doc.id,
           mechLabel: doc.name?.trim() ? `${doc.variant} / ${doc.name.trim()}` : doc.variant,
           submittedAt: formatSubmissionDate(doc.submittedAt, doc._ts),
@@ -969,6 +973,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         list.push({
           label,
           code: preferredCode,
+          skillTreeCode: getMechSkillTreeCode(doc),
           mechId: doc.id,
           mechLabel: doc.name?.trim() ? `${doc.variant} / ${doc.name.trim()}` : doc.variant,
           submittedAt: formatSubmissionDate(doc.submittedAt, doc._ts),
@@ -1250,7 +1255,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         buildUrl: build?.link || build?.buildUrl || "",
         buildCode: build ? getPreferredBuildCode(build.buildCodes) : "",
         role: build?.role ?? row.role ?? "",
-        skillTree: build?.skillCode ?? row.skillTree ?? "",
+        skillTree: getMechSkillTreeCode(build) || row.skillTree || "",
         weightClass: build?.class ?? configSelection?.class ?? row.weightClass,
         tonnage: build?.tonnage ?? configSelection?.tonnage ?? row.tonnage,
         equipmentText: build ? (build.metadata?.equipment ?? build.equipment ?? []).join(", ") : row.equipmentText,
@@ -1641,10 +1646,10 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       sx={{
         minHeight: "100vh",
         maxWidth: "100vw",
-        overflowX: "hidden",
+        overflowX: "clip",
         background:
           isLight
-            ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
+            ? LIGHT_VIEW_BACKGROUND
             : "radial-gradient(circle at 8% 10%, rgba(167, 196, 255, 0.18), transparent 35%), radial-gradient(circle at 90% 0%, rgba(119, 140, 191, 0.18), transparent 40%), #0c101d",
         pb: 3,
         "& .MuiPaper-root, & .MuiButton-root, & .MuiButtonGroup-root, & .MuiOutlinedInput-root, & .MuiAlert-root, & .MuiDialog-paper": {
@@ -1653,10 +1658,13 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
       }}
     >
       <AppBar
+        data-testid="top-navbar"
         position="sticky"
         elevation={0}
         sx={{
-          background: isLight ? "rgba(229, 236, 246, 0.93)" : "rgba(9, 14, 28, 0.9)",
+          top: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          background: isLight ? LIGHT_VIEW_APP_BAR : "rgba(9, 14, 28, 0.9)",
           borderBottom: isLight ? "1px solid rgba(111, 130, 160, 0.34)" : "1px solid rgba(130, 154, 217, 0.32)",
           backdropFilter: "blur(8px)",
         }}
@@ -2038,7 +2046,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   p: 1.4,
                   borderRadius: 2,
                   border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-                  background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+                  background: isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.9)",
                 }}
               >
                 <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
@@ -2403,6 +2411,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   options.push({
                                     label: mech.weaponry?.trim() || key,
                                     code,
+                                    skillTreeCode: getMechSkillTreeCode(mech),
                                     mechId: dedupeKey,
                                     mechLabel: mech.name?.trim() ? `${mech.variant} / ${mech.name.trim()}` : mech.variant,
                                     submittedAt: formatSubmissionDate(mech.submittedAt, mech._ts),
@@ -2642,6 +2651,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                           mech: option.mechId.split(":", 1)[0] ?? entry.mech,
                                           weaponry: option.label,
                                           buildCode: nextBuildCode,
+                                          skillTree: option.skillTreeCode,
                                         };
                                       });
                                     }}
@@ -2727,6 +2737,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 {editMode === "edit" ? (
                                   <Stack direction="row" spacing={0.3} sx={{ alignItems: "center", minWidth: 0 }}>
                                     <TextField
+                                      key={row.mech}
                                       variant="standard"
                                       fullWidth
                                       defaultValue={row.skillTree ?? ""}
@@ -2752,7 +2763,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                       }}
                                     />
                                     {(() => {
-                                      const skillTreeCode = (row.skillTree || mech?.skillCode || "").trim();
+                                      const skillTreeCode = (row.skillTree || getMechSkillTreeCode(mech)).trim();
                                       const copyable = Boolean(skillTreeCode) && skillTreeCode !== "-" && skillTreeCode.toLowerCase() !== "pending";
                                       if (!copyable) return null;
                                       return (
@@ -2802,7 +2813,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 ) : (
                                   <Stack direction="row" spacing={0.3} sx={{ alignItems: "center", minWidth: 0 }}>
                                     {(() => {
-                                      const skillTreeCode = (row.skillTree || mech?.skillCode || "").trim();
+                                      const skillTreeCode = (row.skillTree || getMechSkillTreeCode(mech)).trim();
                                       const display = skillTreeCode || "-";
                                       const copyable = Boolean(skillTreeCode) && skillTreeCode !== "-" && skillTreeCode.toLowerCase() !== "pending";
                                       return (
@@ -2902,7 +2913,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                       p: 1.6,
                       borderRadius: 2,
                       border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-                      background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+                      background: isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.9)",
                     }}
                   >
                     <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>

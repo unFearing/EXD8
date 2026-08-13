@@ -34,6 +34,7 @@ import { CS26_COMPETITION } from "../constants/competition";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import type { DeckRowDoc, DropDeckDoc, QuickslotEntry } from "../types/contracts";
 import { resolveAppRole } from "../utils/discordRoles";
+import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL } from "../constants/viewPalette";
 
 type EditMode = "view" | "edit";
 type TeamSide = "1" | "2" | "either";
@@ -525,10 +526,10 @@ export function OverviewView({
       sx={{
         minHeight: "100vh",
         maxWidth: "100vw",
-        overflowX: "hidden",
+        overflowX: "clip",
         background:
           isLight
-            ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
+            ? LIGHT_VIEW_BACKGROUND
             : "radial-gradient(circle at 8% 10%, rgba(167, 196, 255, 0.18), transparent 35%), radial-gradient(circle at 90% 0%, rgba(119, 140, 191, 0.18), transparent 40%), #0c101d",
         pb: 3,
         "& .MuiPaper-root, & .MuiButton-root, & .MuiButtonGroup-root, & .MuiOutlinedInput-root, & .MuiAlert-root, & .MuiDialog-paper": {
@@ -537,10 +538,13 @@ export function OverviewView({
       }}
     >
       <AppBar
+        data-testid="top-navbar"
         position="sticky"
         elevation={0}
         sx={{
-          background: isLight ? "rgba(229, 236, 246, 0.93)" : "rgba(9, 14, 28, 0.9)",
+          top: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          background: isLight ? LIGHT_VIEW_APP_BAR : "rgba(9, 14, 28, 0.9)",
           borderBottom: isLight ? "1px solid rgba(111, 130, 160, 0.34)" : "1px solid rgba(130, 154, 217, 0.32)",
           backdropFilter: "blur(8px)",
         }}
@@ -624,6 +628,7 @@ export function OverviewView({
                   variant="outlined"
                   size="small"
                   onClick={onToggleMode}
+                  aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
                   sx={{
                     minWidth: 38,
                     width: 38,
@@ -666,7 +671,7 @@ export function OverviewView({
               px: 1.2,
               py: 0.8,
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-              background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+              background: isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.9)",
             }}
           >
             <Stack spacing={0.55}>
@@ -792,7 +797,7 @@ export function OverviewView({
               maxWidth: "100%",
               overflowX: "auto",
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-              background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+              background: isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.9)",
             }}
           >
             <Table stickyHeader size="small">
@@ -844,7 +849,7 @@ export function OverviewView({
                   const allAssignments = assignmentsByPilot.get(pilot) ?? [];
                   const hasPrimary = allAssignments.some((entry) => entry.isPrimary);
                   const hasAlternate = allAssignments.some((entry) => entry.isAlternate);
-                  const stickyBg = isLight ? "rgba(236, 242, 249, 0.98)" : "rgba(11, 16, 33, 0.96)";
+                  const stickyBg = isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.96)";
 
                   return (
                     <TableRow key={pilot} hover>
@@ -983,7 +988,7 @@ export function OverviewView({
             sx={{
               p: 1,
               border: isLight ? "1px solid rgba(114, 133, 162, 0.34)" : "1px solid rgba(130, 154, 217, 0.35)",
-              background: isLight ? "rgba(236, 242, 249, 0.95)" : "rgba(11, 16, 33, 0.9)",
+              background: isLight ? LIGHT_VIEW_PANEL : "rgba(11, 16, 33, 0.9)",
             }}
           >
             <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} sx={{ alignItems: { xs: "flex-start", md: "center" }, justifyContent: "space-between" }}>

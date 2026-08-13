@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MECH_ROLE_VALUES } from "./mechRoles.js";
+import { isSkillTreeCode, parseSkillTreeUrl } from "../utils/skillTree.js";
 
 export const weightClassSchema = z.enum(["Light", "Medium", "Heavy", "Assault"]);
 export type WeightClass = z.infer<typeof weightClassSchema>;
@@ -213,6 +214,8 @@ const mechDocBaseSchema = z.object({
   name: z.string().max(80).optional(),
   link: z.string().url().or(z.literal("")),
   skillCode: z.string().min(1),
+  skillTreeCode: z.string().refine(isSkillTreeCode, "skillTreeCode must be a hexadecimal Kitlaan skill code").optional(),
+  skillTreeUrl: z.string().url().refine((value) => Boolean(parseSkillTreeUrl(value)), "skillTreeUrl must be a Kitlaan MWO skill tree URL").optional(),
   weaponry: z.string(),
   description: z.string(),
   role: z.string().min(1),
@@ -271,6 +274,23 @@ export const mechDocSchema = mechDocBaseSchema.superRefine((value, context) => {
       code: z.ZodIssueCode.custom,
       path: ["metadata", "ranges"],
       message: "metadata.ranges.idealMin must be <= idealMax",
+    });
+  }
+
+  const parsedSkillTreeUrl = parseSkillTreeUrl(value.skillTreeUrl);
+  if (parsedSkillTreeUrl && value.skillTreeCode && parsedSkillTreeUrl.code !== value.skillTreeCode.toLowerCase()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["skillTreeCode"],
+      message: "skillTreeCode must match the code in skillTreeUrl",
+    });
+  }
+
+  if (parsedSkillTreeUrl && value.tech && parsedSkillTreeUrl.tech !== value.tech) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["skillTreeUrl"],
+      message: "skillTreeUrl tech must match mech tech",
     });
   }
 });

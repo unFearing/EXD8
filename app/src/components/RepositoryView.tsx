@@ -13,6 +13,8 @@ import { deleteMech, getMechHierarchy, getMechs, parseMechBuild, updateMech } fr
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import { AddBuildDialog } from "./AddBuildDialog";
 import { resolveAppRole } from "../utils/discordRoles";
+import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL, LIGHT_VIEW_SUBTLE_PANEL } from "../constants/viewPalette";
+import { buildSkillTreeUrl, getMechSkillTreeCode, isSkillTreeCode, parseSkillTreeUrl } from "../utils/skillTree";
 
 type EditMode = "view" | "edit";
 
@@ -125,6 +127,7 @@ export function RepositoryView({
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   const [suggestedBuildDrafts, setSuggestedBuildDrafts] = useState<Record<string, boolean>>({});
   const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
+  const [skillTreeUrlDrafts, setSkillTreeUrlDrafts] = useState<Record<string, string>>({});
   const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
   const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
@@ -282,7 +285,8 @@ export function RepositoryView({
 
     const description = (descriptionDrafts[id] ?? source.description ?? "").trim();
     const weaponry = (weaponryDrafts[id] ?? source.weaponry ?? "").trim();
-    const skillCode = (skillCodeDrafts[id] ?? source.skillCode ?? "").trim();
+    const skillTreeCode = (skillCodeDrafts[id] ?? getMechSkillTreeCode(source)).trim();
+    const skillTreeUrl = (skillTreeUrlDrafts[id] ?? source.skillTreeUrl ?? "").trim();
     const name = normalizeBuildName(nameDrafts[id] ?? source.name);
     const role = (roleDrafts[id] ?? source.role ?? "").trim();
     const buildCodes = getDisplayBuildCodes(buildCodesDrafts[id] ?? source.buildCodes ?? {}).reduce<Record<string, string>>(
@@ -302,7 +306,9 @@ export function RepositoryView({
         suggestedBuild: suggestedBuildDrafts[id] ?? Boolean(source.suggestedBuild),
         description,
         weaponry,
-        skillCode,
+        skillCode: skillTreeCode || source.skillCode,
+        skillTreeCode: skillTreeCode || undefined,
+        skillTreeUrl: skillTreeUrl || undefined,
         buildCodes,
       });
       setMechsById((previous) => ({
@@ -353,6 +359,12 @@ export function RepositoryView({
         if (!(id in previous)) {
           return previous;
         }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setSkillTreeUrlDrafts((previous) => {
+        if (!(id in previous)) return previous;
         const next = { ...previous };
         delete next[id];
         return next;
@@ -567,9 +579,9 @@ export function RepositoryView({
       sx={{
         minHeight: "100vh",
         maxWidth: "100vw",
-        overflowX: "hidden",
+        overflowX: "clip",
         background: isLight
-          ? "radial-gradient(circle at 14% 6%, rgba(248, 179, 151, 0.4), transparent 32%), radial-gradient(circle at 86% 2%, rgba(255, 212, 184, 0.38), transparent 38%), #fbe9de"
+          ? LIGHT_VIEW_BACKGROUND
           : `radial-gradient(circle at 14% 5%, rgba(96, 125, 200, 0.24), transparent 35%), radial-gradient(circle at 86% 2%, rgba(248, 179, 151, 0.16), transparent 40%), ${MOXIE_NIGHT_BG}`,
         pb: 3,
         "& .MuiPaper-root, & .MuiButton-root, & .MuiButtonGroup-root, & .MuiOutlinedInput-root, & .MuiAlert-root, & .MuiDialog-paper": {
@@ -578,11 +590,14 @@ export function RepositoryView({
       }}
     >
       <AppBar
+        data-testid="top-navbar"
         position="sticky"
         elevation={0}
         sx={{
-          background: isLight ? "rgba(252, 225, 210, 0.94)" : "rgba(20, 30, 56, 0.92)",
-          borderBottom: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}75`,
+          top: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
+          background: isLight ? LIGHT_VIEW_APP_BAR : "rgba(20, 30, 56, 0.92)",
+          borderBottom: isLight ? "1px solid rgba(111, 130, 160, 0.34)" : `1px solid ${MOXIE_NIGHT_LINE}75`,
           backdropFilter: "blur(8px)",
         }}
       >
@@ -737,7 +752,7 @@ export function RepositoryView({
           sx={{
             borderRadius: 2,
             border: isLight ? `1px solid ${MOXIE_BLUE}73` : `1px solid ${MOXIE_NIGHT_LINE}80`,
-            background: isLight ? "rgba(252, 235, 224, 0.95)" : "rgba(23, 35, 66, 0.92)",
+            background: isLight ? LIGHT_VIEW_PANEL : "rgba(23, 35, 66, 0.92)",
             overflow: "hidden",
             p: 2,
           }}
@@ -823,7 +838,7 @@ export function RepositoryView({
                             p: 1.25,
                             borderColor: isLight ? `${MOXIE_BLUE}70` : `${MOXIE_NIGHT_LINE}90`,
                             borderWidth: "1px 0 0 0",
-                            background: isLight ? "rgba(252, 236, 223, 0.72)" : "rgba(21, 33, 62, 0.72)",
+                            background: isLight ? LIGHT_VIEW_SUBTLE_PANEL : "rgba(21, 33, 62, 0.72)",
                           }}
                         >
                           <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
@@ -953,6 +968,7 @@ export function RepositoryView({
                                         gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" },
                                         columnGap: { xs: 2, md: 4 },
                                         rowGap: { xs: 2.5, md: 3 },
+                                        "& > *": { minWidth: 0 },
                                       }}
                                     >
                                       {editMode === "edit" && canManageBuilds && (
@@ -1059,17 +1075,37 @@ export function RepositoryView({
                                         {editMode === "edit" && canManageBuilds ? (
                                           <Stack spacing={1.5} sx={{ mt: 0.9 }}>
                                             <TextField
-                                              label="Skill Code"
+                                              label="Skill Tree Code"
                                               size="small"
                                               fullWidth
                                               slotProps={{ inputLabel: { shrink: true } }}
-                                              value={skillCodeDrafts[build.id] ?? sourceBuild?.skillCode ?? ""}
+                                              value={skillCodeDrafts[build.id] ?? getMechSkillTreeCode(sourceBuild)}
                                               onChange={(event) => {
-                                                const next = event.target.value;
+                                                const next = event.target.value.trim();
                                                 setSkillCodeDrafts((previous) => ({
                                                   ...previous,
                                                   [build.id]: next,
                                                 }));
+                                                if (isSkillTreeCode(next)) {
+                                                  setSkillTreeUrlDrafts((previous) => ({
+                                                    ...previous,
+                                                    [build.id]: buildSkillTreeUrl(next, sourceBuild?.tech ?? "IS"),
+                                                  }));
+                                                }
+                                              }}
+                                            />
+                                            <TextField
+                                              label="Kitlaan Skill Tree URL"
+                                              size="small"
+                                              fullWidth
+                                              value={skillTreeUrlDrafts[build.id] ?? sourceBuild?.skillTreeUrl ?? ""}
+                                              onChange={(event) => {
+                                                const next = event.target.value;
+                                                const parsed = parseSkillTreeUrl(next);
+                                                setSkillTreeUrlDrafts((previous) => ({ ...previous, [build.id]: next }));
+                                                if (parsed) {
+                                                  setSkillCodeDrafts((previous) => ({ ...previous, [build.id]: parsed.code }));
+                                                }
                                               }}
                                             />
                                             <TextField
@@ -1090,17 +1126,22 @@ export function RepositoryView({
                                             />
                                           </Stack>
                                         ) : (
-                                          <Stack spacing={0.4} sx={{ mt: 0.65 }}>
-                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                              Skill Code: {(sourceBuild?.skillCode ?? "").trim() || "-"}
-                                            </Typography>
+                                          <Stack spacing={1.4} sx={{ mt: 0.65, minWidth: 0 }}>
+                                            <Box data-testid={`repo-skill-code-${build.id}`} sx={{ minWidth: 0 }}>
+                                              <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", display: "block" }}>
+                                                Skill Tree
+                                              </Typography>
+                                              <Typography component="code" variant="body2" sx={{ mt: 0.25, display: "block", maxWidth: "100%", color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, lineHeight: 1.45, overflowWrap: "anywhere", wordBreak: "break-word", userSelect: "text" }}>
+                                                {getMechSkillTreeCode(sourceBuild) || "-"}
+                                              </Typography>
+                                            </Box>
                                             {buildCodes.length ? (
                                               buildCodes.map(([codeType, codeValue]) => (
-                                                <Box key={codeType} sx={{ mt: 0.4 }}>
+                                                <Box key={codeType} data-testid={`repo-build-code-${build.id}-${codeType}`} sx={{ minWidth: 0 }}>
                                                   <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", display: "block" }}>
                                                     {codeType}
                                                   </Typography>
-                                                  <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere", userSelect: "text" }}>
+                                                  <Typography component="code" variant="body2" sx={{ mt: 0.25, display: "block", maxWidth: "100%", color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, lineHeight: 1.45, overflowWrap: "anywhere", wordBreak: "break-word", userSelect: "text" }}>
                                                     {codeValue}
                                                   </Typography>
                                                 </Box>
@@ -1114,12 +1155,25 @@ export function RepositoryView({
                                         )}
                                       </Box>
 
+                                    </Box>
+
+                                    <Box
+                                      sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr", sm: hasRangeInformation ? "minmax(0, 1fr) minmax(0, 1fr)" : "1fr" },
+                                        gap: { xs: 1.5, sm: 3 },
+                                        alignItems: "start",
+                                        borderTop: isLight ? `1px solid ${MOXIE_BLUE}33` : `1px solid ${MOXIE_NIGHT_LINE}44`,
+                                        pt: 1.1,
+                                        "& > *": { minWidth: 0 },
+                                      }}
+                                    >
                                       {hasRangeInformation && (
-                                        <Box sx={{ gridColumn: { md: 2 } }}>
+                                        <Box data-testid={`repo-range-${build.id}`}>
                                           <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                             Range
                                           </Typography>
-                                          <Typography variant="body2" sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                          <Typography variant="body2" sx={{ mt: 0.45, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, lineHeight: 1.55, overflowWrap: "anywhere" }}>
                                             {rangeMin > 0 || rangeMax > 0 ? `Ideal: ${rangeMin}-${rangeMax} m` : null}
                                             {(rangeMin > 0 || rangeMax > 0) && (optimalRange > 0 || maxRange > 0) ? " | " : null}
                                             {optimalRange > 0 ? `Optimal: ${optimalRange} m` : null}
@@ -1128,24 +1182,40 @@ export function RepositoryView({
                                           </Typography>
                                         </Box>
                                       )}
-                                    </Box>
-
-                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, columnGap: { md: 4 } }}>
-                                      <Box sx={{ gridColumn: { md: 2 } }}>
+                                      <Box data-testid={`repo-source-${build.id}`}>
                                         <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                           Source
                                         </Typography>
-                                        <Stack spacing={0.45} sx={{ mt: 0.65 }}>
-                                          <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                        <Stack
+                                          direction={hasRangeInformation ? "column" : { xs: "column", sm: "row" }}
+                                          spacing={hasRangeInformation ? 0.35 : { xs: 0.35, sm: 0 }}
+                                          sx={{
+                                            mt: 0.45,
+                                            columnGap: hasRangeInformation ? 0 : { sm: 4 },
+                                            rowGap: 0.35,
+                                            flexWrap: "wrap",
+                                            minWidth: 0,
+                                          }}
+                                        >
+                                          <Typography data-testid={`repo-submitter-${build.id}`} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
                                             Submitted By: {(sourceBuild?.submittedBy ?? "").trim() || "-"}
                                           </Typography>
                                           {canonicalUrl ? (
-                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
-                                              Link: <a href={canonicalUrl} target="_blank" rel="noopener noreferrer">Open NAV build</a>
+                                            <Typography data-testid={`repo-mechdb-${build.id}`} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
+                                              MechDB: <a href={canonicalUrl} target="_blank" rel="noopener noreferrer">Open build</a>
                                             </Typography>
                                           ) : (
-                                            <Typography variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
-                                              Link: -
+                                            <Typography data-testid={`repo-mechdb-${build.id}`} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                              MechDB: -
+                                            </Typography>
+                                          )}
+                                          {sourceBuild?.skillTreeUrl ? (
+                                            <Typography data-testid={`repo-kitlaan-${build.id}`} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, overflowWrap: "anywhere" }}>
+                                              Kitlaan: <a href={sourceBuild.skillTreeUrl} target="_blank" rel="noopener noreferrer">Open skill tree</a>
+                                            </Typography>
+                                          ) : (
+                                            <Typography data-testid={`repo-kitlaan-${build.id}`} variant="body2" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                              Kitlaan: -
                                             </Typography>
                                           )}
                                         </Stack>

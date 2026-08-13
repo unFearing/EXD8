@@ -153,6 +153,8 @@ export type MechDoc = {
   name?: string;
   link: string;
   skillCode: string;
+  skillTreeCode?: string;
+  skillTreeUrl?: string;
   weaponry: string;
   description: string;
   role: string;
@@ -268,6 +270,8 @@ export type CreateMechInput = {
   role: string;
   buildCodes: Record<string, string>;
   skillCode: string;
+  skillTreeCode?: string;
+  skillTreeUrl?: string;
   metadata: {
     equipment: string[];
     ranges: {

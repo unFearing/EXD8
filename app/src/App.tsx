@@ -6,6 +6,7 @@ import { RepositoryView } from "./components/RepositoryView";
 import { OverviewView } from "./components/OverviewView";
 import { AuthSplash } from "./components/AuthSplash";
 import { useDiscordAuth } from "./hooks/useDiscordAuth";
+import { LIGHT_THEME_BACKGROUND, LIGHT_THEME_PAPER } from "./constants/viewPalette";
 import "./App.css";
 
 type ThemeMode = "light" | "dark";
@@ -46,8 +47,8 @@ function buildTheme(mode: ThemeMode) {
         main: mode === "light" ? "#a86f44" : "#ffb74d",
       },
       background: {
-        default: mode === "light" ? "#e7edf4" : "#0b1020",
-        paper: mode === "light" ? "#edf3f9" : "#131b36",
+        default: mode === "light" ? LIGHT_THEME_BACKGROUND : "#0b1020",
+        paper: mode === "light" ? LIGHT_THEME_PAPER : "#131b36",
       },
     },
     shape: {

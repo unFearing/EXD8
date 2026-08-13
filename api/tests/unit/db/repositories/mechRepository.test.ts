@@ -63,4 +63,32 @@ describe("normalizeMechInputForStorage", () => {
     const unnamed = normalizeMechInputForStorage(buildInput({ name: "   " }));
     expect(unnamed.name).toBeUndefined();
   });
+
+  it("derives canonical Kitlaan fields from a valid legacy skill code", () => {
+    const code = "aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000";
+    const normalized = normalizeMechInputForStorage(buildInput({ skillCode: code, tech: "Clan" }));
+
+    expect(normalized.skillTreeCode).toBe(code);
+    expect(normalized.skillTreeUrl).toBe(`https://kitlaan.gitlab.io/mwoskill2/#/C/${code}`);
+  });
+
+  it("derives the code and canonical URL from a Kitlaan URL", () => {
+    const code = "aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000";
+    const normalized = normalizeMechInputForStorage(buildInput({
+      skillTreeUrl: `https://kitlaan.gitlab.io/mwoskill2/#/C/${code.toUpperCase()}`,
+    }));
+
+    expect(normalized.skillTreeCode).toBe(code);
+    expect(normalized.skillTreeUrl).toBe(`https://kitlaan.gitlab.io/mwoskill2/#/C/${code}`);
+  });
+
+  it("canonicalizes a pasted route to the mech tech", () => {
+    const code = "aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000";
+    const normalized = normalizeMechInputForStorage(buildInput({
+      tech: "IS",
+      skillTreeUrl: `https://kitlaan.gitlab.io/mwoskill2/#/C/${code}`,
+    }));
+
+    expect(normalized.skillTreeUrl).toBe(`https://kitlaan.gitlab.io/mwoskill2/#/I/${code}`);
+  });
 });

@@ -82,6 +82,8 @@ describe("mechDocSchema", () => {
       tech: "Clan",
       tonnage: 75,
       buildUrl: "https://example.com/builds/timberwolf-s",
+      skillTreeCode: "aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000",
+      skillTreeUrl: "https://kitlaan.gitlab.io/mwoskill2/#/C/aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000",
       submittedAt: "2026-08-12T12:00:00.000Z",
       suggestedBuild: true,
       equipment: ["ECM", "Targeting Computer Mk I"],
@@ -95,6 +97,32 @@ describe("mechDocSchema", () => {
     expect(result.success).toBe(true);
     expect(result.data?.suggestedBuild).toBe(true);
     expect(result.data?.submittedAt).toBe("2026-08-12T12:00:00.000Z");
+  });
+
+  it("rejects mismatched Kitlaan URL and code fields", () => {
+    const base = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      chassis: "TIMB",
+      variant: "S",
+      link: "",
+      skillCode: "pending",
+      skillTreeCode: "aff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000",
+      skillTreeUrl: "https://kitlaan.gitlab.io/mwoskill2/#/C/bff4f5ef742967c910149cdf5ef6a76a0525a0000604b030a100080000000",
+      weaponry: "",
+      description: "",
+      role: "Sniper",
+      buildCodes: {},
+      metadata: {
+        equipment: [],
+        ranges: { optimal: 0, max: 0, idealMin: 0, idealMax: 0 },
+        heat: { generation: 0, capacity: 0, dissipation: 0 },
+        dps: { sustained: 0, max: 0 },
+      },
+      tech: "Clan",
+      schemaVersion: "1.0",
+    };
+
+    expect(mechDocSchema.safeParse(base).success).toBe(false);
   });
 
   it("rejects mismatched tonnage and class", () => {

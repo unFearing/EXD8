@@ -26,6 +26,7 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { parseMechBuild, createMech, getMechRoles, checkMechLink } from "../api/client";
 import type { CreateMechInput, MechsConfigFile } from "../types/contracts";
+import { normalizeSkillTreeInput } from "../utils/skillTree";
 
 const EXPORT_CODE_WARNING = "Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.";
 
@@ -177,6 +178,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
   const [buildNotes, setBuildNotes] = useState("");
 
   const [buildDraft, setBuildDraft] = useState<CreateMechInput>(defaultBuildDraft());
+  const [skillTreeInput, setSkillTreeInput] = useState("");
   const [buildCodeText, setBuildCodeText] = useState("");
   const [equipmentText, setEquipmentText] = useState("");
   const [buildMeta, setBuildMeta] = useState<Record<string, string | number | boolean | null>>({});
@@ -247,6 +249,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
 
       const parsed = await parseMechBuild(urlInput.trim());
       setBuildDraft(parsed.draft);
+      setSkillTreeInput(parsed.draft.skillTreeUrl ?? parsed.draft.skillTreeCode ?? "");
       setBuildCodeText(buildCodesToText(parsed.draft.buildCodes));
       setEquipmentText(listToText(parsed.draft.metadata.equipment ?? parsed.draft.equipment ?? []));
       setWarnings(parsed.warnings.filter((warning) => warning !== EXPORT_CODE_WARNING));
@@ -461,8 +464,12 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     setNotice("");
 
     try {
+      const normalizedSkillTree = normalizeSkillTreeInput(skillTreeInput, buildDraft.tech ?? "IS");
       const payload: CreateMechInput = {
         ...buildDraft,
+        skillCode: normalizedSkillTree?.code ?? buildDraft.skillCode,
+        skillTreeCode: normalizedSkillTree?.code,
+        skillTreeUrl: normalizedSkillTree?.url,
         metadata: {
           ...buildDraft.metadata,
           equipment: parseListText(equipmentText),
@@ -491,6 +498,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     setUseBulk(false);
     setReviewBeforeSubmit(false);
     setBuildDraft(defaultBuildDraft());
+    setSkillTreeInput("");
     setBuildCodeText("");
     setEquipmentText("");
     setBuildMeta({});
@@ -503,11 +511,14 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     onClose();
   };
 
+  const normalizedSkillTreeInput = normalizeSkillTreeInput(skillTreeInput, buildDraft.tech ?? "IS");
+  const isSkillTreeInputValid = !skillTreeInput.trim() || Boolean(normalizedSkillTreeInput);
   const isFormValid =
     buildDraft.chassis &&
     buildDraft.variant &&
     buildDraft.tonnage &&
-    buildDraft.weaponry;
+    buildDraft.weaponry &&
+    isSkillTreeInputValid;
 
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
@@ -790,16 +801,29 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                       helperText='key: value per line ("default" is the parser-generated code key)'
                     />
 
-                    <Stack direction="row" spacing={1}>
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
                       <TextField
-                        label="Skill Code"
+                        label="Skill Tree Code or Kitlaan URL"
                         size="small"
                         fullWidth
-                        value={buildDraft.skillCode}
-                        onChange={(e) => setBuildDraft((prev) => ({ ...prev, skillCode: e.target.value }))}
+                        value={skillTreeInput}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const normalized = normalizeSkillTreeInput(value, buildDraft.tech ?? "IS");
+                          setSkillTreeInput(value);
+                          setBuildDraft((prev) => ({
+                            ...prev,
+                            tech: normalized?.tech ?? prev.tech,
+                            skillCode: normalized?.code ?? "pending",
+                            skillTreeCode: normalized?.code,
+                            skillTreeUrl: normalized?.url,
+                          }));
+                        }}
+                        error={Boolean(skillTreeInput.trim()) && !isSkillTreeInputValid}
+                        helperText="Paste either a raw skill tree code or a full Kitlaan skill tree link. Both the code and URL are saved automatically."
                       />
                       <TextField
-                        label="Build URL"
+                        label="MechDB Build URL"
                         size="small"
                         fullWidth
                         value={buildDraft.link || buildDraft.buildUrl || ""}

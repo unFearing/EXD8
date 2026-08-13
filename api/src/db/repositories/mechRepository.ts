@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CreateMechInput, MechDoc, WeightClass } from "../../types/contracts.js";
 import { resolveConfigMech } from "../../data/mechsConfigCatalog.js";
+import { normalizeSkillTreeFields } from "../../utils/skillTree.js";
 import { getMechsContainer } from "../cosmos.js";
 
 export type VariantSummary = {
@@ -48,6 +49,7 @@ export function normalizeMechInputForStorage(input: CreateMechInput): CreateMech
   const normalized: CreateMechInput = {
     ...input,
     buildCodes: normalizeBuildCodes(input.buildCodes ?? {}),
+    ...normalizeSkillTreeFields(input),
   };
 
   if (normalizedName) {

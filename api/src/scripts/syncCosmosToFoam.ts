@@ -23,6 +23,16 @@ function toMarkdown(doc: MechDoc): string {
   return `---\nid: ${doc.id}\nclass: ${className}\ntech: ${tech}\ntonnage: ${tonnage}\nchassis: ${doc.chassis}\nvariant: ${doc.variant}\nbuildUrl: ${buildUrl}\nskillCode: ${doc.skillCode}\nweaponry: \"${doc.weaponry.replaceAll("\"", "\\\"")}\"\nrole: ${doc.role}\nprimaryRangeBracket: [${rangeMin}, ${rangeMax}]\noptimalRange: ${optimalRange}\nmaxRange: ${maxRange}\nequipment:\n${equipmentList}\nbuildCodes:\n${buildCodesLines}\n---\n\n# ${doc.id}\n\n[[${className}]] [[${doc.chassis}]] [[${doc.variant}]]\n\n${doc.description}\n`;
 }
 
+function addSkillTreeFrontmatter(markdown: string, doc: MechDoc): string {
+  const fields = [
+    doc.skillTreeCode ? `skillTreeCode: ${doc.skillTreeCode}` : "",
+    doc.skillTreeUrl ? `skillTreeUrl: "${doc.skillTreeUrl}"` : "",
+  ].filter(Boolean);
+  if (!fields.length) return markdown;
+
+  return markdown.replace(`skillCode: ${doc.skillCode}\n`, `skillCode: ${doc.skillCode}\n${fields.join("\n")}\n`);
+}
+
 async function main(): Promise<void> {
   const root = process.cwd();
   const mechsDir = process.env.FOAM_MECHS_DIR ?? join(root, "..", "mwo_docs", "mechs");
@@ -31,7 +41,7 @@ async function main(): Promise<void> {
   const docs = await listMechs();
   for (const mech of docs) {
     const filePath = join(mechsDir, `${mech.id}.md`);
-    await writeFile(filePath, toMarkdown(mech), "utf8");
+    await writeFile(filePath, addSkillTreeFrontmatter(toMarkdown(mech), mech), "utf8");
   }
 
   console.log(`Synced ${docs.length} mechs from Cosmos DB to Foam markdown`);

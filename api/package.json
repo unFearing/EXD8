@@ -20,6 +20,7 @@
     "migrate:remove-export-codes": "npm run build:ts && node dist/scripts/removeExportBuildCodes.js",
     "migrate:strip-codename": "npm run build:ts && node dist/scripts/stripCodenameFromCosmos.js",
     "migrate:prune-stale-mechs": "npm run build:ts && node dist/scripts/pruneStaleMechDocs.js",
+    "migrate:skill-trees": "npm run build:ts && node dist/scripts/backfillSkillTrees.js",
     "prestart": "npm run build",
     "start": "func start"
   },
