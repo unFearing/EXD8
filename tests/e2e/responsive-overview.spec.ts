@@ -47,6 +47,9 @@ const duplicateWeaponBuilds = [
     class: "Light",
     tonnage: 20,
     skillCode: "pending",
+    primaryRangeBracket: [180, 360],
+    optimalRange: 300,
+    maxRange: 540,
   },
 ];
 
@@ -189,18 +192,38 @@ test("Deck build picker shows shortnames and dates without export codes", async 
   await expect(page.getByText("HIDDEN-EXPORT-CODE-ONE")).toHaveCount(0);
 });
 
-test("suggested build can be set during creation and is starred in Repository", async ({ page }) => {
+test("Repository prioritizes suggested builds and supports complete build editing", async ({ page }) => {
   await mockApi(page);
   await page.goto("/repository", { waitUntil: "networkidle" });
 
-  await expect(page.getByLabel("Suggested build").first()).toBeVisible();
+  const cards = page.locator('[id^="repo-mech-"]');
+  await expect(cards.first()).toHaveAttribute("id", `repo-mech-${duplicateWeaponBuilds[1].id}`);
   const suggestedCard = page.locator(`#repo-mech-${duplicateWeaponBuilds[1].id}`);
+  await expect(suggestedCard.getByText("Ideal: 180-360 m | Optimal: 300 m | Max: 540 m")).toBeVisible();
+
   const suggestedCheckbox = suggestedCard.getByRole("checkbox", { name: "Suggested build" });
+  const roleInput = suggestedCard.getByRole("textbox", { name: "Role" });
+  const nameInput = suggestedCard.getByPlaceholder("Optional short name");
   await expect(suggestedCheckbox).toBeChecked();
+  await expect(roleInput).toHaveValue("Skirmisher");
+
+  const headerBottom = Math.max(
+    (await suggestedCheckbox.boundingBox())?.y ?? 0,
+    (await roleInput.boundingBox())?.y ?? 0,
+  );
+  expect((await nameInput.boundingBox())?.y).toBeGreaterThan(headerBottom);
+
   await suggestedCheckbox.uncheck();
+  await roleInput.fill("Flanker");
   const updateRequest = page.waitForRequest((request) => request.url().endsWith(`/api/mechs/${duplicateWeaponBuilds[1].id}`) && request.method() === "PUT");
   await suggestedCard.getByRole("button", { name: "Save Build" }).click();
-  expect((await updateRequest).postDataJSON()).toMatchObject({ suggestedBuild: false });
+  expect((await updateRequest).postDataJSON()).toMatchObject({ suggestedBuild: false, role: "Flanker" });
+
+  const skillCodeInput = suggestedCard.getByRole("textbox", { name: "Skill Code" });
+  const buildCodesInput = suggestedCard.getByRole("textbox", { name: "Build Codes (key: value per line)" });
+  const skillCodeBox = await skillCodeInput.boundingBox();
+  const buildCodesBox = await buildCodesInput.boundingBox();
+  expect(skillCodeBox && buildCodesBox && skillCodeBox.y + skillCodeBox.height <= buildCodesBox.y).toBe(true);
 
   await page.getByRole("button", { name: "Add Build" }).click();
   await page.getByRole("switch", { name: "Manual Input" }).click();

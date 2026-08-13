@@ -122,6 +122,7 @@ export function RepositoryView({
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
   const [suggestedBuildDrafts, setSuggestedBuildDrafts] = useState<Record<string, boolean>>({});
   const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
   const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
@@ -283,6 +284,7 @@ export function RepositoryView({
     const weaponry = (weaponryDrafts[id] ?? source.weaponry ?? "").trim();
     const skillCode = (skillCodeDrafts[id] ?? source.skillCode ?? "").trim();
     const name = normalizeBuildName(nameDrafts[id] ?? source.name);
+    const role = (roleDrafts[id] ?? source.role ?? "").trim();
     const buildCodes = getDisplayBuildCodes(buildCodesDrafts[id] ?? source.buildCodes ?? {}).reduce<Record<string, string>>(
       (result, [key, value]) => {
         result[key] = value;
@@ -296,6 +298,7 @@ export function RepositoryView({
       const saved = await updateMech(id, {
         ...source,
         name,
+        role,
         suggestedBuild: suggestedBuildDrafts[id] ?? Boolean(source.suggestedBuild),
         description,
         weaponry,
@@ -323,6 +326,22 @@ export function RepositoryView({
         return next;
       });
       setNameDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setRoleDrafts((previous) => {
+        if (!(id in previous)) {
+          return previous;
+        }
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setSuggestedBuildDrafts((previous) => {
         if (!(id in previous)) {
           return previous;
         }
@@ -832,8 +851,11 @@ export function RepositoryView({
                             gap: 1,
                           }}
                         >
-                          {chassis.variants.flatMap((variant) =>
-                            variant.builds.map((build) => {
+                          {chassis.variants
+                            .flatMap((variant) => variant.builds.map((build) => ({ build, variant })))
+                            .sort(({ build: left }, { build: right }) =>
+                              Number(Boolean(mechsById[right.id]?.suggestedBuild)) - Number(Boolean(mechsById[left.id]?.suggestedBuild)))
+                            .map(({ build, variant }) => {
                               const sourceBuild = mechsById[build.id];
                               const equipment = sourceBuild?.equipment ?? sourceBuild?.metadata?.equipment ?? [];
                               const buildCodes = getDisplayBuildCodes(sourceBuild?.buildCodes);
@@ -846,6 +868,12 @@ export function RepositoryView({
                               const title = (sourceBuild?.variant ?? variant.variant).trim() || variant.variant;
                               const nameValue = nameDrafts[build.id] ?? sourceBuild?.name ?? "";
                               const trimmedNameValue = nameValue.trim();
+                              const roleValue = roleDrafts[build.id] ?? sourceBuild?.role ?? "";
+                              const rangeMin = sourceBuild?.primaryRangeBracket?.[0] ?? sourceBuild?.metadata?.ranges?.idealMin ?? 0;
+                              const rangeMax = sourceBuild?.primaryRangeBracket?.[1] ?? sourceBuild?.metadata?.ranges?.idealMax ?? 0;
+                              const optimalRange = sourceBuild?.optimalRange ?? sourceBuild?.metadata?.ranges?.optimal ?? 0;
+                              const maxRange = sourceBuild?.maxRange ?? sourceBuild?.metadata?.ranges?.max ?? 0;
+                              const hasRangeInformation = rangeMin > 0 || rangeMax > 0 || optimalRange > 0 || maxRange > 0;
 
                               return (
                                 <Paper
@@ -891,11 +919,32 @@ export function RepositoryView({
                                         <Box component="span" sx={{ textTransform: "uppercase" }}>{title}</Box>
                                         {trimmedNameValue ? ` "${trimmedNameValue}"` : ""}
                                       </Typography>
-                                      <Stack direction="row" spacing={0.6} sx={{ flexWrap: "wrap" }}>
+                                      {editMode === "edit" && canManageBuilds ? (
+                                        <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" }, width: { xs: "100%", md: "auto" }, minWidth: 0 }}>
+                                          <FormControlLabel
+                                            sx={{ m: 0, whiteSpace: "nowrap" }}
+                                            control={
+                                              <Checkbox
+                                                size="small"
+                                                checked={suggestedBuildDrafts[build.id] ?? Boolean(sourceBuild?.suggestedBuild)}
+                                                onChange={(event) => setSuggestedBuildDrafts((previous) => ({ ...previous, [build.id]: event.target.checked }))}
+                                              />
+                                            }
+                                            label="Suggested build"
+                                          />
+                                          <TextField
+                                            label="Role"
+                                            size="small"
+                                            value={roleValue}
+                                            onChange={(event) => setRoleDrafts((previous) => ({ ...previous, [build.id]: event.target.value }))}
+                                            sx={{ minWidth: { sm: 150 }, flex: 1 }}
+                                          />
+                                        </Stack>
+                                      ) : (
                                         <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
                                           <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600 }}>{sourceBuild?.role ?? "No Role"}</Typography>
                                         </Box>
-                                      </Stack>
+                                      )}
                                     </Stack>
 
                                     <Box
@@ -908,15 +957,6 @@ export function RepositoryView({
                                     >
                                       {editMode === "edit" && canManageBuilds && (
                                         <Box sx={{ gridColumn: "1 / -1" }}>
-                                          <FormControlLabel
-                                            control={
-                                              <Checkbox
-                                                checked={suggestedBuildDrafts[build.id] ?? Boolean(sourceBuild?.suggestedBuild)}
-                                                onChange={(event) => setSuggestedBuildDrafts((previous) => ({ ...previous, [build.id]: event.target.checked }))}
-                                              />
-                                            }
-                                            label="Suggested build"
-                                          />
                                           <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                             Name
                                           </Typography>
@@ -1017,11 +1057,12 @@ export function RepositoryView({
                                           Codes
                                         </Typography>
                                         {editMode === "edit" && canManageBuilds ? (
-                                          <Stack spacing={0.6} sx={{ mt: 0.7 }}>
+                                          <Stack spacing={1.5} sx={{ mt: 0.9 }}>
                                             <TextField
                                               label="Skill Code"
                                               size="small"
                                               fullWidth
+                                              slotProps={{ inputLabel: { shrink: true } }}
                                               value={skillCodeDrafts[build.id] ?? sourceBuild?.skillCode ?? ""}
                                               onChange={(event) => {
                                                 const next = event.target.value;
@@ -1037,6 +1078,7 @@ export function RepositoryView({
                                               minRows={2}
                                               size="small"
                                               fullWidth
+                                              slotProps={{ inputLabel: { shrink: true } }}
                                               value={buildCodesDrafts[build.id] ? getEditableBuildCodesText(buildCodesDrafts[build.id]) : getEditableBuildCodesText(sourceBuild?.buildCodes)}
                                               onChange={(event) => {
                                                 const codes = parseBuildCodesText(event.target.value);
@@ -1071,6 +1113,21 @@ export function RepositoryView({
                                           </Stack>
                                         )}
                                       </Box>
+
+                                      {hasRangeInformation && (
+                                        <Box sx={{ gridColumn: { md: 2 } }}>
+                                          <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
+                                            Range
+                                          </Typography>
+                                          <Typography variant="body2" sx={{ mt: 0.65, color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT }}>
+                                            {rangeMin > 0 || rangeMax > 0 ? `Ideal: ${rangeMin}-${rangeMax} m` : null}
+                                            {(rangeMin > 0 || rangeMax > 0) && (optimalRange > 0 || maxRange > 0) ? " | " : null}
+                                            {optimalRange > 0 ? `Optimal: ${optimalRange} m` : null}
+                                            {optimalRange > 0 && maxRange > 0 ? " | " : null}
+                                            {maxRange > 0 ? `Max: ${maxRange} m` : null}
+                                          </Typography>
+                                        </Box>
+                                      )}
                                     </Box>
 
                                     <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, columnGap: { md: 4 } }}>
@@ -1155,8 +1212,7 @@ export function RepositoryView({
                                   </Stack>
                                 </Paper>
                               );
-                            }),
-                          )}
+                            })}
                         </Box>
                         </Paper>
                       );
