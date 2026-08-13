@@ -4,14 +4,11 @@ import type { AuthState } from "../hooks/useDiscordAuth";
 interface AuthSplashProps {
   state: AuthState;
   onLogin: () => void;
+  onRetry: () => void;
 }
 
-export function AuthSplash({ state, onLogin }: AuthSplashProps) {
+export function AuthSplash({ state, onLogin, onRetry }: AuthSplashProps) {
   const isLight = localStorage.getItem("ui-theme-mode") !== "dark";
-
-  if (state.isAuthed) {
-    return null;
-  }
 
   return (
     <Box
@@ -94,14 +91,19 @@ export function AuthSplash({ state, onLogin }: AuthSplashProps) {
         </Button>
 
         {state.error && (
-          <Typography
-            sx={{
-              fontSize: "0.85rem",
-              color: "#f44336",
-            }}
-          >
-            {state.error}
-          </Typography>
+          <Stack spacing={1.5} sx={{ alignItems: "center" }}>
+            <Typography
+              sx={{
+                fontSize: "0.85rem",
+                color: "#f44336",
+              }}
+            >
+              {state.error}
+            </Typography>
+            <Button variant="outlined" onClick={onRetry}>
+              Retry authentication
+            </Button>
+          </Stack>
         )}
       </Stack>
     </Box>

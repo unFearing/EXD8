@@ -18,16 +18,6 @@ import type {
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
-  const fallbackUser = "ui-local-user";
-  const disableAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
-
-  if (disableAuth) {
-    return {
-      "x-team-id": teamId,
-      "x-user-role": "TL",
-      "x-user-id": fallbackUser,
-    };
-  }
   return { "x-team-id": teamId };
 }
 

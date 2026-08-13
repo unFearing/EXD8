@@ -19,53 +19,83 @@ export interface AuthState {
 const DISCORD_REDIRECT_URI = `${window.location.origin}/auth/callback`;
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 const DISCORD_OAUTH_STATE_KEY = "discord_oauth_state";
+const DISCORD_REQUESTED_PATH_KEY = "discord_requested_path";
+const INITIAL_AUTH_STATE: AuthState = {
+  isLoading: true,
+  isAuthed: false,
+  user: null,
+  error: null,
+};
 
 function createOAuthState(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(24));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function getCachedUser(): DiscordUser | null {
+function getRequestedPath(): string {
+  const requestedPath = sessionStorage.getItem(DISCORD_REQUESTED_PATH_KEY);
+  if (!requestedPath || !requestedPath.startsWith("/") || requestedPath.startsWith("//")) return "/";
+
   try {
-    const cachedUserRaw = localStorage.getItem("discord_user");
-    return cachedUserRaw ? normalizeDiscordUser(JSON.parse(cachedUserRaw) as DiscordUser) : null;
+    const url = new URL(requestedPath, window.location.origin);
+    if (url.origin !== window.location.origin) return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
   } catch {
-    return null;
+    return "/";
   }
 }
 
-function getCachedAuthState(): AuthState {
-  try {
-    const cachedUser = getCachedUser();
+function isDiscordUser(value: unknown): value is DiscordUser {
+  if (!value || typeof value !== "object") return false;
+  const user = value as Partial<DiscordUser>;
+  return typeof user.id === "string" && user.id.trim().length > 0
+    && typeof user.username === "string" && user.username.trim().length > 0
+    && Array.isArray(user.roles)
+    && user.roles.every((role) => typeof role === "string")
+    && (user.appRole === "TL" || user.appRole === "Pilot");
+}
 
-    if (cachedUser) {
-      return {
-        isLoading: true,
-        isAuthed: true,
-        user: cachedUser,
-        error: null,
-      };
-    }
+async function validateCurrentSession(): Promise<DiscordUser> {
+  let response: Response;
+  try {
+    response = await fetch("/api/auth/me", { credentials: "include" });
   } catch {
-    // Fall back to a fresh auth check if cached state is unreadable.
+    throw new Error("Unable to reach the authentication service. Check your connection and retry.");
   }
 
-  return {
-    isLoading: true,
-    isAuthed: false,
-    user: null,
-    error: null,
-  };
+  if (response.status === 401) {
+    throw new Error("Authentication required. Sign in with Discord to continue.");
+  }
+  if (response.status === 403) {
+    throw new Error("Your Discord account is not authorized for this team. Check your server membership and role.");
+  }
+  if (!response.ok) {
+    throw new Error(`Unable to validate your session. The authentication service returned ${response.status}.`);
+  }
+
+  const payload = await response.json().catch(() => null) as { ok?: boolean; data?: unknown } | null;
+  if (!payload?.ok || !isDiscordUser(payload.data)) {
+    throw new Error("The authentication service returned an invalid response. Please retry.");
+  }
+
+  return normalizeDiscordUser(payload.data);
 }
 
 export function useDiscordAuth(): AuthState & {
   login: () => void;
+  retry: () => void;
   logout: () => Promise<void>;
   hasRole: (roleId: string) => boolean;
 } {
   const [discordClientId, setDiscordClientId] = useState("");
-  const [state, setState] = useState<AuthState>(getCachedAuthState);
+  const [state, setState] = useState<AuthState>(INITIAL_AUTH_STATE);
   const authGenerationRef = useRef(0);
+  const callbackStartedRef = useRef(false);
+  const isOAuthCallbackRef = useRef(
+    window.location.pathname === "/auth/callback"
+      && (new URLSearchParams(window.location.search).has("code")
+        || new URLSearchParams(window.location.search).has("error")),
+  );
 
   const loadDiscordClientId = async (): Promise<string> => {
     if (discordClientId) return discordClientId;
@@ -83,57 +113,13 @@ export function useDiscordAuth(): AuthState & {
 
   // Check if already authenticated on mount
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has("code")) return;
+    if (isOAuthCallbackRef.current) return;
     const generation = ++authGenerationRef.current;
 
     const checkAuth = async () => {
       try {
-        const cachedUser = getCachedUser();
-
-        if (cachedUser) {
-          setState({
-            isLoading: true,
-            isAuthed: true,
-            user: cachedUser,
-            error: null,
-          });
-        }
-
-        const response = await fetch("/api/auth/me", {
-          credentials: "include",
-        });
+        const user = await validateCurrentSession();
         if (generation !== authGenerationRef.current) return;
-
-        if (!response.ok) {
-          if (response.status !== 401 && response.status !== 403 && cachedUser) {
-            setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
-            return;
-          }
-          localStorage.removeItem("discord_user");
-          setState({
-            isLoading: false,
-            isAuthed: false,
-            user: null,
-            error: null,
-          });
-          return;
-        }
-
-        const payload = await response.json() as { ok: boolean; data: DiscordUser };
-        if (generation !== authGenerationRef.current) return;
-        if (!payload.ok || !payload.data) {
-          localStorage.removeItem("discord_user");
-          setState({
-            isLoading: false,
-            isAuthed: false,
-            user: null,
-            error: null,
-          });
-          return;
-        }
-
-        const user = normalizeDiscordUser(payload.data);
-        localStorage.setItem("discord_user", JSON.stringify(user));
         setState({
           isLoading: false,
           isAuthed: true,
@@ -143,16 +129,13 @@ export function useDiscordAuth(): AuthState & {
       } catch (err) {
         if (generation !== authGenerationRef.current) return;
         console.error("Auth check failed:", err);
-        const cachedUser = getCachedUser();
-        if (cachedUser) {
-          setState((prev) => ({ ...prev, isLoading: false, isAuthed: true, user: cachedUser, error: null }));
-        } else {
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            error: "Auth check failed",
-          }));
-        }
+        localStorage.removeItem("discord_user");
+        setState({
+          isLoading: false,
+          isAuthed: false,
+          user: null,
+          error: err instanceof Error ? err.message : "Unable to validate your session. Please retry.",
+        });
       }
     };
 
@@ -164,16 +147,36 @@ export function useDiscordAuth(): AuthState & {
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
+      const oauthError = params.get("error");
 
-      if (!code) return;
+      if (!isOAuthCallbackRef.current || callbackStartedRef.current) return;
+      callbackStartedRef.current = true;
       const generation = ++authGenerationRef.current;
+
+      if (oauthError || !code) {
+        window.history.replaceState({}, document.title, getRequestedPath());
+        setState({
+          isLoading: false,
+          isAuthed: false,
+          user: null,
+          error: oauthError
+            ? "Discord sign-in was cancelled or denied. Please try again."
+            : "Discord did not return a valid authorization code. Please try again.",
+        });
+        return;
+      }
 
       const returnedState = params.get("state");
       const expectedState = sessionStorage.getItem(DISCORD_OAUTH_STATE_KEY);
       sessionStorage.removeItem(DISCORD_OAUTH_STATE_KEY);
       if (!returnedState || !expectedState || returnedState !== expectedState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-        setState((prev) => ({ ...prev, isLoading: false, error: "Invalid Discord login state. Please try again." }));
+        window.history.replaceState({}, document.title, getRequestedPath());
+        setState({
+          isLoading: false,
+          isAuthed: false,
+          user: null,
+          error: "Invalid Discord login state. Please try again.",
+        });
         return;
       }
 
@@ -193,31 +196,27 @@ export function useDiscordAuth(): AuthState & {
           throw new Error(payload?.error?.message || "OAuth exchange failed");
         }
 
-        const payload = await response.json() as { ok: boolean; data: { user: DiscordUser } };
-        if (generation !== authGenerationRef.current) return;
-        if (!payload.ok || !payload.data?.user) {
-          throw new Error("OAuth exchange failed");
+        const exchangePayload = await response.json().catch(() => null) as { ok?: boolean; error?: { message?: string } } | null;
+        if (!exchangePayload?.ok) {
+          throw new Error(exchangePayload?.error?.message || "OAuth exchange failed");
         }
-        const user = normalizeDiscordUser(payload.data.user);
-        localStorage.setItem("discord_user", JSON.stringify(user));
 
-        setState({
-          isLoading: false,
-          isAuthed: true,
-          user,
-          error: null,
-        });
+        await validateCurrentSession();
+        if (generation !== authGenerationRef.current) return;
 
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const requestedPath = getRequestedPath();
+        sessionStorage.removeItem(DISCORD_REQUESTED_PATH_KEY);
+        window.location.replace(requestedPath);
       } catch (err) {
         if (generation !== authGenerationRef.current) return;
         console.error("OAuth callback failed:", err);
-        setState((prev) => ({
-          ...prev,
+        window.history.replaceState({}, document.title, getRequestedPath());
+        setState({
           isLoading: false,
+          isAuthed: false,
+          user: null,
           error: err instanceof Error ? err.message : "OAuth failed",
-        }));
+        });
       }
     };
 
@@ -257,6 +256,10 @@ export function useDiscordAuth(): AuthState & {
         const scope = "identify guilds.members.read";
         const oauthState = createOAuthState();
         sessionStorage.setItem(DISCORD_OAUTH_STATE_KEY, oauthState);
+        const requestedPath = window.location.pathname === "/auth/callback"
+          ? getRequestedPath()
+          : `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        sessionStorage.setItem(DISCORD_REQUESTED_PATH_KEY, requestedPath);
         const url = new URL("https://discord.com/api/oauth2/authorize");
         url.searchParams.set("client_id", clientId);
         url.searchParams.set("redirect_uri", DISCORD_REDIRECT_URI);
@@ -273,6 +276,27 @@ export function useDiscordAuth(): AuthState & {
         }));
       }
     })();
+  };
+
+  const retry = () => {
+    const generation = ++authGenerationRef.current;
+    setState(INITIAL_AUTH_STATE);
+
+    void validateCurrentSession()
+      .then((user) => {
+        if (generation !== authGenerationRef.current) return;
+        setState({ isLoading: false, isAuthed: true, user, error: null });
+      })
+      .catch((error: unknown) => {
+        if (generation !== authGenerationRef.current) return;
+        localStorage.removeItem("discord_user");
+        setState({
+          isLoading: false,
+          isAuthed: false,
+          user: null,
+          error: error instanceof Error ? error.message : "Unable to validate your session. Please retry.",
+        });
+      });
   };
 
   const logout = async () => {
@@ -308,6 +332,7 @@ export function useDiscordAuth(): AuthState & {
   return {
     ...state,
     login,
+    retry,
     logout,
     hasRole,
   };

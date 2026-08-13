@@ -16,7 +16,6 @@ const APP_BUILD_WATERMARK_BOTTOM_PX = 8;
 const APP_BUILD_WATERMARK_OPACITY = 0.78;
 const APP_BUILD_WATERMARK_FONT_SIZE = "0.88rem";
 const APP_BUILD_WATERMARK_FONT_WEIGHT = 700;
-const APP_ROLE_TEAM_LEAD = "TL" as const;
 const APP_WATERMARK_VERSION = `v${__APP_VERSION__}`;
 
 function formatBuildTimestamp(buildEpochMs: number): string {
@@ -52,7 +51,7 @@ function buildTheme(mode: ThemeMode) {
       },
     },
     shape: {
-      borderRadius: 14,
+      borderRadius: 0,
     },
     typography: {
       fontFamily: '"Rajdhani", "IBM Plex Sans", sans-serif',
@@ -80,28 +79,6 @@ function AppContent() {
     [],
   );
   const auth = useDiscordAuth();
-  const bypassDiscordAuth = import.meta.env.VITE_DISABLE_DISCORD_AUTH === "true";
-
-  const effectiveAuth = bypassDiscordAuth
-    ? {
-        isLoading: false,
-        isAuthed: true,
-        user: {
-          id: "local-dev",
-          username: "Local Dev",
-          roles: ["local-dev"],
-          appRole: APP_ROLE_TEAM_LEAD,
-        },
-        error: null,
-        login: () => {
-          // noop in local auth bypass mode
-        },
-        logout: () => {
-          // noop in local auth bypass mode
-        },
-        hasRole: (_roleId: string) => true,
-      }
-    : auth;
 
   const toggleMode = () => {
     setMode((previous) => {
@@ -111,59 +88,63 @@ function AppContent() {
     });
   };
 
+  if (auth.isLoading || !auth.isAuthed) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AuthSplash state={auth} onLogin={auth.login} onRetry={auth.retry} />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {!bypassDiscordAuth && !effectiveAuth.isLoading && !effectiveAuth.isAuthed && (
-        <AuthSplash state={effectiveAuth} onLogin={effectiveAuth.login} />
-      )}
-      {effectiveAuth.isAuthed && (
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <DeckBoard
-                mode={mode}
-                onToggleMode={toggleMode}
-                user={effectiveAuth.user}
-                onLogout={effectiveAuth.logout}
-                hasRole={effectiveAuth.hasRole}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-              />
-            }
-          />
-          <Route
-            path="/repository"
-            element={
-              <RepositoryView
-                mode={mode}
-                onToggleMode={toggleMode}
-                user={effectiveAuth.user}
-                onLogout={effectiveAuth.logout}
-                hasRole={effectiveAuth.hasRole}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-              />
-            }
-          />
-          <Route
-            path="/overview"
-            element={
-              <OverviewView
-                mode={mode}
-                onToggleMode={toggleMode}
-                user={effectiveAuth.user}
-                onLogout={effectiveAuth.logout}
-                hasRole={effectiveAuth.hasRole}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-              />
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      )}
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <DeckBoard
+              mode={mode}
+              onToggleMode={toggleMode}
+              user={auth.user}
+              onLogout={auth.logout}
+              hasRole={auth.hasRole}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          }
+        />
+        <Route
+          path="/repository"
+          element={
+            <RepositoryView
+              mode={mode}
+              onToggleMode={toggleMode}
+              user={auth.user}
+              onLogout={auth.logout}
+              hasRole={auth.hasRole}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          }
+        />
+        <Route
+          path="/overview"
+          element={
+            <OverviewView
+              mode={mode}
+              onToggleMode={toggleMode}
+              user={auth.user}
+              onLogout={auth.logout}
+              hasRole={auth.hasRole}
+              viewMode={viewMode}
+              onViewModeChange={setViewMode}
+            />
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
       <Box
         sx={{
           position: "fixed",

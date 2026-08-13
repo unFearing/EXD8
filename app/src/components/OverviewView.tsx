@@ -531,6 +531,9 @@ export function OverviewView({
             ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
             : "radial-gradient(circle at 8% 10%, rgba(167, 196, 255, 0.18), transparent 35%), radial-gradient(circle at 90% 0%, rgba(119, 140, 191, 0.18), transparent 40%), #0c101d",
         pb: 3,
+        "& .MuiPaper-root, & .MuiButton-root, & .MuiButtonGroup-root, & .MuiOutlinedInput-root, & .MuiAlert-root, & .MuiDialog-paper": {
+          borderRadius: "0 !important",
+        },
       }}
     >
       <AppBar
@@ -543,8 +546,8 @@ export function OverviewView({
         }}
       >
         <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.7, md: 2.2 }} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", minWidth: 0 }}>
-            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
+          <Stack direction={{ xs: "column", lg: "row" }} spacing={{ xs: 0.7, lg: 2.2 }} sx={{ alignItems: { xs: "stretch", lg: "center" }, justifyContent: "space-between", minWidth: 0 }}>
+            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", minWidth: 0, flex: { lg: 1 } }}>
               <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6, display: { xs: "none", md: "block" } }}>
                 EXDEATE
               </Typography>
@@ -570,9 +573,9 @@ export function OverviewView({
               </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={0.7} sx={{ ml: { md: "auto" }, alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "flex-start", md: "flex-end" }, minWidth: 0 }}>
+            <Stack direction="row" spacing={0.7} sx={{ ml: { lg: "auto" }, alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, justifyContent: { xs: "flex-start", lg: "flex-end" }, minWidth: 0, flexShrink: 0 }}>
               {user && (
-                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
+                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" }, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.username}
                 </Typography>
               )}
@@ -588,7 +591,6 @@ export function OverviewView({
                       background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
                       color: isLight ? "#fff" : "#7fb3ff",
                       textTransform: "none",
-                      borderRadius: 1,
                       px: 2,
                       minHeight: 38,
                       fontWeight: 700,

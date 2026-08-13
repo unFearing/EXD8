@@ -27,8 +27,6 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AddIcon from "@mui/icons-material/Add";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import EditIcon from "@mui/icons-material/Edit";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
@@ -1614,6 +1612,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
             ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
             : "radial-gradient(circle at 8% 10%, rgba(167, 196, 255, 0.18), transparent 35%), radial-gradient(circle at 90% 0%, rgba(119, 140, 191, 0.18), transparent 40%), #0c101d",
         pb: 3,
+        "& .MuiPaper-root, & .MuiButton-root, & .MuiButtonGroup-root, & .MuiOutlinedInput-root, & .MuiAlert-root, & .MuiDialog-paper": {
+          borderRadius: "0 !important",
+        },
       }}
     >
       <AppBar
@@ -1626,8 +1627,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         }}
       >
         <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.7, md: 2.2 }} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", minWidth: 0 }}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.4, md: 1.6 }} sx={{ alignItems: { xs: "stretch", md: "center" }, minWidth: 0, width: "100%" }}>
+          <Stack direction={{ xs: "column", lg: "row" }} spacing={{ xs: 0.7, lg: 2.2 }} sx={{ alignItems: { xs: "stretch", lg: "center" }, justifyContent: "space-between", minWidth: 0 }}>
+            <Stack direction={{ xs: "column", lg: "row" }} spacing={{ xs: 0.4, lg: 1.6 }} sx={{ alignItems: { xs: "stretch", lg: "center" }, minWidth: 0, flex: { lg: 1 } }}>
               <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6, display: { xs: "none", md: "block" } }}>
                 EXDEATE
               </Typography>
@@ -1685,9 +1686,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={0.7} sx={{ ml: { md: "auto" }, alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "flex-start", md: "flex-end" }, minWidth: 0 }}>
+            <Stack direction="row" spacing={0.7} sx={{ ml: { lg: "auto" }, alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, justifyContent: { xs: "flex-start", lg: "flex-end" }, minWidth: 0, flexShrink: 0 }}>
               {user && (
-                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
+                <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" }, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.username}
                 </Typography>
               )}
@@ -1701,7 +1702,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   background: isLight ? "rgba(58, 111, 189, 0.85)" : "rgba(127, 179, 255, 0.18)",
                   color: isLight ? "#fff" : "#7fb3ff",
                   textTransform: "none",
-                  borderRadius: 999,
                   px: 2,
                   minHeight: 38,
                   fontWeight: 700,
@@ -1713,64 +1713,55 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                 Add Build
               </Button>
 
-              <ButtonGroup
-                size="small"
-                sx={{
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: isLight ? "rgba(151, 170, 198, 0.1)" : "rgba(121, 149, 206, 0.08)",
-                  boxShadow: isLight ? "0 0 0 1px rgba(108, 128, 158, 0.35)" : "0 0 0 1px rgba(130, 154, 217, 0.28)",
-                  "& .MuiButton-root": {
+              <Tooltip title={isLight ? "Switch to dark mode" : "Switch to light mode"}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={onToggleMode}
+                  aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+                  sx={{
+                    minWidth: 38,
+                    width: 38,
+                    height: 38,
+                    p: 0,
+                    color: isLight ? "#4e6486" : "#c8d8ff",
+                    borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
+                  }}
+                >
+                  {isLight ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
+                </Button>
+              </Tooltip>
+
+              {canDelete && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => onViewModeChange(editMode === "edit" ? "view" : "edit")}
+                  sx={{
+                    color: isLight ? "#4e6486" : "#c8d8ff",
                     borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
                     minHeight: 38,
-                    px: 1.5,
-                  },
-                }}
-              >
-                <Tooltip title={isLight ? "Switch to dark mode" : "Switch to light mode"}>
-                  <Button
-                    variant="outlined"
-                    onClick={onToggleMode}
-                    aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
-                    sx={{ minWidth: 40, px: 1.1 }}
-                  >
-                    {isLight ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
-                  </Button>
-                </Tooltip>
-                <Button
-                  startIcon={<VisibilityIcon fontSize="small" />}
-                  variant={editMode === "view" ? "contained" : "outlined"}
-                  onClick={() => onViewModeChange("view")}
+                    px: 1.6,
+                    textTransform: "none",
+                  }}
                 >
-                  View
+                  {editMode === "edit" ? "Editing" : "Viewing"}
                 </Button>
-                {canDelete && (
-                  <Button
-                    startIcon={<EditIcon fontSize="small" />}
-                    variant={editMode === "edit" ? "contained" : "outlined"}
-                    onClick={() => onViewModeChange("edit")}
-                  >
-                    Edit
-                  </Button>
-                )}
-              </ButtonGroup>
+              )}
 
               <Button
-                variant="contained"
+                variant="outlined"
                 size="small"
                 onClick={onLogout}
                 sx={{
-                  backgroundColor: "#5865F2",
-                  color: "#fff",
                   textTransform: "none",
-                  fontWeight: 600,
-                  borderRadius: 999,
-                  px: 2,
+                  color: isLight ? "#4e6486" : "#c8d8ff",
+                  borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
                   minHeight: 38,
-                  "&:hover": { backgroundColor: "#4752C4" },
+                  px: 1.5,
                 }}
               >
-                Discord Logout
+                Logout
               </Button>
             </Stack>
           </Stack>
