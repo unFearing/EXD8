@@ -20,6 +20,36 @@ const decks = [
   },
 ];
 
+const duplicateWeaponBuilds = [
+  {
+    id: "550e8400-e29b-41d4-a716-446655440010",
+    chassis: "Flea",
+    variant: "FLE-R5K",
+    name: "ROMEO 5000",
+    weaponry: "4x Medium Laser",
+    buildCodes: { default: "HIDDEN-EXPORT-CODE-ONE" },
+    submittedAt: "2026-07-01T12:00:00.000Z",
+    role: "Skirmisher",
+    class: "Light",
+    tonnage: 20,
+    skillCode: "pending",
+  },
+  {
+    id: "550e8400-e29b-41d4-a716-446655440011",
+    chassis: "Flea",
+    variant: "FLE-R5K",
+    name: "ROMEO 5000 XL",
+    weaponry: "4x Medium Laser",
+    buildCodes: { default: "HIDDEN-EXPORT-CODE-TWO" },
+    submittedAt: "2026-08-02T12:00:00.000Z",
+    suggestedBuild: true,
+    role: "Skirmisher",
+    class: "Light",
+    tonnage: 20,
+    skillCode: "pending",
+  },
+];
+
 async function mockApi(page: Page, appRole: "TL" | "Pilot" = "TL") {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -58,8 +88,24 @@ async function mockApi(page: Page, appRole: "TL" | "Pilot" = "TL") {
       ],
       overviewSelectedDeckIds: [firstDeckId],
     });
-    if (url.pathname.endsWith("/api/mechs/hierarchy")) return success([]);
-    if (url.pathname.endsWith("/api/mechs")) return success([]);
+    if (url.pathname.endsWith("/api/mechs/hierarchy")) return success([
+      {
+        class: "Light",
+        buildCount: 2,
+        chassis: [
+          {
+            chassis: "Flea",
+            buildCount: 2,
+            variants: [{ variant: "FLE-R5K", buildCount: 2, builds: duplicateWeaponBuilds.map((build) => ({ id: build.id, markdown: "" })) }],
+          },
+        ],
+      },
+    ]);
+    if (url.pathname.startsWith("/api/mechs/") && request.method() === "PUT") {
+      const id = url.pathname.split("/").pop();
+      return success({ ...request.postDataJSON(), id });
+    }
+    if (url.pathname.endsWith("/api/mechs")) return success(duplicateWeaponBuilds);
     if (url.pathname.endsWith("/api/config/maps")) return success([]);
     if (url.pathname.endsWith("/api/config/mech-roles")) return success([]);
     return success([]);
@@ -119,6 +165,46 @@ test.describe("Overview selection modes", () => {
     await page.getByRole("switch", { name: "Use my filters" }).uncheck();
     await expect(page.getByTestId(`quickslot-deck-${secondDeckId}`).getByRole("checkbox")).not.toBeChecked();
   });
+});
+
+test("Deck build picker shows shortnames and dates without export codes", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  const buildInput = page.getByPlaceholder("Build").first();
+  await buildInput.click();
+
+  const options = page.getByRole("option");
+  await expect(options.filter({ hasText: "FLE-R5K / ROMEO 5000 | 4x Medium Laser" })).toBeVisible();
+  await expect(options.filter({ hasText: "FLE-R5K / ROMEO 5000 XL | 4x Medium Laser" })).toBeVisible();
+  await expect(options.filter({ hasText: "Submitted" })).toHaveCount(2);
+  await expect(options.first().getByLabel("Suggested build")).toBeVisible();
+  await expect(options.first()).toContainText("ROMEO 5000 XL");
+  await expect(page.getByText("HIDDEN-EXPORT-CODE-ONE")).toHaveCount(0);
+  await expect(page.getByText("HIDDEN-EXPORT-CODE-TWO")).toHaveCount(0);
+
+  await options.filter({ hasText: "ROMEO 5000 XL" }).click();
+  await expect(buildInput).toHaveValue("4x Medium Laser");
+  await expect(page.getByText("HIDDEN-EXPORT-CODE-TWO")).toBeVisible();
+  await expect(page.getByText("HIDDEN-EXPORT-CODE-ONE")).toHaveCount(0);
+});
+
+test("suggested build can be set during creation and is starred in Repository", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/repository", { waitUntil: "networkidle" });
+
+  await expect(page.getByLabel("Suggested build").first()).toBeVisible();
+  const suggestedCard = page.locator(`#repo-mech-${duplicateWeaponBuilds[1].id}`);
+  const suggestedCheckbox = suggestedCard.getByRole("checkbox", { name: "Suggested build" });
+  await expect(suggestedCheckbox).toBeChecked();
+  await suggestedCheckbox.uncheck();
+  const updateRequest = page.waitForRequest((request) => request.url().endsWith(`/api/mechs/${duplicateWeaponBuilds[1].id}`) && request.method() === "PUT");
+  await suggestedCard.getByRole("button", { name: "Save Build" }).click();
+  expect((await updateRequest).postDataJSON()).toMatchObject({ suggestedBuild: false });
+
+  await page.getByRole("button", { name: "Add Build" }).click();
+  await page.getByRole("switch", { name: "Manual Input" }).click();
+  await expect(page.getByRole("switch", { name: "Suggested build" })).toBeVisible();
 });
 
 test.describe("Pilot Overview selection", () => {

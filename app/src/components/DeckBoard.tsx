@@ -31,6 +31,7 @@ import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import BackspaceIcon from "@mui/icons-material/Backspace";
+import StarIcon from "@mui/icons-material/Star";
 import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
@@ -98,7 +99,20 @@ type CopiedCell = {
 type BuildOption = {
   label: string;
   code: string;
+  mechId: string;
+  mechLabel: string;
+  submittedAt?: string;
+  suggestedBuild?: boolean;
 };
+
+function formatSubmissionDate(value?: string, cosmosTimestamp?: number): string {
+  const submittedAt = value ?? (cosmosTimestamp ? new Date(cosmosTimestamp * 1000).toISOString() : "");
+  if (!submittedAt) return "Submission date unavailable";
+
+  const date = new Date(submittedAt);
+  if (Number.isNaN(date.getTime())) return "Submission date unavailable";
+  return `Submitted ${date.toLocaleDateString()}`;
+}
 
 function BuildAutocompleteField({
   value,
@@ -151,6 +165,7 @@ function BuildAutocompleteField({
       freeSolo
       forcePopupIcon
       options={options}
+      getOptionKey={(option) => (typeof option === "string" ? option : option.mechId)}
       inputValue={localValue}
       openOnFocus
       filterOptions={(opts) => {
@@ -197,11 +212,14 @@ function BuildAutocompleteField({
       renderOption={(props, option) => (
         <li {...props}>
           <Stack spacing={0.1} sx={{ minWidth: 0 }}>
-            <Typography variant="body2" sx={{ lineHeight: 1.1 }}>
-              {option.label}
-            </Typography>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+              {option.suggestedBuild && <StarIcon aria-label="Suggested build" sx={{ color: "#d69b13", fontSize: "0.95rem", flexShrink: 0 }} />}
+              <Typography variant="body2" sx={{ lineHeight: 1.1 }}>
+                {option.mechLabel} | {option.label}
+              </Typography>
+            </Stack>
             <Typography variant="caption" sx={{ opacity: 0.72, lineHeight: 1.1 }}>
-              {option.code}
+              {option.submittedAt}
             </Typography>
           </Stack>
         </li>
@@ -904,45 +922,61 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     return map;
   }, [configuredByNormalizedPair, mechs]);
   const buildOptionsByPair = useMemo(() => {
-    const map = new Map<string, Array<{ label: string; code: string }>>();
+    const map = new Map<string, BuildOption[]>();
     for (const [key, docs] of mechsByNormalizedPair.entries()) {
       if (!docs.length) continue;
       const seen = new Set<string>();
-      const options: Array<{ label: string; code: string }> = [];
+      const options: BuildOption[] = [];
       
       for (const doc of docs) {
         // Pick only the preferred build code for this mech variant
         // Different builds (different weaponry) are separate docs, so each gets one option
         const preferredCode = getPreferredBuildCode(doc.buildCodes);
         const label = doc.weaponry?.trim() || `${doc.variant} | ${doc.chassis}`;
-        const dedupeKey = `${label}::${preferredCode}`;
+        const dedupeKey = doc.id;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
-        options.push({ label, code: preferredCode });
+        options.push({
+          label,
+          code: preferredCode,
+          mechId: doc.id,
+          mechLabel: doc.name?.trim() ? `${doc.variant} / ${doc.name.trim()}` : doc.variant,
+          submittedAt: formatSubmissionDate(doc.submittedAt, doc._ts),
+          suggestedBuild: Boolean(doc.suggestedBuild),
+        });
       }
+      options.sort((a, b) => Number(b.suggestedBuild) - Number(a.suggestedBuild));
       map.set(key, options);
     }
     return map;
   }, [mechsByNormalizedPair]);
   const buildOptionsByChassis = useMemo(() => {
-    const map = new Map<string, Array<{ label: string; code: string }>>();
+    const map = new Map<string, BuildOption[]>();
     for (const docs of mechsByNormalizedPair.values()) {
       if (!docs.length) continue;
       const chassisKey = normalizeChassisToken(docs[0].chassis);
       const list = map.get(chassisKey) ?? [];
-      const seen = new Set(list.map((entry) => `${entry.label}::${entry.code}`));
+      const seen = new Set(list.map((entry) => entry.mechId));
 
       for (const doc of docs) {
         // Pick only the preferred build code for this mech variant
         const preferredCode = getPreferredBuildCode(doc.buildCodes);
-        const baseLabel = doc.weaponry?.trim() || doc.variant;
-        const label = `${doc.variant} | ${baseLabel}`;
-        const dedupeKey = `${label}::${preferredCode}`;
+        const label = doc.weaponry?.trim() || doc.variant;
+        const dedupeKey = doc.id;
         
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
-        list.push({ label, code: preferredCode });
+        list.push({
+          label,
+          code: preferredCode,
+          mechId: doc.id,
+          mechLabel: doc.name?.trim() ? `${doc.variant} / ${doc.name.trim()}` : doc.variant,
+          submittedAt: formatSubmissionDate(doc.submittedAt, doc._ts),
+          suggestedBuild: Boolean(doc.suggestedBuild),
+        });
       }
+
+      list.sort((a, b) => Number(b.suggestedBuild) - Number(a.suggestedBuild));
 
       map.set(chassisKey, list);
     }
@@ -977,6 +1011,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
           class: (doc.class ?? configEntry?.class ?? "Medium") as WeightClass,
           chassis: doc.chassis,
           variant: doc.variant,
+          name: doc.name,
           tonnage: doc.tonnage ?? configEntry?.tonnage ?? 0,
         };
       }),
@@ -2342,7 +2377,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             const mech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
                             const configMech = configuredByKey.get(row.mech);
                             const mechLabel = mech
-                              ? `${mech.chassis}-${mech.variant}`
+                              ? `${mech.chassis} / ${mech.variant}${mech.name?.trim() ? ` / ${mech.name.trim()}` : ""}`
                               : configMech
                                 ? `${configMech.chassis}-${configMech.variant}`
                                 : row.mech || "-";
@@ -2352,17 +2387,27 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             const normalizedVariant = normalizeVariantToken(rowVariant);
                             const selectedConfigMech = resolveConfigMechByRowSelection(rowChassis, rowVariant);
                             const buildOptions = (() => {
+                              const pairKey = selectedConfigMech
+                                ? getPairLookupKey(selectedConfigMech.chassis, selectedConfigMech.variant)
+                                : `${normalizedChassis}|${normalizedVariant}`;
                               const options = normalizedVariant
-                                ? [...(buildOptionsByPair.get(`${normalizedChassis}|${normalizedVariant}`) ?? [])]
+                                ? [...(buildOptionsByPair.get(pairKey) ?? [])]
                                 : [...(buildOptionsByChassis.get(normalizedChassis) ?? [])];
 
                               if (!options.length && mech?.buildCodes) {
-                                const seen = new Set(options.map((option) => `${option.label}::${option.code}`));
-                                for (const { key, code, label } of getBuildCodeEntries(mech.buildCodes)) {
-                                  const dedupeKey = `${label}::${code}`;
+                                const seen = new Set(options.map((option) => option.mechId));
+                                for (const { key, code } of getBuildCodeEntries(mech.buildCodes)) {
+                                  const dedupeKey = `${mech.id}:${key}`;
                                   if (seen.has(dedupeKey)) continue;
                                   seen.add(dedupeKey);
-                                  options.push({ label: `${key}: ${label}`, code });
+                                  options.push({
+                                    label: mech.weaponry?.trim() || key,
+                                    code,
+                                    mechId: dedupeKey,
+                                    mechLabel: mech.name?.trim() ? `${mech.variant} / ${mech.name.trim()}` : mech.variant,
+                                    submittedAt: formatSubmissionDate(mech.submittedAt, mech._ts),
+                                    suggestedBuild: Boolean(mech.suggestedBuild),
+                                  });
                                 }
                               }
 
@@ -2503,6 +2548,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                         selectedMechId={row.mech}
                                         selectedChassis={rowChassis}
                                         selectedVariant={rowVariant}
+                                        selectedName={mech?.name}
                                         allConfiguredMechs={configuredMechs}
                                         repositoryMechs={repositoryMechs}
                                         repoIdToAllKey={repoIdToAllKey}
@@ -2591,23 +2637,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                         const nextBuildCode = option.code.trim();
                                         if ((entry.weaponry ?? "") === option.label && (entry.buildCode ?? "") === nextBuildCode) return entry;
                                         
-                                        // When selecting a build, also find and set the mech ID
-                                        let nextMechId = entry.mech;
-                                        if (rowChassis && rowVariant) {
-                                          const key = getPairLookupKey(rowChassis, rowVariant);
-                                          const docsForPair = mechsByNormalizedPair.get(key);
-                                          if (docsForPair && docsForPair.length > 0) {
-                                            // Find the mech that matches this build's weaponry
-                                            const matchingMech = docsForPair.find(doc => doc.weaponry?.trim() === option.label);
-                                            if (matchingMech) {
-                                              nextMechId = matchingMech.id;
-                                            }
-                                          }
-                                        }
-                                        
                                         return {
                                           ...entry,
-                                          mech: nextMechId,
+                                          mech: option.mechId.split(":", 1)[0] ?? entry.mech,
                                           weaponry: option.label,
                                           buildCode: nextBuildCode,
                                         };

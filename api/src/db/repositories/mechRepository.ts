@@ -233,6 +233,7 @@ export async function createMech(input: CreateMechInput, submittedBy?: string): 
     tonnage,
     buildUrl: normalizedInput.buildUrl || normalizedInput.link || "",
     submittedBy: submittedBy?.trim() || normalizedInput.submittedBy || "unknown",
+    submittedAt: new Date().toISOString(),
     equipment: normalizedInput.equipment ?? normalizedInput.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
     optimalRange: normalizedInput.optimalRange ?? normalizedInput.metadata.ranges.optimal,
@@ -299,6 +300,7 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
   }
 
   const normalizedInput = normalizeMechInputForStorage(input);
+  const existing = await getMechById(id);
   const candidateLink = canonicalizeBuildLink(normalizedInput.link || normalizedInput.buildUrl || "");
   if (candidateLink) {
     const existingDocs = await listMechs();
@@ -332,6 +334,7 @@ export async function upsertMechWithId(id: string, input: CreateMechInput, submi
     tonnage,
     buildUrl: normalizedInput.buildUrl || normalizedInput.link || "",
     submittedBy: submittedBy?.trim() || normalizedInput.submittedBy || "unknown",
+    submittedAt: existing?.submittedAt ?? new Date().toISOString(),
     equipment: normalizedInput.equipment ?? normalizedInput.metadata.equipment,
     primaryRangeBracket: [primaryRange[0] ?? 0, primaryRange[1] ?? 0],
     optimalRange: normalizedInput.optimalRange ?? normalizedInput.metadata.ranges.optimal,

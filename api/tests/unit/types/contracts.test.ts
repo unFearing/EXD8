@@ -82,6 +82,8 @@ describe("mechDocSchema", () => {
       tech: "Clan",
       tonnage: 75,
       buildUrl: "https://example.com/builds/timberwolf-s",
+      submittedAt: "2026-08-12T12:00:00.000Z",
+      suggestedBuild: true,
       equipment: ["ECM", "Targeting Computer Mk I"],
       primaryRangeBracket: [540, 810],
       optimalRange: 420,
@@ -91,6 +93,8 @@ describe("mechDocSchema", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.data?.suggestedBuild).toBe(true);
+    expect(result.data?.submittedAt).toBe("2026-08-12T12:00:00.000Z");
   });
 
   it("rejects mismatched tonnage and class", () => {

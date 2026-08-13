@@ -34,6 +34,7 @@ function defaultBuildDraft(): CreateMechInput {
     chassis: "",
     variant: "",
     name: "",
+    suggestedBuild: false,
     link: "",
     weaponry: "",
     description: "",
@@ -735,6 +736,16 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
                 size="small"
                 value={buildDraft.weaponry}
                 onChange={(e) => setBuildDraft((prev) => ({ ...prev, weaponry: e.target.value }))}
+              />
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={Boolean(buildDraft.suggestedBuild)}
+                    onChange={(event) => setBuildDraft((previous) => ({ ...previous, suggestedBuild: event.target.checked }))}
+                  />
+                }
+                label="Suggested build"
               />
 
               <TextField

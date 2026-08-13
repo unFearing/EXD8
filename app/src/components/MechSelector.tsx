@@ -6,6 +6,7 @@ type MechSelectorProps = {
   selectedMechId: string;
   selectedChassis: string;
   selectedVariant: string;
+  selectedName?: string;
   allConfiguredMechs: ConfigMech[];
   repositoryMechs: ConfigMech[];
   repoIdToAllKey: Map<string, string>;
@@ -18,6 +19,7 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   selectedMechId,
   selectedChassis,
   selectedVariant,
+  selectedName,
   allConfiguredMechs,
   repositoryMechs,
   repoIdToAllKey,
@@ -26,17 +28,17 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   disabled,
 }) => {
   const options = useMemo(() => {
-    const list =
-      source === "repository"
-        ? repositoryMechs
-        : source === "config"
-          ? allConfiguredMechs
-          : [...allConfiguredMechs, ...repositoryMechs];
+    const list = source === "repository"
+      ? repositoryMechs
+      : source === "config"
+        ? allConfiguredMechs
+        : [...allConfiguredMechs, ...repositoryMechs];
     return list
       .map((mech) => ({
         mechId: mech.key,
         chassis: mech.chassis,
         variant: mech.variant,
+        name: mech.name,
         tonnage: mech.tonnage,
       }))
       .sort((a, b) => {
@@ -49,51 +51,36 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   }, [allConfiguredMechs, repositoryMechs, source]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, Array<{ variant: string; tonnage: number }>>();
+    const map = new Map<string, Array<{ variant: string; tonnage: number; name?: string }>>();
     const chassisTonnage = new Map<string, number>();
     for (const option of options) {
       const list = map.get(option.chassis) ?? [];
       if (!list.some((entry) => entry.variant === option.variant)) {
-        list.push({ variant: option.variant, tonnage: option.tonnage });
+        list.push({ variant: option.variant, tonnage: option.tonnage, name: option.name });
       }
       map.set(option.chassis, list);
       const existing = chassisTonnage.get(option.chassis);
-      if (existing === undefined || option.tonnage < existing) {
-        chassisTonnage.set(option.chassis, option.tonnage);
-      }
+      if (existing === undefined || option.tonnage < existing) chassisTonnage.set(option.chassis, option.tonnage);
     }
     return Array.from(map.entries())
-      .map(([chassis, variantEntries]) => ({
+      .map(([chassis, variants]) => ({
         chassis,
-        variants: variantEntries
-          .slice()
-          .sort((a, b) => {
-            const tonnageDelta = (a.tonnage ?? Number.POSITIVE_INFINITY) - (b.tonnage ?? Number.POSITIVE_INFINITY);
-            if (tonnageDelta !== 0) return tonnageDelta;
-            return a.variant.localeCompare(b.variant);
-          }),
+        variants: variants.slice().sort((a, b) => a.tonnage - b.tonnage || a.variant.localeCompare(b.variant)),
         tonnage: chassisTonnage.get(chassis) ?? Number.POSITIVE_INFINITY,
       }))
-      .sort((a, b) => {
-        const tonnageDelta = (a.tonnage ?? Number.POSITIVE_INFINITY) - (b.tonnage ?? Number.POSITIVE_INFINITY);
-        if (tonnageDelta !== 0) return tonnageDelta;
-        return a.chassis.localeCompare(b.chassis);
-      });
+      .sort((a, b) => a.tonnage - b.tonnage || a.chassis.localeCompare(b.chassis));
   }, [options]);
 
-  const effectiveSelectedId = useMemo(() => {
-    const effectiveSelectedId =
-      source === "config" ? (repoIdToAllKey.get(selectedMechId) ?? selectedMechId) : selectedMechId;
-    return effectiveSelectedId;
-  }, [repoIdToAllKey, selectedMechId, source]);
-
-  const selectedOption = useMemo(() => {
-    return options.find((option) => option.mechId === effectiveSelectedId) ?? null;
-  }, [effectiveSelectedId, options]);
-
+  const effectiveSelectedId = useMemo(
+    () => source === "config" ? (repoIdToAllKey.get(selectedMechId) ?? selectedMechId) : selectedMechId,
+    [repoIdToAllKey, selectedMechId, source],
+  );
+  const selectedOption = useMemo(
+    () => options.find((option) => option.mechId === effectiveSelectedId) ?? null,
+    [effectiveSelectedId, options],
+  );
   const chassisValue = selectedChassis || selectedOption?.chassis || "";
   const variantValue = selectedVariant || selectedOption?.variant || "";
-
   const selectedToken = variantValue
     ? `variant|${chassisValue}|${variantValue}`
     : chassisValue
@@ -107,8 +94,12 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
       const chassisLabel = Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis;
       items.push({ token: `chassis|${group.chassis}`, label: chassisLabel, indent: false });
       if (normalizedChassis && group.chassis.toLowerCase() === normalizedChassis) {
-        for (const variantEntry of group.variants) {
-          items.push({ token: `variant|${group.chassis}|${variantEntry.variant}`, label: variantEntry.variant, indent: true });
+        for (const variant of group.variants) {
+          items.push({
+            token: `variant|${group.chassis}|${variant.variant}`,
+            label: variant.name ? `${variant.variant} / ${variant.name}` : variant.variant,
+            indent: true,
+          });
         }
       }
     }
@@ -117,9 +108,7 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
 
   const tokenToMechId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const option of options) {
-      map.set(`variant|${option.chassis}|${option.variant}`, option.mechId);
-    }
+    for (const option of options) map.set(`variant|${option.chassis}|${option.variant}`, option.mechId);
     return map;
   }, [options]);
 
@@ -135,9 +124,8 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
             if (!token) return "Select Mech";
             const [kind, chassis, variant] = token.split("|");
             const selected = options.find((option) => option.chassis === chassis && option.variant === variant);
-            const tonnage = selected?.tonnage;
-            if (kind === "chassis") return Number.isFinite(tonnage) ? `${chassis} (${tonnage}t)` : chassis;
-            return `${chassis} / ${variant}`;
+            if (kind === "chassis") return Number.isFinite(selected?.tonnage) ? `${chassis} (${selected?.tonnage}t)` : chassis;
+            return `${chassis} / ${variant}${selectedName?.trim() ? ` / ${selectedName.trim()}` : ""}`;
           }}
           onChange={(event) => {
             const token = String(event.target.value);
@@ -151,11 +139,7 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
         >
           <MenuItem value="">Select Mech</MenuItem>
           {flattenedOptions.map((option) => (
-            <MenuItem
-              key={option.token}
-              value={option.token}
-              sx={option.indent ? { pl: 4 } : undefined}
-            >
+            <MenuItem key={option.token} value={option.token} sx={option.indent ? { pl: 4 } : undefined}>
               {option.indent ? `- ${option.label}` : option.label}
             </MenuItem>
           ))}
@@ -165,15 +149,14 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   );
 };
 
-export const MechSelector = memo(MechSelectorComponent, (prev, next) => {
-  return (
-    prev.selectedMechId === next.selectedMechId &&
-    prev.selectedChassis === next.selectedChassis &&
-    prev.selectedVariant === next.selectedVariant &&
-    prev.disabled === next.disabled &&
-    prev.source === next.source &&
-    prev.allConfiguredMechs === next.allConfiguredMechs &&
-    prev.repositoryMechs === next.repositoryMechs &&
-    prev.repoIdToAllKey === next.repoIdToAllKey
-  );
-});
+export const MechSelector = memo(MechSelectorComponent, (prev, next) => (
+  prev.selectedMechId === next.selectedMechId &&
+  prev.selectedChassis === next.selectedChassis &&
+  prev.selectedVariant === next.selectedVariant &&
+  prev.selectedName === next.selectedName &&
+  prev.disabled === next.disabled &&
+  prev.source === next.source &&
+  prev.allConfiguredMechs === next.allConfiguredMechs &&
+  prev.repositoryMechs === next.repositoryMechs &&
+  prev.repoIdToAllKey === next.repoIdToAllKey
+));

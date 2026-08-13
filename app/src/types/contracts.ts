@@ -182,6 +182,8 @@ export type MechDoc = {
   tonnage?: number;
   buildUrl?: string;
   submittedBy?: string;
+  submittedAt?: string;
+  suggestedBuild?: boolean;
   equipment?: string[];
   primaryRangeBracket?: [number, number];
   optimalRange?: number;
@@ -210,6 +212,7 @@ export type MechsConfigFile = {
 
 export type ConfigMech = {
   key: string;
+  name?: string;
   tech: MechsConfigTech;
   class: WeightClass;
   chassis: string;
@@ -258,6 +261,7 @@ export type CreateMechInput = {
   chassis: string;
   variant: string;
   name?: string;
+  suggestedBuild?: boolean;
   link: string;
   weaponry: string;
   description: string;

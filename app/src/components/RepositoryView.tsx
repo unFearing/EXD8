@@ -1,9 +1,10 @@
-import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme } from "@mui/material";
+import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, Tab, Tabs, TextField, IconButton, Divider, FormControl, FormControlLabel, Checkbox, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SaveIcon from "@mui/icons-material/Save";
+import StarIcon from "@mui/icons-material/Star";
 import { Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -121,6 +122,7 @@ export function RepositoryView({
   const [descriptionDrafts, setDescriptionDrafts] = useState<Record<string, string>>({});
   const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [suggestedBuildDrafts, setSuggestedBuildDrafts] = useState<Record<string, boolean>>({});
   const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
   const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
@@ -294,6 +296,7 @@ export function RepositoryView({
       const saved = await updateMech(id, {
         ...source,
         name,
+        suggestedBuild: suggestedBuildDrafts[id] ?? Boolean(source.suggestedBuild),
         description,
         weaponry,
         skillCode,
@@ -884,6 +887,7 @@ export function RepositoryView({
                                   <Stack spacing={1.15}>
                                     <Stack direction={{ xs: "column", md: "row" }} spacing={0.8} sx={{ justifyContent: "space-between", alignItems: { md: "center" } }}>
                                       <Typography sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontFamily: MOXIE_INK_FONT, letterSpacing: "0.16em", fontWeight: 600, fontSize: { xs: "0.9rem", md: "0.98rem" } }}>
+                                        {sourceBuild?.suggestedBuild && <StarIcon aria-label="Suggested build" sx={{ fontSize: "1rem", verticalAlign: "text-bottom", mr: 0.6, color: "#d69b13" }} />}
                                         <Box component="span" sx={{ textTransform: "uppercase" }}>{title}</Box>
                                         {trimmedNameValue ? ` "${trimmedNameValue}"` : ""}
                                       </Typography>
@@ -904,6 +908,15 @@ export function RepositoryView({
                                     >
                                       {editMode === "edit" && canManageBuilds && (
                                         <Box sx={{ gridColumn: "1 / -1" }}>
+                                          <FormControlLabel
+                                            control={
+                                              <Checkbox
+                                                checked={suggestedBuildDrafts[build.id] ?? Boolean(sourceBuild?.suggestedBuild)}
+                                                onChange={(event) => setSuggestedBuildDrafts((previous) => ({ ...previous, [build.id]: event.target.checked }))}
+                                              />
+                                            }
+                                            label="Suggested build"
+                                          />
                                           <Typography variant="caption" sx={{ color: isLight ? MOXIE_BLUE : MOXIE_NIGHT_TEXT, fontWeight: 700, fontFamily: MOXIE_INK_FONT, textTransform: "uppercase", letterSpacing: "0.14em" }}>
                                             Name
                                           </Typography>

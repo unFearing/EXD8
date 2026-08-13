@@ -248,6 +248,8 @@ const mechDocBaseSchema = z.object({
     }).optional(),
   buildUrl: z.string().url().optional(),
   submittedBy: z.string().min(1).optional(),
+  submittedAt: z.string().datetime().optional(),
+  suggestedBuild: z.boolean().optional(),
   equipment: z.array(z.string().min(1)).optional(),
   primaryRangeBracket: primaryRangeBracketSchema.optional(),
   optimalRange: z.number().nonnegative().optional(),
@@ -318,6 +320,7 @@ const createMechInputBaseSchema = mechDocBaseSchema.omit({
   _etag: true,
   _attachments: true,
   _ts: true,
+  submittedAt: true,
 });
 export const createMechInputSchema = createMechInputBaseSchema;
 export type CreateMechInput = z.infer<typeof createMechInputSchema>;
@@ -330,6 +333,7 @@ const upsertMechInputBaseSchema = mechDocBaseSchema.omit({
   _etag: true,
   _attachments: true,
   _ts: true,
+  submittedAt: true,
 });
 export const upsertMechInputSchema = upsertMechInputBaseSchema;
 export type UpsertMechInput = z.infer<typeof upsertMechInputSchema>;
