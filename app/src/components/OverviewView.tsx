@@ -89,6 +89,7 @@ const PILOT_OPTIONS = [
   "V",
   "P4TCHY",
   "Bux",
+  "maddy",
   "Itsy",
   "Acerg",
   "GiL",
