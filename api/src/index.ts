@@ -19,3 +19,4 @@ import "./functions/matchNights/upsertDeck.js";
 import "./functions/matchNights/deleteDeck.js";
 import "./functions/matchNights/getQuickslots.js";
 import "./functions/matchNights/upsertQuickslots.js";
+import "./functions/matchNights/updateQuickslotOverviewSelection.js";

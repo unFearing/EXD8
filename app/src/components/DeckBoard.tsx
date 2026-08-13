@@ -1607,6 +1607,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     <Box
       sx={{
         minHeight: "100vh",
+        maxWidth: "100vw",
+        overflowX: "hidden",
         background:
           isLight
             ? "radial-gradient(circle at 8% 10%, rgba(132, 154, 184, 0.22), transparent 35%), radial-gradient(circle at 90% 0%, rgba(170, 179, 191, 0.22), transparent 40%), #e3e9f0"
@@ -1624,9 +1626,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         }}
       >
         <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
-          <Stack direction="row" spacing={2.2} sx={{ alignItems: "center", flexWrap: "nowrap", justifyContent: "space-between" }}>
-            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
-              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6 }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.7, md: 2.2 }} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", minWidth: 0 }}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.4, md: 1.6 }} sx={{ alignItems: { xs: "stretch", md: "center" }, minWidth: 0, width: "100%" }}>
+              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6, display: { xs: "none", md: "block" } }}>
                 EXDEATE
               </Typography>
 
@@ -1640,10 +1642,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     navigate("/overview");
                   }
                 }}
-                variant="standard"
+                variant="scrollable"
+                scrollButtons={false}
                 sx={{
                   minHeight: 38,
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
+                  maxWidth: "100%",
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, minWidth: 0, py: 0, px: { xs: 1.1, sm: 1.8 } },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
@@ -1659,16 +1663,19 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   alignSelf: "stretch",
                   borderColor: isLight ? "rgba(108, 128, 158, 0.3)" : "rgba(130, 154, 217, 0.24)",
                   mx: 1.0,
+                  display: { xs: "none", md: "block" },
                 }}
               />
 
               <Tabs
                 value={selectedMap}
                 onChange={(_, value: DeckMap) => onMapChange(value)}
-                variant="standard"
+                variant="scrollable"
+                scrollButtons={false}
                 sx={{
                   minHeight: 38,
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.6 },
+                  maxWidth: "100%",
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, minWidth: 0, py: 0, px: { xs: 1.1, sm: 1.6 } },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
@@ -1678,7 +1685,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={1.35} sx={{ ml: "auto", alignItems: "center", flexWrap: "nowrap", justifyContent: "flex-end", flexShrink: 0 }}>
+            <Stack direction="row" spacing={0.7} sx={{ ml: { md: "auto" }, alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "flex-start", md: "flex-end" }, minWidth: 0 }}>
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
                   {user.username}
@@ -1840,7 +1847,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             onChange={(event) => setMaproomUrlInput(event.target.value)}
                             disabled={editMode !== "edit"}
                             inputRef={maproomUrlInputRef}
-                            sx={{ minWidth: { xs: 260, md: 440 }, flex: 1 }}
+                            sx={{ minWidth: { xs: 0, md: 440 }, width: { xs: "100%", md: "auto" }, flex: 1 }}
                           />
                           {editMode === "edit" && (
                             <Button
@@ -2060,7 +2067,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           {entry.slot}
                         </Typography>
                       </Stack>
-                      <FormControl size="small" sx={{ flex: 1, minWidth: 220 }}>
+                      <FormControl size="small" sx={{ flex: 1, minWidth: { xs: 0, sm: 220 }, width: { xs: "100%", sm: "auto" } }}>
                         <InputLabel>Deck</InputLabel>
                         {(() => {
                           const safeDeckId =
@@ -2215,7 +2222,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               };
                             });
                           }}
-                          sx={{ minWidth: 220 }}
+                          sx={{ minWidth: { xs: 0, sm: 220 }, width: { xs: "100%", sm: "auto" } }}
                         />
                         <FormControl size="small" sx={{ minWidth: 130 }}>
                           <InputLabel>Team</InputLabel>

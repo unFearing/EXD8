@@ -6,6 +6,7 @@ import {
   encodeSessionToken,
   getSessionUser,
   resolveMappedRole,
+  resolveSessionSigningKey,
   type SessionAppRole,
   type SessionUser,
 } from "./session.js";
@@ -18,7 +19,11 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || "";
 const DISCORD_GUILD_ID = process.env.DISCORD_GUILD_ID || "";
 const DISCORD_ROLE_TL = process.env.DISCORD_ROLE_TL || process.env.DISCORD_TL_ROLE_ID || process.env.DISCORD_ROLE_X || "";
 const DISCORD_ROLE_PILOT = process.env.DISCORD_ROLE_PILOT || process.env.DISCORD_PILOT_ROLE_ID || process.env.DISCORD_ROLE_Y || "";
-const SESSION_SECRET = process.env.SESSION_SECRET || "";
+const SESSION_SIGNING_KEY = resolveSessionSigningKey(
+  process.env.SESSION_SIGNING_KEY || "",
+  process.env.SESSION_SECRET || "",
+  DISCORD_CLIENT_SECRET,
+);
 
 type AppRole = SessionAppRole;
 
@@ -121,7 +126,7 @@ export async function discordOAuthHandler(request: HttpRequest) {
       appRole,
     };
 
-    const token = encodeSessionToken(user, SESSION_SECRET);
+    const token = encodeSessionToken(user, SESSION_SIGNING_KEY);
 
     return {
       ...ok({ user }),
@@ -142,7 +147,7 @@ app.http("discordOAuth", {
 
 export async function authMeHandler(request: HttpRequest) {
   try {
-    const user = getSessionUser(request, SESSION_SECRET);
+    const user = getSessionUser(request, SESSION_SIGNING_KEY);
 
     if (!user) {
       return fail(401, "UNAUTHORIZED", "Invalid or expired session");

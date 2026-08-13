@@ -172,6 +172,7 @@ function AppContent() {
           zIndex: 1300,
           pointerEvents: "none",
           opacity: APP_BUILD_WATERMARK_OPACITY,
+          display: { xs: "none", sm: "block" },
         }}
       >
         <Typography

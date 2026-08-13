@@ -75,6 +75,7 @@ export type QuickslotEntry = {
 export type QuickslotDoc = {
   id: string;
   slots: QuickslotEntry[];
+  overviewSelectedDeckIds?: string[];
   updatedAt?: string;
   updatedBy?: string;
   schemaVersion?: "1.0.0";
@@ -84,6 +85,11 @@ export type QuickslotDoc = {
 export type QuickslotUpsertInput = {
   id?: string;
   slots: QuickslotEntry[];
+};
+
+export type QuickslotOverviewSelectionInput = {
+  id?: string;
+  overviewSelectedDeckIds: string[];
 };
 
 export type MapConfigDoc = {

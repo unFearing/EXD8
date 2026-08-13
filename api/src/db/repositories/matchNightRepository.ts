@@ -5,6 +5,7 @@ import type {
   MatchNightCreateInput,
   MatchNightDoc,
   QuickslotDoc,
+  QuickslotOverviewSelectionInput,
   QuickslotUpsertInput,
 } from "../../types/contracts.js";
 import { getMatchNightsContainer } from "../cosmos.js";
@@ -362,10 +363,35 @@ export async function getQuickslotById(id: string): Promise<QuickslotDoc | null>
 export async function upsertQuickslot(input: QuickslotUpsertInput, updatedBy: string): Promise<QuickslotDoc> {
   const now = new Date().toISOString();
   const id = input.id ?? "quickslots-default";
+  const existing = await getQuickslotById(id);
   const doc: QuickslotDoc = {
     id,
     slots: input.slots,
+    ...(existing?.overviewSelectedDeckIds
+      ? { overviewSelectedDeckIds: existing.overviewSelectedDeckIds }
+      : {}),
     updatedAt: now,
+    updatedBy,
+    schemaVersion: "1.0.0",
+    docType: "quickslot",
+  };
+
+  const container = getMatchNightsContainer();
+  await container.items.upsert(doc);
+  return doc;
+}
+
+export async function updateQuickslotOverviewSelection(
+  input: QuickslotOverviewSelectionInput,
+  updatedBy: string,
+): Promise<QuickslotDoc> {
+  const id = input.id ?? "quickslots-default";
+  const existing = await getQuickslotById(id);
+  const doc: QuickslotDoc = {
+    id,
+    slots: existing?.slots ?? [],
+    overviewSelectedDeckIds: input.overviewSelectedDeckIds,
+    updatedAt: new Date().toISOString(),
     updatedBy,
     schemaVersion: "1.0.0",
     docType: "quickslot",

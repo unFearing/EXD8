@@ -7,6 +7,7 @@ import {
   encodeSessionToken,
   getSessionUser,
   resolveMappedRole,
+  resolveSessionSigningKey,
   type SessionUser,
 } from "../../../../src/functions/auth/session.js";
 
@@ -18,6 +19,14 @@ const user: SessionUser = {
 };
 
 describe("Discord auth sessions", () => {
+  it("prefers the signing key, supports the legacy secret, and derives a stable OAuth fallback", () => {
+    expect(resolveSessionSigningKey("signing-key", "legacy-secret", "oauth-secret")).toBe("signing-key");
+    expect(resolveSessionSigningKey("", "legacy-secret", "oauth-secret")).toBe("legacy-secret");
+    expect(resolveSessionSigningKey("", "", "oauth-secret")).toBe(resolveSessionSigningKey("", "", "oauth-secret"));
+    expect(resolveSessionSigningKey("", "", "oauth-secret")).not.toBe("oauth-secret");
+    expect(resolveSessionSigningKey("", "", "")).toBe("");
+  });
+
   it("preserves a valid signed session across requests", () => {
     const token = encodeSessionToken(user, "test-secret", 1_000);
 

@@ -6,7 +6,8 @@ describe("production auth guard", () => {
     vi.resetModules();
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("DISABLE_DISCORD_AUTH", "false");
-    vi.stubEnv("SESSION_SECRET", "test-secret");
+    vi.stubEnv("SESSION_SIGNING_KEY", "test-signing-key");
+    vi.stubEnv("SESSION_SECRET", "");
     vi.stubEnv("DISCORD_ROLE_TL", "tl-role");
     vi.stubEnv("DISCORD_ROLE_PILOT", "pilot-role");
   });
@@ -52,7 +53,7 @@ describe("production auth guard", () => {
       username: "pilot",
       roles: ["pilot-role"],
       appRole: "Pilot",
-    }, "test-secret");
+    }, "test-signing-key");
     const request = new HttpRequest({
       method: "POST",
       url: "https://example.com/api/mechs",

@@ -5,6 +5,7 @@ import type {
   DropDeckDoc,
   DropDeckUpsertInput,
   QuickslotDoc,
+  QuickslotOverviewSelectionInput,
   QuickslotUpsertInput,
   MatchNightCreateInput,
   MatchNightDoc,
@@ -166,6 +167,22 @@ export async function getQuickslots(id = "quickslots-default"): Promise<Quickslo
 export async function saveQuickslots(input: QuickslotUpsertInput): Promise<QuickslotDoc> {
   const response = await fetch(`${API_BASE}/quickslots`, {
     method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+  });
+
+  const parsed = await parseResponse<QuickslotDoc>(response);
+  return parsed.data;
+}
+
+export async function saveQuickslotOverviewSelection(
+  input: QuickslotOverviewSelectionInput,
+): Promise<QuickslotDoc> {
+  const response = await fetch(`${API_BASE}/quickslots/overview-selection`, {
+    method: "PUT",
     headers: {
       "content-type": "application/json",
       ...getAuthHeaders(),

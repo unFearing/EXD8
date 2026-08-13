@@ -1,8 +1,12 @@
 import type { HttpRequest, HttpResponseInit } from "@azure/functions";
-import { getSessionUser, resolveMappedRole } from "../functions/auth/session.js";
+import { getSessionUser, resolveMappedRole, resolveSessionSigningKey } from "../functions/auth/session.js";
 import { fail } from "./http.js";
 
-const SESSION_SECRET = process.env.SESSION_SECRET || "";
+const SESSION_SIGNING_KEY = resolveSessionSigningKey(
+  process.env.SESSION_SIGNING_KEY || "",
+  process.env.SESSION_SECRET || "",
+  process.env.DISCORD_CLIENT_SECRET || "",
+);
 const DISCORD_ROLE_TL = process.env.DISCORD_ROLE_TL || process.env.DISCORD_TL_ROLE_ID || process.env.DISCORD_ROLE_X || "";
 const DISCORD_ROLE_PILOT = process.env.DISCORD_ROLE_PILOT || process.env.DISCORD_PILOT_ROLE_ID || process.env.DISCORD_ROLE_Y || "";
 
@@ -26,7 +30,7 @@ export function getRequestContext(request: HttpRequest, access: AccessLevel = "r
   }
 
   if (!allowHeaderAuth) {
-    const user = getSessionUser(request, SESSION_SECRET);
+    const user = getSessionUser(request, SESSION_SIGNING_KEY);
     if (!user) throw new Error("AUTH_REQUIRED");
     const role = resolveMappedRole(user.roles, DISCORD_ROLE_TL, DISCORD_ROLE_PILOT);
     if (!role) throw new Error("INVALID_ROLE");

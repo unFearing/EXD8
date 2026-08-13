@@ -135,6 +135,7 @@ export const quickslotEntrySchema = z.object({
 export const quickslotDocSchema = z.object({
   id: z.string().min(1),
   slots: z.array(quickslotEntrySchema).max(25),
+  overviewSelectedDeckIds: z.array(z.string().uuid()).max(25).optional(),
   updatedAt: z.string().datetime(),
   updatedBy: z.string().min(1),
   schemaVersion: z.literal("1.0.0"),
@@ -144,6 +145,14 @@ export const quickslotDocSchema = z.object({
 export const quickslotUpsertInputSchema = z.object({
   id: z.string().min(1).optional(),
   slots: z.array(quickslotEntrySchema).max(25),
+});
+
+export const quickslotOverviewSelectionInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  overviewSelectedDeckIds: z.array(z.string().uuid()).max(25)
+    .refine((values) => new Set(values).size === values.length, {
+      message: "overviewSelectedDeckIds must be unique",
+    }),
 });
 
 export const mapConfigDocSchema = z.object({
@@ -292,6 +301,7 @@ export type DropDeckDoc = z.infer<typeof dropDeckDocSchema>;
 export type DropDeckUpsertInput = z.infer<typeof dropDeckUpsertInputSchema>;
 export type QuickslotDoc = z.infer<typeof quickslotDocSchema>;
 export type QuickslotUpsertInput = z.infer<typeof quickslotUpsertInputSchema>;
+export type QuickslotOverviewSelectionInput = z.infer<typeof quickslotOverviewSelectionInputSchema>;
 export type MapConfigDoc = z.infer<typeof mapConfigDocSchema>;
 export type MapConfigUpsertInput = z.infer<typeof mapConfigUpsertInputSchema>;
 export type MatchNightCreateInput = z.infer<typeof matchNightCreateInputSchema>;

@@ -19,6 +19,16 @@ type SessionPayload = {
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const SESSION_COOKIE_NAME = "__Host-exd8_session";
 const LOCAL_SESSION_COOKIE_NAME = "exd8_session";
+const SESSION_KEY_CONTEXT = "exd8/session-signing/v1";
+
+export function resolveSessionSigningKey(signingKey: string, legacySecret: string, discordClientSecret: string): string {
+  const dedicatedKey = signingKey.trim() || legacySecret.trim();
+  if (dedicatedKey) return dedicatedKey;
+
+  const oauthSecret = discordClientSecret.trim();
+  if (!oauthSecret) return "";
+  return createHmac("sha256", oauthSecret).update(SESSION_KEY_CONTEXT).digest("base64url");
+}
 
 export function resolveMappedRole(
   roles: string[],
@@ -40,7 +50,7 @@ export function encodeSessionToken(
   secret: string,
   now = Date.now(),
 ): string {
-  if (!secret) throw new Error("SESSION_SECRET is not configured");
+  if (!secret) throw new Error("SESSION_SIGNING_KEY is not configured");
   const payload = Buffer.from(JSON.stringify({ user, expiresAt: now + SESSION_TTL_MS })).toString("base64url");
   return `${payload}.${signPayload(payload, secret)}`;
 }

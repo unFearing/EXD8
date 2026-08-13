@@ -9,7 +9,8 @@ describe("Discord auth handlers", () => {
     vi.stubEnv("DISCORD_GUILD_ID", "guild-id");
     vi.stubEnv("DISCORD_ROLE_TL", "tl-role");
     vi.stubEnv("DISCORD_ROLE_PILOT", "pilot-role");
-    vi.stubEnv("SESSION_SECRET", "session-secret");
+    vi.stubEnv("SESSION_SIGNING_KEY", "session-signing-key");
+    vi.stubEnv("SESSION_SECRET", "");
   });
 
   afterEach(() => {
@@ -30,6 +31,7 @@ describe("Discord auth handlers", () => {
   }
 
   it("issues a secure session cookie for a mapped Discord role", async () => {
+    vi.stubEnv("SESSION_SIGNING_KEY", "");
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
       if (url.endsWith("oauth2/token")) return Response.json({ access_token: "access-token" });
@@ -74,7 +76,7 @@ describe("Discord auth handlers", () => {
       username: "pilot",
       roles: ["pilot-role"],
       appRole: "Pilot",
-    }, "session-secret");
+    }, "session-signing-key");
     const request = new HttpRequest({
       method: "GET",
       url: "https://example.com/api/auth/me",

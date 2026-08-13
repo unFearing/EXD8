@@ -20,6 +20,8 @@ import {
   AccordionDetails,
   Typography,
   Autocomplete,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { parseMechBuild, createMech, getMechRoles, checkMechLink } from "../api/client";
@@ -152,6 +154,8 @@ type BulkReviewState = {
 };
 
 export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuildDialogProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const isLight = mode === "light";
   const [roleOptions, setRoleOptions] = useState<string[]>([]);
   const [chassisVariants, setChassisVariants] = useState<Array<{ chassis: string; variant: string }>>([]);
@@ -505,7 +509,7 @@ export function AddBuildDialog({ open, onClose, onBuildCreated, mode }: AddBuild
     buildDraft.weaponry;
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth fullScreen={isMobile}>
       <DialogTitle>Add a Build</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>

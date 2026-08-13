@@ -11,6 +11,7 @@ import {
   Paper,
   Select,
   Stack,
+  Switch,
   Tab,
   Tabs,
   Table,
@@ -28,7 +29,7 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import DownloadIcon from "@mui/icons-material/Download";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import { useNavigate } from "react-router-dom";
-import { getDropDecks, getQuickslots } from "../api/client";
+import { getDropDecks, getQuickslots, saveQuickslotOverviewSelection } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import type { DeckRowDoc, DropDeckDoc, QuickslotEntry } from "../types/contracts";
@@ -99,6 +100,24 @@ const MATRIX_PRIMARY_COL_WIDTH = 110;
 const MATRIX_ALT_COL_WIDTH = 110;
 const MATRIX_STATUS_COL_WIDTH = 130;
 const MATRIX_PACK_COL_WIDTH = 54;
+const OVERVIEW_SELECTION_STORAGE_PREFIX = "overview-deck-selection";
+
+function getLocalSelectionStorageKey(userId: string | undefined): string {
+  return `${OVERVIEW_SELECTION_STORAGE_PREFIX}:EXD8:${userId ?? "anonymous"}`;
+}
+
+function readLocalSelection(userId: string | undefined): string[] | null {
+  try {
+    const raw = localStorage.getItem(getLocalSelectionStorageKey(userId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) && parsed.every((value) => typeof value === "string")
+      ? parsed
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 function normalizeDeckSide(side: DropDeckDoc["side"]): TeamSide {
   if (side === "Team 1") return "1";
@@ -243,7 +262,10 @@ export function OverviewView({
   const [deckDocs, setDeckDocs] = useState<DropDeckDoc[]>([]);
   const [quickslots, setQuickslots] = useState<QuickslotEntry[]>([]);
   const [chassisCodeByName, setChassisCodeByName] = useState<Record<string, string>>({});
-  const [selectedDeckIds, setSelectedDeckIds] = useState<string[]>([]);
+  const [serverSelectedDeckIds, setServerSelectedDeckIds] = useState<string[] | null>(null);
+  const [localSelectedDeckIds, setLocalSelectedDeckIds] = useState<string[]>([]);
+  const [useLocalOverride, setUseLocalOverride] = useState(false);
+  const [savingSelection, setSavingSelection] = useState(false);
   const [slottedPilots, setSlottedPilots] = useState<Record<string, string>>({});
   const [showAssignedOnly, setShowAssignedOnly] = useState(true);
   const canManage = resolveAppRole(user?.roles ?? [], user?.appRole) === "TL";
@@ -260,6 +282,7 @@ export function OverviewView({
         if (cancelled) return;
         setDeckDocs(docs);
         setQuickslots(quickslotDoc.slots ?? []);
+        setServerSelectedDeckIds(quickslotDoc.overviewSelectedDeckIds ?? null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -291,12 +314,7 @@ export function OverviewView({
 
   const deckColumns = useMemo(() => getDeckColumns(deckDocs, quickslots), [deckDocs, quickslots]);
 
-  useEffect(() => {
-    if (!deckColumns.length) {
-      setSelectedDeckIds([]);
-      return;
-    }
-
+  const defaultSelectedDeckIds = useMemo(() => {
     const quickslotDeckOrder = Array.from(
       new Set(
         quickslots
@@ -309,15 +327,21 @@ export function OverviewView({
     const defaults = quickslotDeckOrder.length
       ? quickslotDeckOrder
       : deckColumns.slice(0, Math.min(deckColumns.length, 6)).map((column) => column.id);
-
-    setSelectedDeckIds((previous) => {
-      if (previous.length) {
-        const retained = previous.filter((id) => deckColumns.some((column) => column.id === id));
-        if (retained.length) return retained;
-      }
-      return defaults;
-    });
+    return defaults;
   }, [deckColumns, quickslots]);
+
+  const sharedSelectedDeckIds = useMemo(() => {
+    const source = serverSelectedDeckIds ?? defaultSelectedDeckIds;
+    return source.filter((id) => deckColumns.some((column) => column.id === id));
+  }, [deckColumns, defaultSelectedDeckIds, serverSelectedDeckIds]);
+
+  useEffect(() => {
+    const stored = readLocalSelection(user?.id);
+    const source = stored ?? sharedSelectedDeckIds;
+    setLocalSelectedDeckIds(source.filter((id) => deckColumns.some((column) => column.id === id)));
+  }, [deckColumns, sharedSelectedDeckIds, user?.id]);
+
+  const selectedDeckIds = useLocalOverride ? localSelectedDeckIds : sharedSelectedDeckIds;
 
   const selectedDeckColumns = useMemo(
     () => selectedDeckIds
@@ -412,13 +436,47 @@ export function OverviewView({
     [assignmentsByPilot, visiblePilotList],
   );
 
+  const applySelectedDeckIds = async (next: string[]) => {
+    const normalized = Array.from(new Set(next));
+    if (useLocalOverride) {
+      setLocalSelectedDeckIds(normalized);
+      localStorage.setItem(getLocalSelectionStorageKey(user?.id), JSON.stringify(normalized));
+      return;
+    }
+    if (!canManage || savingSelection) return;
+
+    const previous = serverSelectedDeckIds;
+    setServerSelectedDeckIds(normalized);
+    setSavingSelection(true);
+    setError("");
+    try {
+      const saved = await saveQuickslotOverviewSelection({
+        id: "quickslots-default",
+        overviewSelectedDeckIds: normalized,
+      });
+      setServerSelectedDeckIds(saved.overviewSelectedDeckIds ?? normalized);
+    } catch (saveError) {
+      setServerSelectedDeckIds(previous);
+      setError(saveError instanceof Error ? saveError.message : "Failed to save TL selection");
+    } finally {
+      setSavingSelection(false);
+    }
+  };
+
   const toggleDeckInMatrix = (deckId: string) => {
-    setSelectedDeckIds((previous) => {
-      if (previous.includes(deckId)) {
-        return previous.filter((id) => id !== deckId);
-      }
-      return [...previous, deckId];
-    });
+    void applySelectedDeckIds(
+      selectedDeckIds.includes(deckId)
+        ? selectedDeckIds.filter((id) => id !== deckId)
+        : [...selectedDeckIds, deckId],
+    );
+  };
+
+  const setLocalOverride = (enabled: boolean) => {
+    if (enabled) {
+      const stored = readLocalSelection(user?.id);
+      setLocalSelectedDeckIds(stored ?? sharedSelectedDeckIds);
+    }
+    setUseLocalOverride(enabled);
   };
 
   const downloadPilotNightPack = (pilot: string) => {
@@ -485,9 +543,9 @@ export function OverviewView({
         }}
       >
         <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
-          <Stack direction="row" spacing={2.2} sx={{ alignItems: "center", flexWrap: "nowrap", justifyContent: "space-between" }}>
-            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
-              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6 }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.7, md: 2.2 }} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", minWidth: 0 }}>
+            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", minWidth: 0, width: "100%" }}>
+              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6, display: { xs: "none", md: "block" } }}>
                 EXDEATE
               </Typography>
 
@@ -497,10 +555,12 @@ export function OverviewView({
                   if (value === "dropDecks") navigate("/");
                   if (value === "repository") navigate("/repository");
                 }}
-                variant="standard"
+                variant="scrollable"
+                scrollButtons={false}
                 sx={{
                   minHeight: 38,
-                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, py: 0, px: 1.8 },
+                  maxWidth: "100%",
+                  "& .MuiTab-root": { color: isLight ? "#566987" : "#cbd6f6", minHeight: 38, minWidth: 0, py: 0, px: { xs: 1.1, sm: 1.8 } },
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
@@ -510,7 +570,7 @@ export function OverviewView({
               </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={1.35} sx={{ ml: "auto", alignItems: "center", flexWrap: "nowrap", justifyContent: "flex-end", flexShrink: 0 }}>
+            <Stack direction="row" spacing={0.7} sx={{ ml: { md: "auto" }, alignItems: "center", flexWrap: "wrap", justifyContent: { xs: "flex-start", md: "flex-end" }, minWidth: 0 }}>
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
                   {user.username}
@@ -623,10 +683,20 @@ export function OverviewView({
               </Stack>
 
               <Stack direction="row" spacing={0.6} sx={{ alignItems: "center", justifyContent: "space-between" }}>
-                <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}>Quickslots By Map</Typography>
-                <Stack direction="row" spacing={0.4}>
-                  <Button size="small" onClick={() => setSelectedDeckIds(Array.from(new Set(mapSelectorColumns.flatMap((column) => column.decks.map((deck) => deck.id)))))} sx={{ textTransform: "none" }}>Select All</Button>
-                  <Button size="small" onClick={() => setSelectedDeckIds([])} sx={{ textTransform: "none" }}>Clear</Button>
+                <Stack spacing={0}>
+                  <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}>Quickslots By Map</Typography>
+                  <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                    {useLocalOverride ? "Personal filters on this browser" : savingSelection ? "Saving TL selection..." : "Following TL selection"}
+                  </Typography>
+                </Stack>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={0.4} sx={{ alignItems: { sm: "center" } }}>
+                  <FormControlLabel
+                    control={<Switch size="small" checked={useLocalOverride} onChange={(_, checked) => setLocalOverride(checked)} />}
+                    label="Use my filters"
+                    sx={{ m: 0, "& .MuiFormControlLabel-label": { fontSize: "0.76rem", fontWeight: 700 } }}
+                  />
+                  <Button size="small" disabled={!useLocalOverride && (!canManage || savingSelection)} onClick={() => void applySelectedDeckIds(Array.from(new Set(mapSelectorColumns.flatMap((column) => column.decks.map((deck) => deck.id)))))} sx={{ textTransform: "none" }}>Select All</Button>
+                  <Button size="small" disabled={!useLocalOverride && (!canManage || savingSelection)} onClick={() => void applySelectedDeckIds([])} sx={{ textTransform: "none" }}>Clear</Button>
                 </Stack>
               </Stack>
 
@@ -649,14 +719,30 @@ export function OverviewView({
                       borderBottom: isLight ? "1px solid rgba(122, 143, 174, 0.24)" : "1px solid rgba(120, 146, 210, 0.24)",
                     }}
                   >
-                    <Typography sx={{ px: 0.9, py: 0.55, fontSize: "0.82rem", fontWeight: 800, background: isLight ? "rgba(210, 222, 237, 0.58)" : "rgba(39, 57, 94, 0.42)" }}>{column.map}</Typography>
+                    <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", background: isLight ? "rgba(210, 222, 237, 0.58)" : "rgba(39, 57, 94, 0.42)" }}>
+                      <Typography sx={{ px: 0.9, py: 0.55, fontSize: "0.82rem", fontWeight: 800 }}>{column.map}</Typography>
+                      <Button
+                        size="small"
+                        disabled={!column.decks.length || (!useLocalOverride && (!canManage || savingSelection))}
+                        onClick={() => {
+                          const mapIds = column.decks.map((deck) => deck.id);
+                          const allSelected = mapIds.every((id) => selectedDeckIds.includes(id));
+                          void applySelectedDeckIds(allSelected
+                            ? selectedDeckIds.filter((id) => !mapIds.includes(id))
+                            : [...selectedDeckIds, ...mapIds]);
+                        }}
+                        sx={{ minWidth: 0, px: 0.8, textTransform: "none", fontSize: "0.7rem" }}
+                      >
+                        {column.decks.every((deck) => selectedDeckIds.includes(deck.id)) ? "Clear" : "Select"}
+                      </Button>
+                    </Stack>
                     {!column.decks.length && <Typography variant="caption" sx={{ display: "block", p: 0.9, opacity: 0.6 }}>No quickslots</Typography>}
                     {column.decks.map((deck) => {
                       const quickslot = quickslots.find((entry) => entry.map === column.map && entry.deckId === deck.id)?.slot;
                       return (
                         <Box key={deck.id} data-testid={`quickslot-deck-${deck.id}`} sx={{ px: 0.9, py: 0.6, borderTop: isLight ? "1px solid rgba(122, 143, 174, 0.2)" : "1px solid rgba(120, 146, 210, 0.2)", background: selectedDeckIds.includes(deck.id) ? (isLight ? "rgba(213, 226, 241, 0.4)" : "rgba(45, 66, 109, 0.2)") : "transparent" }}>
                           <FormControlLabel
-                            control={<Checkbox size="small" checked={selectedDeckIds.includes(deck.id)} onChange={() => toggleDeckInMatrix(deck.id)} />}
+                            control={<Checkbox size="small" checked={selectedDeckIds.includes(deck.id)} disabled={!useLocalOverride && (!canManage || savingSelection)} onChange={() => toggleDeckInMatrix(deck.id)} />}
                             label={`${quickslot ?? "-"} · ${deck.name}`}
                             sx={{ m: 0, width: "100%", "& .MuiFormControlLabel-label": { minWidth: 0, fontSize: "0.78rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }}
                           />

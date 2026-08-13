@@ -1,4 +1,4 @@
-import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { Stack, Alert, Box, Button, AppBar, Container, Paper, Tooltip, ButtonGroup, Tab, Tabs, TextField, IconButton, Divider, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, useMediaQuery, useTheme } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -102,6 +102,8 @@ export function RepositoryView({
   viewMode,
   onViewModeChange,
 }: RepositoryViewProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const navigate = useNavigate();
   const location = useLocation();
   const isLight = mode === "light";
@@ -544,6 +546,8 @@ export function RepositoryView({
     <Box
       sx={{
         minHeight: "100vh",
+        maxWidth: "100vw",
+        overflowX: "hidden",
         background: isLight
           ? "radial-gradient(circle at 14% 6%, rgba(248, 179, 151, 0.4), transparent 32%), radial-gradient(circle at 86% 2%, rgba(255, 212, 184, 0.38), transparent 38%), #fbe9de"
           : `radial-gradient(circle at 14% 5%, rgba(96, 125, 200, 0.24), transparent 35%), radial-gradient(circle at 86% 2%, rgba(248, 179, 151, 0.16), transparent 40%), ${MOXIE_NIGHT_BG}`,
@@ -563,9 +567,9 @@ export function RepositoryView({
         }}
       >
         <Box sx={{ pl: { xs: 2, md: 6.5 }, pr: { xs: 1.5, md: 2.75 }, py: 1.25, display: "grid", gap: 1.25 }}>
-          <Stack direction="row" spacing={2.2} sx={{ alignItems: "center", flexWrap: "nowrap", justifyContent: "space-between" }}>
-            <Stack direction="row" spacing={1.6} sx={{ alignItems: "center", flexWrap: "nowrap", minWidth: 0 }}>
-              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6 }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.7, md: 2.2 }} sx={{ alignItems: { xs: "stretch", md: "center" }, justifyContent: "space-between", minWidth: 0 }}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={{ xs: 0.4, md: 1.6 }} sx={{ alignItems: { xs: "stretch", md: "center" }, minWidth: 0, width: "100%" }}>
+              <Typography sx={{ color: isLight ? "#2f3e58" : "#eff5ff", fontWeight: 700, letterSpacing: "0.02em", mr: 0.6, display: { xs: "none", md: "block" } }}>
                 EXDEATE
               </Typography>
 
@@ -579,10 +583,12 @@ export function RepositoryView({
                     navigate("/overview");
                   }
                 }}
-                variant="standard"
+                variant="scrollable"
+                scrollButtons={false}
                 sx={{
                   minHeight: 38,
-                  "& .MuiTab-root": { color: isLight ? "#5f5180" : MOXIE_NIGHT_TEXT, minHeight: 38, py: 0, px: 1.8 },
+                  maxWidth: "100%",
+                  "& .MuiTab-root": { color: isLight ? "#5f5180" : MOXIE_NIGHT_TEXT, minHeight: 38, minWidth: 0, py: 0, px: { xs: 1.1, sm: 1.8 } },
                   "& .Mui-selected": { color: isLight ? MOXIE_BLUE : "#ffffff" },
                 }}
               >
@@ -598,16 +604,19 @@ export function RepositoryView({
                   alignSelf: "stretch",
                   borderColor: isLight ? `${MOXIE_BLUE}4d` : "rgba(130, 154, 217, 0.24)",
                   mx: 1.0,
+                  display: { xs: "none", md: "block" },
                 }}
               />
 
               <Tabs
                 value={selectedWeightClass}
                 onChange={(_, value: "Light" | "Medium" | "Heavy" | "Assault") => setSelectedWeightClass(value)}
-                variant="standard"
+                variant="scrollable"
+                scrollButtons={false}
                 sx={{
                   minHeight: 38,
-                  "& .MuiTab-root": { color: isLight ? "#5f5180" : MOXIE_NIGHT_TEXT, minHeight: 38, py: 0, px: 1.6 },
+                  maxWidth: "100%",
+                  "& .MuiTab-root": { color: isLight ? "#5f5180" : MOXIE_NIGHT_TEXT, minHeight: 38, minWidth: 0, py: 0, px: { xs: 1.1, sm: 1.6 } },
                   "& .Mui-selected": { color: isLight ? MOXIE_BLUE : "#ffffff" },
                 }}
               >
@@ -618,7 +627,7 @@ export function RepositoryView({
               </Tabs>
             </Stack>
 
-            <Stack direction="row" spacing={1.35} sx={{ alignItems: "center", ml: "auto", flexWrap: "nowrap", justifyContent: "flex-end", flexShrink: 0 }}>
+            <Stack direction="row" spacing={0.7} sx={{ alignItems: "center", ml: { md: "auto" }, flexWrap: "wrap", justifyContent: { xs: "flex-start", md: "flex-end" }, minWidth: 0 }}>
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : MOXIE_NIGHT_TEXT, fontSize: "0.92rem", display: { xs: "none", sm: "block" } }}>
                   {user.username}
@@ -1170,7 +1179,7 @@ export function RepositoryView({
         mode={mode}
       />
 
-      <Dialog open={Boolean(parserReview)} onClose={() => setParserReview(null)} maxWidth="lg" fullWidth>
+      <Dialog open={Boolean(parserReview)} onClose={() => setParserReview(null)} maxWidth="lg" fullWidth fullScreen={isMobile}>
         <DialogTitle>Review re-parsed build</DialogTitle>
         <DialogContent dividers>
           {parserReview && (
