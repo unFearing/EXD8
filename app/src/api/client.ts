@@ -12,6 +12,9 @@ import type {
   MapConfigDoc,
   MechDoc,
   ParsedMechBuild,
+  PresenceDoc,
+  PresenceListResponse,
+  PresenceUpdateInput,
   WeightClassSummary,
 } from "../types/contracts";
 
@@ -94,6 +97,26 @@ export async function getDropDecks(): Promise<DropDeckDoc[]> {
   const response = await fetch(`${API_BASE}/decks`, { headers: getAuthHeaders() });
 
   const parsed = await parseResponse<DropDeckDoc[]>(response);
+  return parsed.data;
+}
+
+export async function getPresence(): Promise<PresenceDoc[]> {
+  const response = await fetch(`${API_BASE}/presence`, { headers: getAuthHeaders() });
+  const parsed = await parseResponse<PresenceListResponse>(response);
+  return parsed.data.presence;
+}
+
+export async function updateMyPresence(input: PresenceUpdateInput, keepalive = false): Promise<PresenceDoc> {
+  const response = await fetch(`${API_BASE}/presence/me`, {
+    method: "PUT",
+    headers: {
+      "content-type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(input),
+    keepalive,
+  });
+  const parsed = await parseResponse<PresenceDoc>(response);
   return parsed.data;
 }
 

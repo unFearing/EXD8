@@ -92,6 +92,34 @@ export type QuickslotOverviewSelectionInput = {
   overviewSelectedDeckIds: string[];
 };
 
+export type PresenceView = "decks" | "repository" | "overview";
+export type PresenceStatus = "active" | "idle";
+
+export type PresenceUpdateInput = {
+  view: PresenceView;
+  route: string;
+  status: PresenceStatus;
+  focus?: string;
+};
+
+export type PresenceDoc = PresenceUpdateInput & {
+  id: string;
+  comp: string;
+  teamId: string;
+  userId: string;
+  userName: string;
+  role: "TL" | "Pilot";
+  avatar?: string;
+  updatedAt: string;
+  expiresAt: string;
+  schemaVersion: "1.0.0";
+  docType: "presence";
+};
+
+export type PresenceListResponse = {
+  presence: PresenceDoc[];
+};
+
 export type MapConfigDoc = {
   id: string;
   name: DeckMap;

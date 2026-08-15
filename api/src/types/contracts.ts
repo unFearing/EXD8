@@ -306,6 +306,35 @@ export const userDocSchema = z.object({
   docType: z.literal("user"),
 });
 
+export const presenceViewSchema = z.enum(["decks", "repository", "overview"]);
+export const presenceStatusSchema = z.enum(["active", "idle"]);
+
+export const presenceUpdateInputSchema = z.object({
+  view: presenceViewSchema,
+  route: z.string().min(1).max(160),
+  status: presenceStatusSchema,
+  focus: z.string().min(1).max(80).optional(),
+});
+
+export const presenceDocSchema = presenceUpdateInputSchema.extend({
+  id: z.string().min(1),
+  comp: z.string().min(1),
+  teamId: z.string().min(1),
+  userId: z.string().min(1),
+  userName: z.string().min(1),
+  role: z.enum(["TL", "Pilot"]),
+  avatar: z.string().optional(),
+  updatedAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+  ttl: z.number().int().positive().optional(),
+  schemaVersion: z.literal("1.0.0"),
+  docType: z.literal("presence"),
+}).extend(cosmosSystemFieldsSchema.shape);
+
+export const presenceListResponseSchema = z.object({
+  presence: z.array(presenceDocSchema),
+});
+
 export const seasonDocSchema = z.object({
   id: z.string().min(1),
   teamId: z.string().min(1),
@@ -359,3 +388,8 @@ export const upsertMechInputSchema = upsertMechInputBaseSchema;
 export type UpsertMechInput = z.infer<typeof upsertMechInputSchema>;
 export type UserDoc = z.infer<typeof userDocSchema>;
 export type SeasonDoc = z.infer<typeof seasonDocSchema>;
+export type PresenceView = z.infer<typeof presenceViewSchema>;
+export type PresenceStatus = z.infer<typeof presenceStatusSchema>;
+export type PresenceUpdateInput = z.infer<typeof presenceUpdateInputSchema>;
+export type PresenceDoc = z.infer<typeof presenceDocSchema>;
+export type PresenceListResponse = z.infer<typeof presenceListResponseSchema>;

@@ -59,6 +59,41 @@ const duplicateWeaponBuilds = [
   },
 ];
 
+const teamPresence = [
+  {
+    id: "presence:tl-user",
+    comp: "presence:EXD8",
+    teamId: "EXD8",
+    userId: "tl-user",
+    userName: "Team Lead",
+    role: "TL",
+    view: "overview",
+    route: "/overview",
+    status: "active",
+    focus: "Map overview",
+    updatedAt: "2026-08-14T12:00:00.000Z",
+    expiresAt: "2026-08-14T12:01:30.000Z",
+    schemaVersion: "1.0.0",
+    docType: "presence",
+  },
+  {
+    id: "presence:pilot-user",
+    comp: "presence:EXD8",
+    teamId: "EXD8",
+    userId: "pilot-user",
+    userName: "Pilot",
+    role: "Pilot",
+    view: "repository",
+    route: "/repository",
+    status: "idle",
+    focus: "Heavy builds",
+    updatedAt: "2026-08-14T11:59:50.000Z",
+    expiresAt: "2026-08-14T12:01:20.000Z",
+    schemaVersion: "1.0.0",
+    docType: "presence",
+  },
+];
+
 async function mockApi(page: Page, appRole: "TL" | "Pilot" = "TL") {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -77,6 +112,13 @@ async function mockApi(page: Page, appRole: "TL" | "Pilot" = "TL") {
       appRole,
     });
     if (url.pathname.endsWith("/api/auth/config")) return success({ clientId: "12345678901234567" });
+    if (url.pathname.endsWith("/api/presence/me")) {
+      return success({
+        ...request.postDataJSON(),
+        ...teamPresence[0],
+      });
+    }
+    if (url.pathname.endsWith("/api/presence")) return success({ presence: teamPresence });
     if (url.pathname.endsWith("/api/decks")) return success(decks);
     if (url.pathname.endsWith("/api/quickslots/overview-selection")) {
       const payload = request.postDataJSON() as { overviewSelectedDeckIds: string[] };
@@ -172,6 +214,100 @@ test("top navbar remains usable while scrolling every view", async ({ page }) =>
     await expect(navbar.getByRole("button", { name: "Editing" })).toBeVisible();
     await expect(navbar.getByRole("button", { name: "Switch to light mode" })).toBeVisible();
   }
+});
+
+test("team presence displays active and idle viewers with safe context", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/overview", { waitUntil: "networkidle" });
+
+  const widget = page.getByTestId("presence-widget");
+  await expect(widget).toBeVisible();
+  await expect(widget.getByLabel("Team Lead | TL | active | Overview | Map overview")).toBeVisible();
+  await expect(widget.getByLabel("Pilot | Pilot | idle | Repository | Heavy builds")).toBeVisible();
+
+  const avatarGeometry = await widget.evaluate((element) => {
+    const widgetBox = element.getBoundingClientRect();
+    const avatarBoxes = Array.from(element.querySelectorAll(".MuiAvatar-root"), (avatar) => avatar.getBoundingClientRect());
+    return {
+      widgetLeft: widgetBox.left,
+      widgetRight: widgetBox.right,
+      avatars: avatarBoxes.map((box) => ({ left: box.left, right: box.right, width: box.width })),
+    };
+  });
+  expect(avatarGeometry.avatars.length).toBeGreaterThan(0);
+  expect(
+    avatarGeometry.avatars.every((avatar) => (
+      avatar.width >= 30 && avatar.left >= avatarGeometry.widgetLeft && avatar.right <= avatarGeometry.widgetRight
+    )),
+    JSON.stringify(avatarGeometry),
+  ).toBe(true);
+});
+
+test("maproom opens at the 0.6 default zoom", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  await page.getByRole("button", { name: "Maproom" }).click();
+  await expect(page.getByLabel("Zoom")).toHaveValue("0.6");
+});
+
+test("presence does not transmit route query parameters", async ({ page }) => {
+  const privateQuery = "PRIVATE-QUERY-VALUE";
+  await mockApi(page);
+  const updateRequest = page.waitForRequest((request) => (
+    request.url().endsWith("/api/presence/me") && request.method() === "PUT"
+  ));
+  await page.goto(`/repository?token=${privateQuery}`, { waitUntil: "networkidle" });
+
+  const update = (await updateRequest).postDataJSON() as { route: string };
+  expect(update.route).toBe("/repository");
+  expect(JSON.stringify(update)).not.toContain(privateQuery);
+});
+
+test("presence sends only route state and explicit focus labels", async ({ page }) => {
+  const updates: Array<Record<string, unknown>> = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/presence/me") && request.method() === "PUT") {
+      updates.push(request.postDataJSON() as Record<string, unknown>);
+    }
+  });
+  await mockApi(page);
+  await page.goto("/", { waitUntil: "networkidle" });
+
+  const labelledUpdate = page.waitForRequest((request) => {
+    if (!request.url().endsWith("/api/presence/me") || request.method() !== "PUT") return false;
+    return (request.postDataJSON() as { focus?: string }).focus === "Repository navigation";
+  });
+  await page.getByRole("tab", { name: "Repository" }).click();
+  await labelledUpdate;
+
+  const privateValue = "PRIVATE-INPUT-VALUE";
+  await page.getByPlaceholder("Optional short name").first().fill(privateValue);
+  await page.keyboard.press("ArrowLeft");
+  await page.getByRole("tab", { name: "Overview" }).click();
+
+  expect(updates.length).toBeGreaterThan(0);
+  for (const update of updates) {
+    expect(Object.keys(update).sort()).toEqual(
+      update.focus === undefined
+        ? ["route", "status", "view"]
+        : ["focus", "route", "status", "view"],
+    );
+    for (const forbiddenKey of ["userId", "userName", "avatar", "teamId", "coordinates", "key", "value"]) {
+      expect(update).not.toHaveProperty(forbiddenKey);
+    }
+    expect(JSON.stringify(update)).not.toContain(privateValue);
+  }
+});
+
+test("presence API failure does not block the core view", async ({ page }) => {
+  await mockApi(page);
+  await page.route("**/api/presence**", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+  await page.goto("/overview", { waitUntil: "networkidle" });
+
+  await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+  await expect(page.getByTestId("presence-widget")).toHaveCount(0);
+  await expect(page.getByText("Unexpected server error")).toHaveCount(0);
 });
 
 test("light mode uses one dimmed shell palette across all views", async ({ page }) => {

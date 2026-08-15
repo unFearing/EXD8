@@ -18,6 +18,7 @@ export type RequestContext = {
   role: RequestRole;
   userId: string;
   userName: string;
+  avatar?: string;
 };
 
 export function getRequestContext(request: HttpRequest, access: AccessLevel = "read"): RequestContext {
@@ -34,7 +35,7 @@ export function getRequestContext(request: HttpRequest, access: AccessLevel = "r
     if (!user) throw new Error("AUTH_REQUIRED");
     const role = resolveMappedRole(user.roles, DISCORD_ROLE_TL, DISCORD_ROLE_PILOT);
     if (!role) throw new Error("INVALID_ROLE");
-    const context = { teamId, role, userId: user.id, userName: user.username };
+    const context = { teamId, role, userId: user.id, userName: user.username, avatar: user.avatar };
     assertAccess(context, access);
     return context;
   }
@@ -55,6 +56,7 @@ export function getRequestContext(request: HttpRequest, access: AccessLevel = "r
     role: roleHeader,
     userId,
     userName: request.headers.get("x-user-name") ?? userId,
+    avatar: request.headers.get("x-user-avatar") ?? undefined,
   };
   assertAccess(context, access);
   return context;

@@ -8,13 +8,14 @@ import StarIcon from "@mui/icons-material/Star";
 import { Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import type { MechDoc, WeightClassSummary } from "../types/contracts";
+import type { MechDoc, PresenceDoc, WeightClassSummary } from "../types/contracts";
 import { deleteMech, getMechHierarchy, getMechs, parseMechBuild, updateMech } from "../api/client";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import { AddBuildDialog } from "./AddBuildDialog";
 import { resolveAppRole } from "../utils/discordRoles";
 import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL, LIGHT_VIEW_SUBTLE_PANEL } from "../constants/viewPalette";
 import { buildSkillTreeUrl, getMechSkillTreeCode, isSkillTreeCode, parseSkillTreeUrl } from "../utils/skillTree";
+import { PresenceWidget } from "./PresenceWidget";
 
 type EditMode = "view" | "edit";
 
@@ -26,6 +27,7 @@ interface RepositoryViewProps {
   hasRole: (roleId: string) => boolean;
   viewMode: EditMode;
   onViewModeChange: (mode: EditMode) => void;
+  presence: PresenceDoc[];
 }
 
 const APP_ROLE_TEAM_LEAD = "TL";
@@ -102,6 +104,7 @@ export function RepositoryView({
   onLogout,
   viewMode,
   onViewModeChange,
+  presence,
 }: RepositoryViewProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
@@ -627,9 +630,9 @@ export function RepositoryView({
                   "& .Mui-selected": { color: isLight ? MOXIE_BLUE : "#ffffff" },
                 }}
               >
-                <Tab label="Drop Decks" value="dropDecks" />
-                <Tab label="Repository" value="repository" />
-                <Tab label="Overview" value="overview" />
+                <Tab label="Drop Decks" value="dropDecks" data-presence-focus="Drop Decks navigation" />
+                <Tab label="Repository" value="repository" data-presence-focus="Repository navigation" />
+                <Tab label="Overview" value="overview" data-presence-focus="Overview navigation" />
               </Tabs>
 
               <Divider
@@ -655,14 +658,16 @@ export function RepositoryView({
                   "& .Mui-selected": { color: isLight ? MOXIE_BLUE : "#ffffff" },
                 }}
               >
-                <Tab label="Lights" value="Light" />
-                <Tab label="Mediums" value="Medium" />
-                <Tab label="Heavies" value="Heavy" />
-                <Tab label="Assaults" value="Assault" />
+                <Tab label="Lights" value="Light" data-presence-focus="Light builds" />
+                <Tab label="Mediums" value="Medium" data-presence-focus="Medium builds" />
+                <Tab label="Heavies" value="Heavy" data-presence-focus="Heavy builds" />
+                <Tab label="Assaults" value="Assault" data-presence-focus="Assault builds" />
               </Tabs>
             </Stack>
 
             <Stack direction="row" spacing={0.7} sx={{ alignItems: "center", ml: { lg: "auto" }, flexWrap: { xs: "wrap", lg: "nowrap" }, justifyContent: { xs: "flex-start", lg: "flex-end" }, minWidth: 0, flexShrink: 0 }}>
+              <PresenceWidget presence={presence} />
+
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : MOXIE_NIGHT_TEXT, fontSize: "0.92rem", display: { xs: "none", sm: "block" }, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.username}
@@ -670,6 +675,7 @@ export function RepositoryView({
               )}
 
               <Button
+                data-presence-focus="Add Build"
                 variant="contained"
                 size="small"
                 startIcon={<AddIcon />}
