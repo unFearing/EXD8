@@ -701,7 +701,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [selectedMap, setSelectedMap] = useState<DeckMap>(MAP_FALLBACK_OPTIONS[0]);
   const [mapTileMode, setMapTileMode] = useState<MapTileMode>("static");
   const [showGridOverlay, setShowGridOverlay] = useState(false);
-  const [iframeZoom, setIframeZoom] = useState(0.8);
+  const [iframeZoom, setIframeZoom] = useState(0.6);
   const [iframeOffsetX, setIframeOffsetX] = useState(0);
   const [iframeOffsetY, setIframeOffsetY] = useState(0);
   const [templates, setTemplates] = useState<DeckTemplate[]>([]);
@@ -777,7 +777,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   }, [mapTileMode, editMode, selectedMap]);
 
   useEffect(() => {
-    setIframeZoom(0.8);
+    setIframeZoom(0.6);
     setIframeOffsetX(0);
     setIframeOffsetY(0);
   }, [selectedMap]);
