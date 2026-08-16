@@ -51,6 +51,7 @@ describe("production auth guard", () => {
     const token = encodeSessionToken({
       id: "discord-user",
       username: "pilot",
+      avatar: "trusted-avatar",
       roles: ["pilot-role"],
       appRole: "Pilot",
     }, "test-signing-key");
@@ -70,6 +71,7 @@ describe("production auth guard", () => {
       role: "Pilot",
       userId: "discord-user",
       userName: "pilot",
+      avatar: "trusted-avatar",
     });
     expect(() => getRequestContext(request, "write")).toThrow("FORBIDDEN_WRITE");
   });

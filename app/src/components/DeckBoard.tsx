@@ -37,6 +37,8 @@ import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import { MechSelector } from "./MechSelector";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
+import type { PresenceDoc } from "../types/contracts";
+import { PresenceWidget } from "./PresenceWidget";
 import type {
   DeckMap,
   DropDeckEditable,
@@ -253,6 +255,7 @@ type DeckBoardProps = {
   hasRole: (roleId: string) => boolean;
   viewMode: EditMode;
   onViewModeChange: (mode: EditMode) => void;
+  presence: PresenceDoc[];
 };
 
 const MAP_FALLBACK_OPTIONS: DeckMap[] = CS26_COMPETITION.majorTabs;
@@ -688,7 +691,7 @@ function toDropDeckUpsertInput(template: DeckTemplate, baseTemplate?: DeckTempla
   };
 }
 
-export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMode, onViewModeChange }: DeckBoardProps) {
+export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMode, onViewModeChange, presence }: DeckBoardProps) {
   const navigate = useNavigate();
   const isLight = mode === "light";
   const syncedSignaturesRef = useRef<Map<string, string>>(new Map());
@@ -1696,9 +1699,9 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
-                <Tab label="Drop Decks" value="dropDecks" />
-                <Tab label="Repository" value="repository" />
-                <Tab label="Overview" value="overview" />
+                <Tab label="Drop Decks" value="dropDecks" data-presence-focus="Drop Decks navigation" />
+                <Tab label="Repository" value="repository" data-presence-focus="Repository navigation" />
+                <Tab label="Overview" value="overview" data-presence-focus="Overview navigation" />
               </Tabs>
 
               <Divider
@@ -1725,12 +1728,14 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                 }}
               >
                 {mapOptions.map((map) => (
-                  <Tab key={map} label={map} value={map} />
+                  <Tab key={map} label={map} value={map} data-presence-focus={`Map: ${map}`} />
                 ))}
               </Tabs>
             </Stack>
 
             <Stack direction="row" spacing={0.7} sx={{ ml: { lg: "auto" }, alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, justifyContent: { xs: "flex-start", lg: "flex-end" }, minWidth: 0, flexShrink: 0 }}>
+              <PresenceWidget presence={presence} />
+
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" }, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.username}
@@ -1738,6 +1743,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               )}
 
               <Button
+                data-presence-focus="Add Build"
                 variant="contained"
                 size="small"
                 startIcon={<AddIcon />}

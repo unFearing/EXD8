@@ -6,6 +6,7 @@ import { RepositoryView } from "./components/RepositoryView";
 import { OverviewView } from "./components/OverviewView";
 import { AuthSplash } from "./components/AuthSplash";
 import { useDiscordAuth } from "./hooks/useDiscordAuth";
+import { usePresence } from "./hooks/usePresence";
 import { LIGHT_THEME_BACKGROUND, LIGHT_THEME_PAPER } from "./constants/viewPalette";
 import "./App.css";
 
@@ -80,6 +81,7 @@ function AppContent() {
     [],
   );
   const auth = useDiscordAuth();
+  const presence = usePresence(auth.isAuthed);
 
   const toggleMode = () => {
     setMode((previous) => {
@@ -113,6 +115,7 @@ function AppContent() {
               hasRole={auth.hasRole}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
+              presence={presence}
             />
           }
         />
@@ -127,6 +130,7 @@ function AppContent() {
               hasRole={auth.hasRole}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
+              presence={presence}
             />
           }
         />
@@ -141,6 +145,7 @@ function AppContent() {
               hasRole={auth.hasRole}
               viewMode={viewMode}
               onViewModeChange={setViewMode}
+              presence={presence}
             />
           }
         />

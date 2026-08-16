@@ -32,9 +32,10 @@ import { useNavigate } from "react-router-dom";
 import { getDropDecks, getQuickslots, saveQuickslotOverviewSelection } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
-import type { DeckRowDoc, DropDeckDoc, QuickslotEntry } from "../types/contracts";
+import type { DeckRowDoc, DropDeckDoc, PresenceDoc, QuickslotEntry } from "../types/contracts";
 import { resolveAppRole } from "../utils/discordRoles";
 import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL } from "../constants/viewPalette";
+import { PresenceWidget } from "./PresenceWidget";
 
 type EditMode = "view" | "edit";
 type TeamSide = "1" | "2" | "either";
@@ -47,6 +48,7 @@ type OverviewViewProps = {
   hasRole: (roleId: string) => boolean;
   viewMode: EditMode;
   onViewModeChange: (mode: EditMode) => void;
+  presence: PresenceDoc[];
 };
 
 type DeckColumn = {
@@ -247,6 +249,7 @@ export function OverviewView({
   hasRole,
   viewMode,
   onViewModeChange,
+  presence,
 }: OverviewViewProps) {
   const navigate = useNavigate();
     const openMechInRepository = (row: DeckRowDoc) => {
@@ -572,13 +575,15 @@ export function OverviewView({
                   "& .Mui-selected": { color: isLight ? "#26364f" : "#ffffff" },
                 }}
               >
-                <Tab label="Drop Decks" value="dropDecks" />
-                <Tab label="Repository" value="repository" />
-                <Tab label="Overview" value="overview" />
+                <Tab label="Drop Decks" value="dropDecks" data-presence-focus="Drop Decks navigation" />
+                <Tab label="Repository" value="repository" data-presence-focus="Repository navigation" />
+                <Tab label="Overview" value="overview" data-presence-focus="Overview navigation" />
               </Tabs>
             </Stack>
 
             <Stack direction="row" spacing={0.7} sx={{ ml: { lg: "auto" }, alignItems: "center", flexWrap: { xs: "wrap", lg: "nowrap" }, justifyContent: { xs: "flex-start", lg: "flex-end" }, minWidth: 0, flexShrink: 0 }}>
+              <PresenceWidget presence={presence} />
+
               {user && (
                 <Typography sx={{ color: isLight ? "#556987" : "#cbd6f6", fontSize: "0.92rem", display: { xs: "none", sm: "block" }, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {user.username}
@@ -588,6 +593,7 @@ export function OverviewView({
               {canManage && (
                 <>
                   <Button
+                    data-presence-focus="Add Build"
                     variant="contained"
                     size="small"
                     startIcon={<AddIcon />}
