@@ -80,6 +80,7 @@ export const deckSlotSchema = z.object({
   buildCode: z.string().default(""),
   role: z.string().default(""),
   skillTree: z.string().default(""),
+  tonnage: z.union([z.number(), z.literal("")]).optional(),
 });
 
 const cosmosSystemFieldsSchema = z.object({

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { matchNightCreateInputSchema, mechDocSchema } from "../../../src/types/contracts.js";
+import { deckSlotSchema, matchNightCreateInputSchema, mechDocSchema } from "../../../src/types/contracts.js";
+
+describe("deckSlotSchema", () => {
+  it("preserves legacy row tonnage", () => {
+    const result = deckSlotSchema.parse({ slot: 1, tonnage: 20 });
+
+    expect(result.tonnage).toBe(20);
+  });
+});
 
 describe("matchNightCreateInputSchema", () => {
   it("accepts a valid payload", () => {

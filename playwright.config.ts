@@ -15,7 +15,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: /deck-board-regressions\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "firefox",
+      testMatch: /deck-board-regressions\.spec\.ts/,
+      use: { ...devices["Desktop Firefox"] },
     },
   ],
 

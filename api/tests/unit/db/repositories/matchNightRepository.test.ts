@@ -20,6 +20,7 @@ vi.mock("../../../../src/db/cosmos.js", () => ({
 
 import {
   updateQuickslotOverviewSelection,
+  upsertDropDeck,
   upsertQuickslot,
 } from "../../../../src/db/repositories/matchNightRepository.js";
 
@@ -75,5 +76,81 @@ describe("quickslot repository updates", () => {
 
     expect(result.slots).toEqual([]);
     expect(result.overviewSelectedDeckIds).toEqual([deckId]);
+  });
+});
+
+function deckRows(tonnage: number) {
+  return Array.from({ length: 5 }, (_, index) => ({
+    slot: index + 1,
+    primary: [],
+    alternates: [],
+    lance: "" as const,
+    mech: `legacy-mech-${index + 1}`,
+    chassis: "",
+    variant: "",
+    weaponry: "",
+    equipmentText: "",
+    buildUrl: "",
+    buildCode: "",
+    role: "",
+    skillTree: "",
+    tonnage,
+  }));
+}
+
+describe("drop deck legacy tonnage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    upsertMock.mockImplementation(async (value) => ({ resource: value }));
+  });
+
+  it("persists row tonnage on a new deck", async () => {
+    const result = await upsertDropDeck({
+      map: "River City",
+      side: "either",
+      name: "Legacy deck",
+      description: "",
+      deck: deckRows(20),
+    }, "TL");
+
+    expect(result.deck[0]?.tonnage).toBe(20);
+    expect(upsertMock).toHaveBeenCalledWith(expect.objectContaining({
+      deck: expect.arrayContaining([expect.objectContaining({ slot: 1, tonnage: 20 })]),
+    }));
+  });
+
+  it("preserves unchanged row tonnage during a stale-revision merge", async () => {
+    const id = "550e8400-e29b-41d4-a716-446655440010";
+    const baseDeck = {
+      map: "River City" as const,
+      side: "either" as const,
+      name: "Legacy deck",
+      description: "Before",
+      deck: deckRows(20),
+    };
+    fetchAllMock.mockResolvedValueOnce({
+      resources: [{
+        ...baseDeck,
+        id,
+        description: "Before",
+        revision: 2,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-13T00:00:00.000Z",
+        updatedBy: "Other TL",
+        schemaVersion: "1.0.0",
+        docType: "dropDeck",
+      }],
+    });
+
+    const result = await upsertDropDeck({
+      id,
+      baseRevision: 1,
+      baseDeck,
+      ...baseDeck,
+      description: "After",
+    }, "TL");
+
+    expect(result.description).toBe("After");
+    expect(result.deck[0]?.tonnage).toBe(20);
   });
 });

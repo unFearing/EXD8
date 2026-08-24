@@ -39,6 +39,7 @@ function cloneEditable(value: DropDeckEditable): DropDeckEditable {
       buildCode: slot.buildCode ?? "",
       role: slot.role ?? "",
       skillTree: slot.skillTree ?? "",
+      tonnage: slot.tonnage ?? "",
     })),
   };
 }
@@ -111,6 +112,7 @@ function mergeEditable(
     "buildCode",
     "role",
     "skillTree",
+    "tonnage",
   ];
 
   for (const [slotNumber, value] of slotIndex.entries()) {
@@ -128,6 +130,7 @@ function mergeEditable(
       buildCode: "",
       role: "",
       skillTree: "",
+      tonnage: "",
     };
     const currentSlot = value.current ?? baseSlot;
     const incomingSlot = value.incoming ?? baseSlot;
