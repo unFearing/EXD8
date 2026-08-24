@@ -468,6 +468,7 @@ function normalizeRow(slot: number, row?: Partial<DeckRow>): DeckRow {
     role: row?.role ?? "",
     buildCode: row?.buildCode ?? "",
     skillTree: row?.skillTree ?? "",
+    tonnage: row?.tonnage ?? "",
   };
 }
 
@@ -678,6 +679,7 @@ function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
       role: row.role ?? "",
       buildCode: row.buildCode ?? "",
       skillTree: row.skillTree ?? "",
+      tonnage: row.tonnage ?? "",
     })),
   };
 }
@@ -1032,6 +1034,44 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     for (const mech of mechs) map.set(mech.id, mech);
     return map;
   }, [mechs]);
+  const repositoryMechByBuildCode = useMemo(() => {
+    const map = new Map<string, MechDoc>();
+    const ambiguous = new Set<string>();
+    for (const mech of mechs) {
+      for (const { code } of getBuildCodeEntries(mech.buildCodes)) {
+        const key = code.trim();
+        if (!key || ambiguous.has(key)) continue;
+        if (map.has(key)) {
+          map.delete(key);
+          ambiguous.add(key);
+        } else {
+          map.set(key, mech);
+        }
+      }
+    }
+    return map;
+  }, [mechs]);
+  const repositoryMechByBuildUrl = useMemo(() => {
+    const map = new Map<string, MechDoc>();
+    const ambiguous = new Set<string>();
+    for (const mech of mechs) {
+      const key = (mech.link || mech.buildUrl || "").trim();
+      if (!key || ambiguous.has(key)) continue;
+      if (map.has(key)) {
+        map.delete(key);
+        ambiguous.add(key);
+      } else {
+        map.set(key, mech);
+      }
+    }
+    return map;
+  }, [mechs]);
+  const resolveRowRepositoryMech = (row: DeckRow): MechDoc | undefined => (
+    mechLookup.get(row.mech) ??
+    repositoryMechById.get(row.mech) ??
+    repositoryMechByBuildCode.get((row.buildCode ?? "").trim()) ??
+    repositoryMechByBuildUrl.get((row.buildUrl ?? "").trim())
+  );
   const repoIdToAllKey = useMemo(() => {
     const map = new Map<string, string>();
     for (const mech of mechs) {
@@ -1113,17 +1153,17 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     templatesForSelection.find((template) => template.id === selectedTemplateId) ?? templatesForSelection[0];
 
   const resolveRowConfigMech = (row: DeckRow): ConfigMech | undefined => {
-    const rowMech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
+    const rowMech = resolveRowRepositoryMech(row);
     return resolveConfigMechByRowSelection(row.chassis || rowMech?.chassis || "", row.variant || rowMech?.variant || "");
   };
 
   const computeTemplateTonnage = (template?: DeckTemplate) => {
     if (!template) return 0;
     return template.rows.reduce((sum, row) => {
-      const byId = mechLookup.get(row.mech)?.tonnage ?? repositoryMechById.get(row.mech)?.tonnage;
+      const byId = resolveRowRepositoryMech(row)?.tonnage;
       const byConfig = configuredByKey.get(row.mech)?.tonnage;
       const byPair = resolveRowConfigMech(row)?.tonnage;
-      return sum + (byId ?? byConfig ?? byPair ?? 0);
+      return sum + (byId ?? byConfig ?? byPair ?? (typeof row.tonnage === "number" ? row.tonnage : 0));
     }, 0);
   };
 
@@ -1160,7 +1200,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     const rowFacts: Array<{ slot: number; rowClass?: WeightClass; normalizedChassis: string }> = [];
 
     for (const row of template.rows) {
-      const rowMech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
+      const rowMech = resolveRowRepositoryMech(row);
       const rowConfig = configuredByKey.get(row.mech) ?? resolveRowConfigMech(row);
       const rowClass = rowMech?.class ?? rowConfig?.class;
       if (rowClass) {
@@ -1754,6 +1794,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   textTransform: "none",
                   px: 2,
                   minHeight: 38,
+                  flexShrink: 0,
                   fontWeight: 700,
                   "&:hover": {
                     background: isLight ? "rgba(58, 111, 189, 0.95)" : "rgba(127, 179, 255, 0.28)",
@@ -1773,6 +1814,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     minWidth: 38,
                     width: 38,
                     height: 38,
+                    flexShrink: 0,
                     p: 0,
                     color: isLight ? "#4e6486" : "#c8d8ff",
                     borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
@@ -1782,22 +1824,33 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                 </Button>
               </Tooltip>
 
-              {canDelete && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => onViewModeChange(editMode === "edit" ? "view" : "edit")}
-                  sx={{
-                    color: isLight ? "#4e6486" : "#c8d8ff",
-                    borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
-                    minHeight: 38,
-                    px: 1.6,
-                    textTransform: "none",
-                  }}
-                >
-                  {editMode === "edit" ? "Editing" : "Viewing"}
-                </Button>
-              )}
+              <Button
+                aria-label={`Deck mode: ${editMode === "edit" ? "Editing" : "Viewing"}`}
+                variant="outlined"
+                size="small"
+                disabled={!canDelete}
+                onClick={() => onViewModeChange(editMode === "edit" ? "view" : "edit")}
+                sx={{
+                  color: editMode === "edit"
+                    ? (isLight ? "#315f9e" : "#8fbdff")
+                    : (isLight ? "#526b91" : "#b7c9ee"),
+                  borderColor: editMode === "edit"
+                    ? (isLight ? "rgba(49, 95, 158, 0.55)" : "rgba(143, 189, 255, 0.55)")
+                    : (isLight ? "rgba(82, 107, 145, 0.48)" : "rgba(183, 201, 238, 0.46)"),
+                  minHeight: 38,
+                  minWidth: 82,
+                  flexShrink: 0,
+                  px: 1.6,
+                  textTransform: "none",
+                  "&.Mui-disabled": {
+                    color: isLight ? "#60789d" : "#b7c9ee",
+                    borderColor: isLight ? "rgba(96, 120, 157, 0.48)" : "rgba(183, 201, 238, 0.46)",
+                    opacity: 1,
+                  },
+                }}
+              >
+                {editMode === "edit" ? "Editing" : "Viewing"}
+              </Button>
 
               <Button
                 variant="outlined"
@@ -1808,6 +1861,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                   color: isLight ? "#4e6486" : "#c8d8ff",
                   borderColor: isLight ? "rgba(108, 128, 158, 0.35)" : "rgba(130, 154, 217, 0.32)",
                   minHeight: 38,
+                  flexShrink: 0,
                   px: 1.5,
                 }}
               >
@@ -2389,15 +2443,15 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
                         <Stack spacing={0.6} sx={{ pt: 0.8 }}>
                           {template.rows.map((row, rowIndex) => {
-                            const mech = mechLookup.get(row.mech) ?? repositoryMechById.get(row.mech);
-                            const configMech = configuredByKey.get(row.mech);
-                            const mechLabel = mech
-                              ? `${mech.chassis} / ${mech.variant}${mech.name?.trim() ? ` / ${mech.name.trim()}` : ""}`
-                              : configMech
-                                ? `${configMech.chassis}-${configMech.variant}`
-                                : row.mech || "-";
-                            const rowChassis = row.chassis || mech?.chassis || "";
-                            const rowVariant = row.variant || mech?.variant || "";
+                            const mech = resolveRowRepositoryMech(row);
+                            const mappedConfigKey = repoIdToAllKey.get(mech?.id ?? row.mech);
+                            const configMech = configuredByKey.get(row.mech) ?? (mappedConfigKey ? configuredByKey.get(mappedConfigKey) : undefined);
+                            const rowChassis = row.chassis || mech?.chassis || configMech?.chassis || "";
+                            const rowVariant = row.variant || mech?.variant || configMech?.variant || "";
+                            const readableMechLabel = [rowChassis, rowVariant].filter(Boolean).join(" / ");
+                            const mechLabel = readableMechLabel
+                              ? `${readableMechLabel}${mech?.name?.trim() ? ` / ${mech.name.trim()}` : ""}`
+                              : isUuid(row.mech) ? "Unknown mech" : row.mech || "-";
                             const normalizedChassis = normalizeChassisToken(rowChassis);
                             const normalizedVariant = normalizeVariantToken(rowVariant);
                             const selectedConfigMech = resolveConfigMechByRowSelection(rowChassis, rowVariant);
@@ -2433,7 +2487,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             const rowClass = mech?.class ?? configMech?.class ?? selectedConfigMech?.class ?? "-";
                             const rowClassLabel = asWeightClassLabel(rowClass);
                             const rowClassTheme = rowClassLabel ? WEIGHT_CLASS_GRADIENTS[rowClassLabel] : null;
-                            const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage;
+                            const rowTonnage = mech?.tonnage ?? configMech?.tonnage ?? selectedConfigMech?.tonnage ?? row.tonnage;
                             const rowIssues = cs26Validation.rowIssuesBySlot.get(row.slot) ?? [];
 
                             return (
