@@ -12,7 +12,7 @@ export async function upsertDropDeckHandler(request: HttpRequest) {
       return fail(400, "BAD_REQUEST", "Invalid payload", parsed.error.flatten());
     }
 
-    const ctx = getRequestContext(request, "write");
+    const ctx = getRequestContext(request, "contribute");
     const saved = await upsertDropDeck(parsed.data, ctx.userName);
     return ok(saved);
   } catch (error: unknown) {

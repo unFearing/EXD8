@@ -19,9 +19,17 @@ import type {
 } from "../types/contracts";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const DEV_APP_ROLE = import.meta.env.DEV && import.meta.env.VITE_DEV_APP_ROLE === "Pilot" ? "Pilot" : null;
 
 function getAuthHeaders(teamId = "EXD8"): Record<string, string> {
-  return { "x-team-id": teamId };
+  return DEV_APP_ROLE
+    ? {
+        "x-team-id": teamId,
+        "x-user-id": "local-pilot",
+        "x-user-name": "Local Pilot",
+        "x-user-role": DEV_APP_ROLE,
+      }
+    : { "x-team-id": teamId };
 }
 
 async function parseResponse<T>(response: Response): Promise<ApiSuccess<T>> {

@@ -12,7 +12,7 @@ export async function createMechHandler(request: HttpRequest) {
       return fail(400, "BAD_REQUEST", "Invalid payload", parsed.error.flatten());
     }
 
-    const ctx = getRequestContext(request, "write");
+    const ctx = getRequestContext(request, "contribute");
 
     const saved = await createMech(parsed.data, ctx.userName);
     return created(saved);

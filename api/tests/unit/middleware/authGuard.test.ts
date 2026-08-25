@@ -73,6 +73,10 @@ describe("production auth guard", () => {
       userName: "pilot",
       avatar: "trusted-avatar",
     });
+    expect(getRequestContext(request, "contribute")).toMatchObject({
+      role: "Pilot",
+      userId: "discord-user",
+    });
     expect(() => getRequestContext(request, "write")).toThrow("FORBIDDEN_WRITE");
   });
 });

@@ -11,7 +11,7 @@ const DISCORD_ROLE_TL = process.env.DISCORD_ROLE_TL || process.env.DISCORD_TL_RO
 const DISCORD_ROLE_PILOT = process.env.DISCORD_ROLE_PILOT || process.env.DISCORD_PILOT_ROLE_ID || process.env.DISCORD_ROLE_Y || "";
 
 export type RequestRole = "TL" | "Pilot";
-export type AccessLevel = "read" | "write";
+export type AccessLevel = "read" | "contribute" | "write";
 
 export type RequestContext = {
   teamId: string;
