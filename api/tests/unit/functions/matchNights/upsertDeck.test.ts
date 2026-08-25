@@ -44,6 +44,23 @@ describe("upsertDropDeckHandler", () => {
     expect(response.status).toBe(200);
   });
 
+  it("allows a Pilot to upsert a deck", async () => {
+    upsertDropDeckMock.mockResolvedValueOnce({ id: "550e8400-e29b-41d4-a716-446655440001" });
+
+    const response = await upsertDropDeckHandler({
+      json: async () => validPayload(),
+      headers: new Headers({
+        "x-team-id": "EXD8",
+        "x-user-id": "pilot-1",
+        "x-user-name": "Pilot",
+        "x-user-role": "Pilot",
+      }),
+    } as never);
+
+    expect(response.status).toBe(200);
+    expect(upsertDropDeckMock).toHaveBeenCalledWith(expect.any(Object), "Pilot");
+  });
+
   it("returns 400 for invalid schema", async () => {
     const response = await upsertDropDeckHandler({
       json: async () => ({ map: "River City" }),

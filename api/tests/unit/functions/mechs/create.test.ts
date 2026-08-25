@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
-  createMech: vi.fn(async (input: {
+const { createMechMock } = vi.hoisted(() => ({
+  createMechMock: vi.fn(async (input: {
     chassis: string;
     variant: string;
     codename: string;
@@ -31,6 +31,10 @@ vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
     schemaVersion: "1.0",
     docType: "mech",
   })),
+}));
+
+vi.mock("../../../../src/db/repositories/mechRepository.js", () => ({
+  createMech: createMechMock,
 }));
 
 import { createMechHandler } from "../../../../src/functions/mechs/create.js";
@@ -93,17 +97,18 @@ describe("createMechHandler", () => {
     expect(response.status).toBe(400);
   });
 
-  it("returns 403 for read-only role", async () => {
+  it("returns 201 for a Pilot contribution", async () => {
     const response = await createMechHandler({
       json: async () => validPayload(),
       headers: new Headers({
         "x-user-role": "Pilot",
         "x-team-id": "exd8",
         "x-user-id": "user-1",
+        "x-user-name": "Pilot",
       }),
     } as never);
 
-    expect(response.status).toBe(403);
-    expect((response.jsonBody as { error?: { code?: string } }).error?.code).toBe("FORBIDDEN");
+    expect(response.status).toBe(201);
+    expect(createMechMock).toHaveBeenCalledWith(expect.any(Object), "Pilot");
   });
 });

@@ -20,10 +20,14 @@ const DISCORD_REDIRECT_URI = `${window.location.origin}/auth/callback`;
 const DISCORD_SNOWFLAKE_REGEX = /^\d{17,20}$/;
 const DISCORD_OAUTH_STATE_KEY = "discord_oauth_state";
 const DISCORD_REQUESTED_PATH_KEY = "discord_requested_path";
+const DEV_APP_ROLE = import.meta.env.DEV && import.meta.env.VITE_DEV_APP_ROLE === "Pilot" ? "Pilot" : null;
+const DEV_USER: DiscordUser | null = DEV_APP_ROLE
+  ? { id: "local-pilot", username: "Local Pilot", roles: [], appRole: DEV_APP_ROLE }
+  : null;
 const INITIAL_AUTH_STATE: AuthState = {
-  isLoading: true,
-  isAuthed: false,
-  user: null,
+  isLoading: !DEV_USER,
+  isAuthed: Boolean(DEV_USER),
+  user: DEV_USER,
   error: null,
 };
 
@@ -113,6 +117,7 @@ export function useDiscordAuth(): AuthState & {
 
   // Check if already authenticated on mount
   useEffect(() => {
+    if (DEV_USER) return;
     if (isOAuthCallbackRef.current) return;
     const generation = ++authGenerationRef.current;
 
@@ -144,6 +149,7 @@ export function useDiscordAuth(): AuthState & {
 
   // Handle OAuth callback
   useEffect(() => {
+    if (DEV_USER) return;
     const handleCallback = async () => {
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
@@ -224,6 +230,7 @@ export function useDiscordAuth(): AuthState & {
   }, []);
 
   useEffect(() => {
+    if (DEV_USER) return;
     loadDiscordClientId().catch(() => {
       // Login handler reports the visible error when a user attempts to sign in.
     });
