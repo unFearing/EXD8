@@ -99,6 +99,8 @@ export const dropDeckDocSchema = z.object({
   map: deckMapSchema,
   side: deckSideSchema,
   description: z.string().default(""),
+  initial: z.string().default(""),
+  ideal: z.string().default(""),
   name: z.string().min(1),
   deck: z.array(deckSlotSchema).min(1),
   revision: z.number().int().positive(),
@@ -113,6 +115,8 @@ const dropDeckEditableSchema = z.object({
   map: deckMapSchema,
   side: deckSideSchema,
   description: z.string().default(""),
+  initial: z.string().default(""),
+  ideal: z.string().default(""),
   name: z.string().min(1),
   deck: z.array(deckSlotSchema).min(1),
 });
@@ -124,6 +128,8 @@ export const dropDeckUpsertInputSchema = z.object({
   map: deckMapSchema,
   side: deckSideSchema,
   description: z.string().default(""),
+  initial: z.string().default(""),
+  ideal: z.string().default(""),
   name: z.string().min(1),
   deck: z.array(deckSlotSchema).min(1),
 });

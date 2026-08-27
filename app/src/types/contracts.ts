@@ -32,6 +32,8 @@ export type DropDeckDoc = {
   side: LegacyDeckSide;
   description?: string;
   strategy?: string;
+  initial?: string;
+  ideal?: string;
   name: string;
   deck: DeckRowDoc[];
   revision?: number;
@@ -51,6 +53,8 @@ export type DropDeckEditable = {
   map: DeckMap;
   side: DeckSide;
   description: string;
+  initial: string;
+  ideal: string;
   name: string;
   deck: DeckRowDoc[];
 };
@@ -62,6 +66,8 @@ export type DropDeckUpsertInput = {
   map: DeckMap;
   side: DeckSide;
   description: string;
+  initial: string;
+  ideal: string;
   name: string;
   deck: DeckRowDoc[];
 };

@@ -7,6 +7,7 @@ import {
   Button,
   ButtonGroup,
   Checkbox,
+  CircularProgress,
   Autocomplete,
   Container,
   FormControl,
@@ -30,11 +31,10 @@ import AddIcon from "@mui/icons-material/Add";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ParkIcon from "@mui/icons-material/Park";
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import BackspaceIcon from "@mui/icons-material/Backspace";
 import StarIcon from "@mui/icons-material/Star";
 import mechWarrior3Cutout from "../assets/mw3-mech-cutout.png";
-import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
+import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, parseMechBuild, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
 import { MechSelector } from "./MechSelector";
@@ -89,6 +89,8 @@ type DeckTemplate = {
   map: DeckMap;
   side: TeamSide;
   description: string;
+  initial: string;
+  ideal: string;
   revision?: number;
   updatedAt?: string;
   updatedBy?: string;
@@ -111,6 +113,223 @@ type BuildOption = {
   suggestedBuild?: boolean;
 };
 
+function StrategyTextField({
+  value,
+  label,
+  disabled,
+  onCommit,
+}: {
+  value: string;
+  label: string;
+  disabled: boolean;
+  onCommit: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value);
+  const focusedRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
+  const onCommitRef = useRef(onCommit);
+
+  useEffect(() => {
+    onCommitRef.current = onCommit;
+  }, [onCommit]);
+
+  useEffect(() => {
+    if (focusedRef.current || timerRef.current !== null || value === draftRef.current) return;
+    draftRef.current = value;
+    setDraft(value);
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
+  const commitDraft = () => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (draftRef.current !== value) {
+      onCommitRef.current(draftRef.current);
+    }
+  };
+
+  return (
+    <TextField
+      variant="outlined"
+      fullWidth
+      multiline
+      minRows={4}
+      value={draft}
+      disabled={disabled}
+      slotProps={{ htmlInput: { "aria-label": label } }}
+      sx={{ mt: 0.6 }}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onChange={(event) => {
+        const nextValue = event.target.value;
+        draftRef.current = nextValue;
+        setDraft(nextValue);
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current);
+        }
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null;
+          if (draftRef.current !== value) {
+            onCommitRef.current(draftRef.current);
+          }
+        }, TEXT_INPUT_AUTOSAVE_DELAY_MS);
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        commitDraft();
+      }}
+    />
+  );
+}
+
+function HoverRevealCodeField({
+  value,
+  label,
+  disabled,
+  onChange,
+  onBlur,
+}: {
+  value: string;
+  label: string;
+  disabled: boolean;
+  onChange: (nextValue: string) => void;
+  onBlur: (nextValue: string) => void;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const hoverTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current !== null) {
+        window.clearTimeout(hoverTimerRef.current);
+      }
+    };
+  }, []);
+
+  const startReveal = () => {
+    if (disabled) return;
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+    }
+    hoverTimerRef.current = window.setTimeout(() => {
+      setRevealed(true);
+    }, 3000);
+  };
+
+  const clearReveal = () => {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setRevealed(false);
+  };
+
+  const maskedValue = value.trim();
+  const displayValue = revealed ? value : maskedValue ? `${maskedValue.slice(0, 3)}${maskedValue.length > 3 ? "…" : ""}` : "";
+
+  const handleCopy = async () => {
+    if (!value || revealed || disabled) return;
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 900);
+    } catch {
+      // no-op so editing remains usable without breaking the UI
+    }
+  };
+
+  return (
+    <Box
+      sx={{ minWidth: 0, width: "100%" }}
+      onMouseEnter={startReveal}
+      onMouseLeave={clearReveal}
+      onFocus={startReveal}
+      onBlur={clearReveal}
+    >
+      <TextField
+        variant="standard"
+        fullWidth
+        value={displayValue}
+        disabled={disabled}
+        onClick={() => {
+          if (!revealed) {
+            void handleCopy();
+          }
+        }}
+        onFocus={() => setRevealed(true)}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={(event) => {
+          clearReveal();
+          onBlur(event.target.value);
+        }}
+        slotProps={{
+          htmlInput: {
+            "aria-label": label,
+            title: copied ? "Copied" : value ? "Click to copy" : "",
+            onDoubleClick: (event: { currentTarget: HTMLInputElement }) => {
+              const target = event.currentTarget;
+              target.select();
+              setRevealed(true);
+            },
+            style: {
+              width: revealed ? "100%" : "3ch",
+              minWidth: 0,
+              padding: "2px 0",
+              fontSize: "0.74rem",
+              fontFamily: "monospace",
+              letterSpacing: revealed ? "0.08em" : "0.16em",
+              color: revealed ? "#edf5ff" : "rgba(219, 234, 254, 0.8)",
+              textShadow: revealed ? "0 0 12px rgba(99, 102, 241, 0.9)" : "none",
+              cursor: disabled ? "not-allowed" : "pointer",
+              opacity: value ? 1 : 0.6,
+              transition: "text-shadow 140ms ease, opacity 140ms ease, width 140ms ease",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            },
+          },
+        }}
+        sx={{
+          minWidth: 0,
+          "& .MuiInputBase-root": {
+            minWidth: 0,
+            width: "100%",
+            alignItems: "center",
+            color: revealed ? "#edf5ff" : "rgba(219, 234, 254, 0.8)",
+          },
+          "& .MuiInputBase-input": {
+            px: 0,
+            fontSize: "0.74rem",
+            letterSpacing: revealed ? "0.08em" : "0.16em",
+            fontFamily: "monospace",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          },
+          "& .MuiInput-underline:before": {
+            borderBottomColor: revealed ? "rgba(255,255,255,0.22)" : "rgba(148, 163, 184, 0.18)",
+          },
+          "& .MuiInput-underline:after": {
+            borderBottomColor: revealed ? "rgba(96, 165, 250, 0.9)" : "rgba(148, 163, 184, 0.28)",
+          },
+        }}
+      />
+    </Box>
+  );
+}
+
 function formatSubmissionDate(value?: string, cosmosTimestamp?: number): string {
   const submittedAt = value ?? (cosmosTimestamp ? new Date(cosmosTimestamp * 1000).toISOString() : "");
   if (!submittedAt) return "Submission date unavailable";
@@ -125,11 +344,15 @@ function BuildAutocompleteField({
   options,
   onCommit,
   onSelect,
+  parsing,
+  onParseUrl,
 }: {
   value: string;
   options: BuildOption[];
   onCommit: (value: string) => void;
   onSelect?: (option: BuildOption | null) => void;
+  parsing: boolean;
+  onParseUrl: (url: string) => Promise<string | undefined>;
 }) {
   const [localValue, setLocalValue] = useState(value);
   const focusedRef = useRef(false);
@@ -165,6 +388,17 @@ function BuildAutocompleteField({
       }
     };
   }, [localValue, onCommit, value]);
+
+  const parseUrl = async (url: string) => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const parsedValue = await onParseUrl(url);
+    if (parsedValue !== undefined) {
+      setLocalValue(parsedValue);
+    }
+  };
 
   return (
     <Autocomplete
@@ -231,7 +465,38 @@ function BuildAutocompleteField({
         </li>
       )}
       renderInput={(params) => (
-        <TextField {...params} variant="standard" placeholder="Build" fullWidth sx={{ minWidth: 0 }} />
+        <Box sx={{ position: "relative", minWidth: 0 }}>
+          <TextField
+            {...params}
+            variant="standard"
+            placeholder={parsing ? "Parsing..." : "Build"}
+            disabled={parsing}
+            fullWidth
+            onPaste={(event) => {
+              const text = event.clipboardData.getData("text").trim();
+              if (!isAbsoluteHttpUrl(text)) return;
+              event.preventDefault();
+              void parseUrl(text);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+            }}
+            onDrop={(event) => {
+              const text = (event.dataTransfer.getData("text") || event.dataTransfer.getData("text/uri-list")).trim();
+              if (!isAbsoluteHttpUrl(text)) return;
+              event.preventDefault();
+              void parseUrl(text);
+            }}
+            sx={{ minWidth: 0 }}
+          />
+          {parsing ? (
+            <CircularProgress
+              size={14}
+              aria-label="Parsing build link"
+              sx={{ position: "absolute", right: 4, top: "50%", mt: "-7px" }}
+            />
+          ) : null}
+        </Box>
       )}
       sx={{ minWidth: 0 }}
     />
@@ -312,6 +577,15 @@ const getAvailableCode = (value: string | undefined): string => {
   const code = value?.trim() ?? "";
   return code && code !== "-" && code.toLowerCase() !== "pending" ? code : "";
 };
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 type WeightClassLabel = "Light" | "Medium" | "Heavy" | "Assault";
 
@@ -400,6 +674,8 @@ function createTemplate(map: DeckMap, side: TeamSide, version = 1): DeckTemplate
     map,
     side,
     description: "",
+    initial: "",
+    ideal: "",
     rows: Array.from({ length: ROW_COUNT }, (_, idx) => createEmptyRow(idx + 1)),
   };
 }
@@ -492,17 +768,41 @@ function normalizeVariantToken(value: string): string {
 
 const CONFIG_VARIANT_ALIASES: Record<string, string[]> = {
   "flea|romeo5000": ["r5k", "fler5k"],
+  "longbow|overcharge": ["oc", "lgboc"],
 };
+
+function getGeneratedConfigVariantAliases(mech: ConfigMech): string[] {
+  const aliases = new Set<string>();
+  const variant = mech.variant.trim();
+  if (!variant || /^[a-z0-9]+(?:-[a-z0-9()]+)+$/i.test(variant)) return [];
+
+  const words = (variant.match(/[a-z0-9]+/gi) ?? []).map((word) => word.toLowerCase());
+  const filteredWords = words.filter((word) => !["the", "a", "an", "of", "and", "st", "saint"].includes(word));
+
+  const candidateInitialisms = [
+    words.map((word) => word[0]).join(""),
+    filteredWords.map((word) => word[0]).join(""),
+  ];
+
+  for (const initialism of candidateInitialisms) {
+    if (!initialism) continue;
+    aliases.add(initialism);
+    if (mech.chassisCode) {
+      aliases.add(`${mech.chassisCode}${initialism}`);
+    }
+  }
+
+  const normalized = normalizeVariantToken(variant);
+  if (normalized) aliases.add(normalized);
+
+  return Array.from(aliases);
+}
 
 function getConfigPairLookupKeys(mech: ConfigMech): string[] {
   const canonicalKey = getPairLookupKey(mech.chassis, mech.variant);
   const aliases = new Set(CONFIG_VARIANT_ALIASES[canonicalKey] ?? []);
-  const words = mech.variant.match(/[a-z0-9]+/gi) ?? [];
-
-  if (words.length > 1 && mech.chassisCode) {
-    const initialism = words.map((word) => word[0]).join("");
-    aliases.add(initialism);
-    aliases.add(`${mech.chassisCode}${initialism}`);
+  for (const alias of getGeneratedConfigVariantAliases(mech)) {
+    aliases.add(alias);
   }
 
   return [canonicalKey, ...Array.from(aliases, (alias) => getPairLookupKey(mech.chassis, alias))];
@@ -533,6 +833,8 @@ function toTemplate(doc: DropDeckDoc): DeckTemplate {
     map: doc.map,
     side: normalizedSide,
     description: doc.description ?? doc.strategy ?? "",
+    initial: doc.initial ?? "",
+    ideal: doc.ideal ?? "",
     revision: doc.revision,
     updatedAt: doc.updatedAt,
     updatedBy: doc.updatedBy,
@@ -661,8 +963,22 @@ function templateSignature(template: DeckTemplate): string {
     side: template.side,
     name: template.name,
     description: template.description,
+    initial: template.initial,
+    ideal: template.ideal,
     rows: template.rows,
   });
+}
+
+function mergeSavedTemplate(current: DeckTemplate, submitted: DeckTemplate, saved: DeckTemplate): DeckTemplate {
+  if (templateSignature(current) === templateSignature(submitted)) return saved;
+
+  return {
+    ...current,
+    id: saved.id,
+    revision: saved.revision,
+    updatedAt: saved.updatedAt,
+    updatedBy: saved.updatedBy,
+  };
 }
 
 function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
@@ -670,6 +986,8 @@ function toDropDeckEditable(template: DeckTemplate): DropDeckEditable {
     map: template.map,
     side: template.side,
     description: template.description,
+    initial: template.initial,
+    ideal: template.ideal,
     name: template.name,
     deck: template.rows.map((row) => ({
       slot: row.slot,
@@ -715,8 +1033,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [mapTileMode, setMapTileMode] = useState<MapTileMode>("static");
   const [showGridOverlay, setShowGridOverlay] = useState(false);
   const [iframeZoom, setIframeZoom] = useState(0.6);
-  const [iframeOffsetX, setIframeOffsetX] = useState(0);
-  const [iframeOffsetY, setIframeOffsetY] = useState(0);
   const [templates, setTemplates] = useState<DeckTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [quickslotId, setQuickslotId] = useState("quickslots-default");
@@ -726,6 +1042,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [deckLoading, setDeckLoading] = useState(false);
   const [deckSaving, setDeckSaving] = useState(false);
   const [deckError, setDeckError] = useState("");
+  const [parsingBuildKeys, setParsingBuildKeys] = useState<Set<string>>(() => new Set());
   const [mechs, setMechs] = useState<MechDoc[]>([]);
   const [configuredMechs, setConfiguredMechs] = useState<ConfigMech[]>([]);
   const [deckRoleOptions, setDeckRoleOptions] = useState<string[]>([]);
@@ -790,8 +1107,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
 
   useEffect(() => {
     setIframeZoom(0.6);
-    setIframeOffsetX(0);
-    setIframeOffsetY(0);
   }, [selectedMap]);
 
   useEffect(() => {
@@ -1270,6 +1585,41 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     }));
   };
 
+  const parseBuildUrlForRow = async (templateId: string, rowIndex: number, url: string) => {
+    const parsingKey = `${templateId}:${rowIndex}`;
+    setParsingBuildKeys((current) => new Set(current).add(parsingKey));
+    setDeckError("");
+    try {
+      const parsed = await parseMechBuild(url);
+      const draft = parsed.draft;
+      updateRow(templateId, rowIndex, (row) => ({
+        ...row,
+        mech: "",
+        chassis: draft.chassis,
+        variant: draft.variant,
+        weaponry: draft.weaponry,
+        equipmentText: (draft.metadata.equipment ?? draft.equipment ?? []).join(", "),
+        buildUrl: parsed.sourceUrl || draft.buildUrl || draft.link || url,
+        role: draft.role,
+        buildCode: getPreferredBuildCode(draft.buildCodes),
+        skillTree: getAvailableCode(draft.skillTreeCode) || getAvailableCode(draft.skillCode),
+        weightClass: draft.class,
+        tonnage: draft.tonnage ?? row.tonnage,
+      }));
+      return draft.weaponry;
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to parse build link";
+      setDeckError(`Could not parse build link for slot ${rowIndex + 1}: ${message}`);
+      return undefined;
+    } finally {
+      setParsingBuildKeys((current) => {
+        const next = new Set(current);
+        next.delete(parsingKey);
+        return next;
+      });
+    }
+  };
+
   const scheduleTextInputCommit = (key: string, commit: () => void) => {
     const existing = textInputDebounceRef.current.get(key);
     if (existing !== undefined) {
@@ -1614,7 +1964,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         }
 
         setTemplates((previous) =>
-          previous.map((template) => (template.id === dirtyTemplate.id ? savedTemplate : template)),
+          previous.map((template) =>
+            template.id === dirtyTemplate.id
+              ? mergeSavedTemplate(template, dirtyTemplate, savedTemplate)
+              : template,
+          ),
         );
         setDeckError("");
       } catch (err: unknown) {
@@ -1626,7 +1980,11 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
             syncedSignaturesRef.current.set(latestTemplate.id, templateSignature(latestTemplate));
             syncedTemplatesRef.current.set(latestTemplate.id, latestTemplate);
             setTemplates((previous) =>
-              previous.map((template) => (template.id === dirtyTemplate.id ? latestTemplate : template)),
+              previous.map((template) =>
+                template.id === dirtyTemplate.id
+                  ? mergeSavedTemplate(template, dirtyTemplate, latestTemplate)
+                  : template,
+              ),
             );
           }
           setDeckError("This deck was changed by another user. Latest changes were loaded.");
@@ -1665,12 +2023,20 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
           return;
         }
 
-        const mapped = docs.map((doc) => toTemplate(doc));
+        const mapped = docs.map((doc) => {
+          const template = toTemplate(doc);
+          const synced = syncedTemplatesRef.current.get(template.id);
+          if (synced && (synced.revision ?? 0) > (template.revision ?? 0)) return synced;
+          return template;
+        });
         const nextSignatures = new Map(mapped.map((template) => [template.id, templateSignature(template)]));
         const previousSignatures = syncedSignaturesRef.current;
         const signaturesChanged =
           nextSignatures.size !== previousSignatures.size ||
-          Array.from(nextSignatures.entries()).some(([id, signature]) => previousSignatures.get(id) !== signature);
+          mapped.some((template) =>
+            previousSignatures.get(template.id) !== nextSignatures.get(template.id)
+            || syncedTemplatesRef.current.get(template.id)?.revision !== template.revision,
+          );
 
         if (!signaturesChanged) {
           return;
@@ -1680,8 +2046,14 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         syncedTemplatesRef.current = new Map(mapped.map((template) => [template.id, template]));
         // Preserve local-only templates (fresh decks not yet saved to server)
         setTemplates((previous) => {
+          const previousById = new Map(previous.map((template) => [template.id, template]));
+          const merged = mapped.map((template) => {
+            const current = previousById.get(template.id);
+            if (!current) return template;
+            return previousSignatures.get(template.id) !== templateSignature(current) ? current : template;
+          });
           const localOnly = previous.filter(t => localOnlyTemplateIdsRef.current.has(t.id));
-          return [...mapped, ...localOnly];
+          return [...merged, ...localOnly];
         });
         setSelectedTemplateId((previous) => {
           // Keep selection if it's still on server OR is a local-only (unsaved) template
@@ -1908,18 +2280,25 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
               >
                 <Stack spacing={1}>
                   <Stack
-                    direction={{ xs: "column", sm: "row" }}
+                    direction="row"
                     spacing={1}
-                    sx={{
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      px: 0.4,
-                    }}
+                    sx={{ alignItems: "center", justifyContent: "space-between", px: 0.4 }}
                   >
                     <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>
                       MAP VIEW
                     </Typography>
-                    <Stack direction="row" spacing={0.8} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                    <Stack direction="row" spacing={0.8} sx={{ alignItems: "center" }}>
+                      {mapTileMode === "static" && (
+                        <Button
+                          variant={showGridOverlay ? "contained" : "outlined"}
+                          size="small"
+                          onClick={() => setShowGridOverlay((prev) => !prev)}
+                          disabled={!hasGridOverlay}
+                          sx={{ textTransform: "none" }}
+                        >
+                          {showGridOverlay ? "Grid On" : "Grid Off"}
+                        </Button>
+                      )}
                       <ButtonGroup size="small" variant="outlined">
                         <Button
                           variant={mapTileMode === "static" ? "contained" : "outlined"}
@@ -1937,40 +2316,60 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                           Maproom
                         </Button>
                       </ButtonGroup>
-                      {mapTileMode === "static" && (
+                    </Stack>
+                  </Stack>
+
+                  {mapTileMode === "iframe" && (
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: {
+                          xs: "minmax(0, 1fr)",
+                          sm: "minmax(0, 1fr) auto",
+                          md: canDelete && editMode === "edit"
+                            ? "minmax(260px, 1fr) auto 96px"
+                            : "minmax(260px, 1fr) 96px",
+                        },
+                        gridTemplateAreas: {
+                          xs: canDelete && editMode === "edit"
+                            ? '"url" "save" "viewport"'
+                            : '"url" "viewport"',
+                          sm: canDelete && editMode === "edit"
+                            ? '"url save" "viewport viewport"'
+                            : '"url url" "viewport viewport"',
+                          md: canDelete && editMode === "edit"
+                            ? '"url save viewport"'
+                            : '"url viewport"',
+                        },
+                        gap: 1,
+                        alignItems: "end",
+                        px: 0.4,
+                      }}
+                    >
+                      <TextField
+                        label="Maproom URL"
+                        size="small"
+                        value={maproomUrlInput}
+                        onChange={(event) => setMaproomUrlInput(event.target.value)}
+                        disabled={!canDelete || editMode !== "edit"}
+                        inputRef={maproomUrlInputRef}
+                        fullWidth
+                        sx={{ gridArea: "url" }}
+                      />
+                      {canDelete && editMode === "edit" && (
                         <Button
-                          variant={showGridOverlay ? "contained" : "outlined"}
-                          onClick={() => setShowGridOverlay((prev) => !prev)}
-                          disabled={!hasGridOverlay}
-                          sx={{ textTransform: "none" }}
+                          variant="outlined"
+                          size="small"
+                          onClick={() => {
+                            void saveMaproomUrl();
+                          }}
+                          disabled={maproomSaving}
+                          sx={{ gridArea: "save", textTransform: "none", minHeight: 40, whiteSpace: "nowrap" }}
                         >
-                          {showGridOverlay ? "Grid On" : "Grid Off"}
+                          {maproomSaving ? "Saving..." : "Save Link"}
                         </Button>
                       )}
-                      {mapTileMode === "iframe" && (
-                        <>
-                          <TextField
-                            label="Maproom URL"
-                            size="small"
-                            value={maproomUrlInput}
-                            onChange={(event) => setMaproomUrlInput(event.target.value)}
-                            disabled={!canDelete || editMode !== "edit"}
-                            inputRef={maproomUrlInputRef}
-                            sx={{ minWidth: { xs: 0, md: 440 }, width: { xs: "100%", md: "auto" }, flex: 1 }}
-                          />
-                          {canDelete && editMode === "edit" && (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => {
-                                void saveMaproomUrl();
-                              }}
-                              disabled={maproomSaving}
-                              sx={{ textTransform: "none" }}
-                            >
-                              {maproomSaving ? "Saving..." : "Save Link"}
-                            </Button>
-                          )}
+                      <Box sx={{ gridArea: "viewport", width: { xs: "100%", sm: 96 }, justifySelf: { sm: "end" } }}>
                           <TextField
                             label="Zoom"
                             type="number"
@@ -1981,39 +2380,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                               if (Number.isNaN(next)) return;
                               setIframeZoom(Math.max(0.6, Math.min(2.2, next)));
                             }}
-                            sx={{ width: 86 }}
+                            fullWidth
                             slotProps={{ htmlInput: { step: 0.1, min: 0.6, max: 2.2 } }}
                           />
-                          <TextField
-                            label="Pan X"
-                            type="number"
-                            size="small"
-                            value={iframeOffsetX}
-                            onChange={(event) => {
-                              const next = Number(event.target.value);
-                              if (Number.isNaN(next)) return;
-                              setIframeOffsetX(Math.max(-220, Math.min(220, next)));
-                            }}
-                            sx={{ width: 86 }}
-                            slotProps={{ htmlInput: { step: 10, min: -220, max: 220 } }}
-                          />
-                          <TextField
-                            label="Pan Y"
-                            type="number"
-                            size="small"
-                            value={iframeOffsetY}
-                            onChange={(event) => {
-                              const next = Number(event.target.value);
-                              if (Number.isNaN(next)) return;
-                              setIframeOffsetY(Math.max(-220, Math.min(220, next)));
-                            }}
-                            sx={{ width: 86 }}
-                            slotProps={{ htmlInput: { step: 10, min: -220, max: 220 } }}
-                          />
-                        </>
-                      )}
-                    </Stack>
-                  </Stack>
+                      </Box>
+                    </Box>
+                  )}
 
                   <Box
                     sx={{
@@ -2080,7 +2452,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                             width: "165%",
                             height: "165%",
                             border: 0,
-                            transform: `translate(calc(-50% + ${iframeOffsetX}px), calc(-50% + ${iframeOffsetY}px)) scale(${iframeZoom})`,
+                            transform: `translate(-50%, -50%) scale(${iframeZoom})`,
                             transformOrigin: "center",
                             pointerEvents: "none",
                           }}
@@ -2701,6 +3073,8 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                   <BuildAutocompleteField
                                     value={row.weaponry ?? ""}
                                     options={buildOptions}
+                                    parsing={parsingBuildKeys.has(`${template.id}:${rowIndex}`)}
+                                    onParseUrl={(url) => parseBuildUrlForRow(template.id, rowIndex, url)}
                                     onCommit={(nextBuildText) => {
                                       updateRow(template.id, rowIndex, (entry) => {
                                         if ((entry.weaponry ?? "") === nextBuildText) return entry;
@@ -2730,28 +3104,23 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 )}
 
                                 <Stack direction="row" spacing={0.1} sx={{ alignItems: "center", minWidth: 0 }}>
-                                  {editMode === "edit" && !exportCode ? (
-                                    <TextField
-                                      key={`export-code-${row.mech}`}
-                                      variant="standard"
-                                      fullWidth
-                                      defaultValue={exportCode}
-                                      slotProps={{ htmlInput: { "aria-label": `Export code slot ${row.slot}` } }}
-                                      onChange={(event) => {
-                                        const nextBuildCode = event.target.value;
+                                  {editMode === "edit" ? (
+                                    <HoverRevealCodeField
+                                      value={exportCode}
+                                      label={`Export code slot ${row.slot}`}
+                                      disabled={false}
+                                      onChange={(nextBuildCode) => {
                                         const commitKey = `export-code-${template.id}-${row.slot}`;
                                         scheduleTextInputCommit(commitKey, () => {
                                           updateRow(template.id, rowIndex, (entry) => ({ ...entry, buildCode: nextBuildCode }));
                                         });
                                       }}
-                                      onBlur={(event) => {
-                                        const nextBuildCode = event.target.value;
+                                      onBlur={(nextBuildCode) => {
                                         const commitKey = `export-code-${template.id}-${row.slot}`;
                                         flushTextInputCommit(commitKey, () => {
                                           updateRow(template.id, rowIndex, (entry) => ({ ...entry, buildCode: nextBuildCode }));
                                         });
                                       }}
-                                      sx={{ minWidth: 0, "& input": { px: 0, fontSize: "0.76rem" } }}
                                     />
                                   ) : null}
                                   {exportCode ? (
@@ -2783,15 +3152,12 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 </Stack>
 
                                 <Stack direction="row" spacing={0.1} sx={{ alignItems: "center", minWidth: 0 }}>
-                                  {editMode === "edit" && !skillTreeCode ? (
-                                    <TextField
-                                      key={`skill-code-${row.mech}`}
-                                      variant="standard"
-                                      fullWidth
-                                      defaultValue={skillTreeCode}
-                                      slotProps={{ htmlInput: { "aria-label": `Skill tree code slot ${row.slot}` } }}
-                                      onChange={(event) => {
-                                        const nextSkillTree = event.target.value;
+                                  {editMode === "edit" ? (
+                                    <HoverRevealCodeField
+                                      value={skillTreeCode}
+                                      label={`Skill tree code slot ${row.slot}`}
+                                      disabled={false}
+                                      onChange={(nextSkillTree) => {
                                         const commitKey = `skill-tree-${template.id}-${row.slot}`;
                                         scheduleTextInputCommit(commitKey, () => {
                                           updateRow(template.id, rowIndex, (entry) => {
@@ -2800,8 +3166,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                           });
                                         });
                                       }}
-                                      onBlur={(event) => {
-                                        const nextSkillTree = event.target.value;
+                                      onBlur={(nextSkillTree) => {
                                         const commitKey = `skill-tree-${template.id}-${row.slot}`;
                                         flushTextInputCommit(commitKey, () => {
                                           updateRow(template.id, rowIndex, (entry) => {
@@ -2810,7 +3175,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                           });
                                         });
                                       }}
-                                      sx={{ minWidth: 0, "& input": { px: 0, fontSize: "0.76rem" } }}
                                     />
                                   ) : null}
                                   {skillTreeCode ? (
@@ -2841,13 +3205,22 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                         aria-label={`Open repository build slot ${row.slot}`}
                                         onClick={() => openMechInRepository(mech?.id, rowChassis, rowVariant)}
                                         sx={{
-                                          color: isLight ? "#53657f" : "#b6c7e3",
-                                          background: isLight ? "rgba(83, 101, 127, 0.07)" : "rgba(182, 199, 227, 0.08)",
-                                          border: isLight ? "1px solid rgba(83, 101, 127, 0.2)" : "1px solid rgba(182, 199, 227, 0.2)",
-                                          p: 0.4,
+                                          p: 0.25,
+                                          flexShrink: 0,
+                                          "&:hover": { background: isLight ? "rgba(176, 37, 29, 0.08)" : "rgba(231, 79, 67, 0.12)" },
+                                          "&:hover img": {
+                                            filter: isLight
+                                              ? "drop-shadow(1px 0 #7f1712) drop-shadow(-1px 0 #7f1712) drop-shadow(0 1px #7f1712) drop-shadow(0 -1px #7f1712) drop-shadow(0 0 3px rgba(176, 37, 29, 0.8))"
+                                              : "drop-shadow(1px 0 #fff) drop-shadow(-1px 0 #fff) drop-shadow(0 1px #fff) drop-shadow(0 -1px #fff) drop-shadow(0 0 3px rgba(255, 255, 255, 0.85))",
+                                          },
                                         }}
                                       >
-                                        <OpenInNewIcon fontSize="inherit" />
+                                        <Box
+                                          component="img"
+                                          src={mechWarrior3Cutout}
+                                          alt=""
+                                          sx={{ width: 16, height: 22, objectFit: "contain", transition: "filter 120ms ease" }}
+                                        />
                                       </IconButton>
                                     </Tooltip>
                                   ) : null}
@@ -2884,38 +3257,43 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                     }}
                   >
                     <Typography variant="caption" sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700, letterSpacing: "0.03em" }}>
-                      STRAT DESCRIPTION | SLOT {slotEntry.slot}
+                      STRATEGY | SLOT {slotEntry.slot}
                     </Typography>
-                    <TextField
-                      key={`strat-description-${template.id}`}
-                      variant="outlined"
-                      fullWidth
-                      multiline
-                      minRows={4}
-                      defaultValue={template.description ?? ""}
-                      disabled={editMode !== "edit"}
-                      sx={{ mt: 1 }}
-                      onChange={(event) => {
-                        const nextDescription = event.target.value;
-                        const commitKey = `deck-description-${template.id}`;
-                        scheduleTextInputCommit(commitKey, () => {
-                          updateTemplateById(template.id, (current) => {
-                            if ((current.description ?? "") === nextDescription) return current;
-                            return { ...current, description: nextDescription };
-                          });
-                        });
+                    <Box
+                      sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "minmax(0, 1fr)", md: "2fr minmax(0, 1fr) minmax(0, 1fr)" },
+                        gap: 1.25,
+                        mt: 1,
                       }}
-                      onBlur={(event) => {
-                        const nextDescription = event.target.value;
-                        const commitKey = `deck-description-${template.id}`;
-                        flushTextInputCommit(commitKey, () => {
-                          updateTemplateById(template.id, (current) => {
-                            if ((current.description ?? "") === nextDescription) return current;
-                            return { ...current, description: nextDescription };
-                          });
-                        });
-                      }}
-                    />
+                    >
+                      {([
+                        ["description", "Description"],
+                        ["initial", "Initial"],
+                        ["ideal", "Ideal"],
+                      ] as const).map(([field, label]) => (
+                        <Box key={field} sx={{ minWidth: 0 }}>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: isLight ? "#5b6f90" : "#b8c9ef", fontWeight: 700 }}
+                          >
+                            {label}
+                          </Typography>
+                          <StrategyTextField
+                            key={`${template.id}-${field}`}
+                            value={template[field]}
+                            disabled={editMode !== "edit"}
+                            label={`${label} slot ${slotEntry.slot}`}
+                            onCommit={(nextValue) => {
+                              updateTemplateById(template.id, (current) => {
+                                if (current[field] === nextValue) return current;
+                                return { ...current, [field]: nextValue };
+                              });
+                            }}
+                          />
+                        </Box>
+                      ))}
+                    </Box>
                   </Paper>
                 </Stack>
               );

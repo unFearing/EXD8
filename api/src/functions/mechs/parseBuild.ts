@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { authErrorResponse, getRequestContext } from "../../middleware/authGuard.js";
 import { fail, ok } from "../../middleware/http.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
 
@@ -1015,7 +1014,7 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       buildUrl: sourceUrl,
       skillCode: "pending",
       weaponry: "Parsed from link. Please review and update weapon details.",
-      description: "",
+      description: "Imported from NAV-Alpha build link.",
       role: tonnage >= 80 ? "Juggernaut" : tonnage >= 60 ? "Brawler" : "Skirmisher",
       buildCodes: {
         imported: variantCode,
@@ -1048,7 +1047,6 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
 
 export async function parseMechBuildHandler(request: HttpRequest) {
   try {
-    getRequestContext(request);
     const payload = (await request.json()) as { url?: string };
     const urlValue = payload?.url?.trim();
     if (!urlValue) {
@@ -1102,7 +1100,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           if (publicExportCode) {
             result.draft.buildCodes = {
               ...result.draft.buildCodes,
-              default: publicExportCode,
+              export: publicExportCode,
             };
             result.metadata.extractedExportCode = true;
           }
@@ -1142,7 +1140,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            default: parsed.exportCode,
+            export: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1172,7 +1170,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            default: parsed.exportCode,
+            export: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1199,7 +1197,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (htmlExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            default: htmlExportCode,
+            export: htmlExportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1208,14 +1206,12 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if (!result.draft.buildCodes.default) {
+    if (!result.draft.buildCodes.export) {
       warnings.push("Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.");
     }
 
     return ok(result);
-  } catch (error: unknown) {
-    const authResponse = authErrorResponse(error);
-    if (authResponse) return authResponse;
+  } catch {
     return fail(500, "INTERNAL", "Unexpected server error");
   }
 }

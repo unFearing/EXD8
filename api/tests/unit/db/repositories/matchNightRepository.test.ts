@@ -110,11 +110,17 @@ describe("drop deck legacy tonnage", () => {
       side: "either",
       name: "Legacy deck",
       description: "",
+      initial: "Scout the river crossing.",
+      ideal: "Collapse on the isolated target.",
       deck: deckRows(20),
     }, "TL");
 
     expect(result.deck[0]?.tonnage).toBe(20);
+    expect(result.initial).toBe("Scout the river crossing.");
+    expect(result.ideal).toBe("Collapse on the isolated target.");
     expect(upsertMock).toHaveBeenCalledWith(expect.objectContaining({
+      initial: "Scout the river crossing.",
+      ideal: "Collapse on the isolated target.",
       deck: expect.arrayContaining([expect.objectContaining({ slot: 1, tonnage: 20 })]),
     }));
   });
@@ -126,6 +132,8 @@ describe("drop deck legacy tonnage", () => {
       side: "either" as const,
       name: "Legacy deck",
       description: "Before",
+      initial: "Initial setup",
+      ideal: "Ideal setup",
       deck: deckRows(20),
     };
     fetchAllMock.mockResolvedValueOnce({
@@ -152,5 +160,42 @@ describe("drop deck legacy tonnage", () => {
 
     expect(result.description).toBe("After");
     expect(result.deck[0]?.tonnage).toBe(20);
+  });
+
+  it("merges independent Initial and Ideal edits during a stale revision", async () => {
+    const id = "550e8400-e29b-41d4-a716-446655440010";
+    const baseDeck = {
+      map: "River City" as const,
+      side: "either" as const,
+      name: "Strategy deck",
+      description: "Hold center",
+      initial: "Scout left",
+      ideal: "Collapse center",
+      deck: deckRows(20),
+    };
+    fetchAllMock.mockResolvedValueOnce({
+      resources: [{
+        ...baseDeck,
+        id,
+        initial: "Scout right",
+        revision: 2,
+        createdAt: "2026-08-12T00:00:00.000Z",
+        updatedAt: "2026-08-13T00:00:00.000Z",
+        updatedBy: "Other TL",
+        schemaVersion: "1.0.0",
+        docType: "dropDeck",
+      }],
+    });
+
+    const result = await upsertDropDeck({
+      id,
+      baseRevision: 1,
+      baseDeck,
+      ...baseDeck,
+      ideal: "Collapse right",
+    }, "TL");
+
+    expect(result.initial).toBe("Scout right");
+    expect(result.ideal).toBe("Collapse right");
   });
 });

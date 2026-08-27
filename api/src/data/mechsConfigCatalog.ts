@@ -53,6 +53,12 @@ const LEGACY_VARIANT_ALIASES: Record<string, string[]> = {
   "fle-r5k": ["romeo 5000"],
   r5k: ["romeo 5000"],
   "romeo 5000": ["fle-r5k", "r5k"],
+  "lgb-oc": ["overcharge"],
+  oc: ["overcharge"],
+  overcharge: ["lgb-oc", "oc"],
+  "ebj-ec": ["esprit de corps"],
+  ec: ["esprit de corps"],
+  "esprit de corps": ["ebj-ec", "ec"],
 };
 
 function normalizeToken(value: string): string {

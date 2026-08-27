@@ -10,7 +10,7 @@ import type {
 } from "../../types/contracts.js";
 import { getMatchNightsContainer } from "../cosmos.js";
 
-type DropDeckEditable = Pick<DropDeckDoc, "map" | "side" | "name" | "description" | "deck">;
+type DropDeckEditable = Pick<DropDeckDoc, "map" | "side" | "name" | "description" | "initial" | "ideal" | "deck">;
 const DROP_DECK_COMP = "CS26" as const;
 const MIN_FILLED_SLOTS_TO_SAVE = 5;
 
@@ -25,6 +25,8 @@ function cloneEditable(value: DropDeckEditable): DropDeckEditable {
     side: value.side,
     name: value.name,
     description: value.description,
+    initial: value.initial,
+    ideal: value.ideal,
     deck: value.deck.map((slot) => ({
       slot: slot.slot,
       primary: [...slot.primary],
@@ -64,7 +66,7 @@ function mergeEditable(
   const merged = cloneEditable(current);
   const conflictPaths: string[] = [];
 
-  const scalarKeys: Array<keyof Omit<DropDeckEditable, "deck">> = ["map", "side", "name", "description"];
+  const scalarKeys: Array<keyof Omit<DropDeckEditable, "deck">> = ["map", "side", "name", "description", "initial", "ideal"];
   for (const key of scalarKeys) {
     const incomingChanged = hasChanged(base[key], incoming[key]);
     if (!incomingChanged) continue;
@@ -87,6 +89,12 @@ function mergeEditable(
         break;
       case "description":
         merged.description = incoming.description;
+        break;
+      case "initial":
+        merged.initial = incoming.initial;
+        break;
+      case "ideal":
+        merged.ideal = incoming.ideal;
         break;
     }
   }
@@ -217,7 +225,11 @@ export async function listDropDecks(): Promise<DropDeckDoc[]> {
     )
     .fetchAll();
 
-  return resources;
+  return resources.map((deck) => ({
+    ...deck,
+    initial: deck.initial ?? "",
+    ideal: deck.ideal ?? "",
+  }));
 }
 
 export async function getDropDeckById(id: string): Promise<DropDeckDoc | null> {
@@ -233,7 +245,12 @@ export async function getDropDeckById(id: string): Promise<DropDeckDoc | null> {
     })
     .fetchAll();
 
-  return resources[0] ?? null;
+  const deck = resources[0];
+  return deck ? {
+    ...deck,
+    initial: deck.initial ?? "",
+    ideal: deck.ideal ?? "",
+  } : null;
 }
 
 export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: string): Promise<DropDeckDoc> {
@@ -246,6 +263,8 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
     side: input.side,
     name: input.name,
     description: input.description,
+    initial: input.initial,
+    ideal: input.ideal,
     deck: input.deck,
   };
 
@@ -272,6 +291,8 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
         side: existing.side,
         name: existing.name,
         description: existingDescription,
+        initial: existing.initial ?? "",
+        ideal: existing.ideal ?? "",
         deck: existing.deck,
       }, incomingEditable);
 
@@ -297,6 +318,8 @@ export async function upsertDropDeck(input: DropDeckUpsertInput, updatedBy: stri
     side: editable.side,
     name: editable.name,
     description: editable.description,
+    initial: editable.initial,
+    ideal: editable.ideal,
     deck: editable.deck,
     revision: nextRevision + 1,
     createdAt: existing?.createdAt ?? now,

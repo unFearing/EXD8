@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MECH_ROLE_VALUES } from "../../../src/types/mechRoles.js";
 import { deckSlotSchema, matchNightCreateInputSchema, mechDocSchema } from "../../../src/types/contracts.js";
 
 describe("deckSlotSchema", () => {
@@ -201,6 +202,10 @@ describe("mechDocSchema", () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  it("includes Instigator in the canonical mech role list", () => {
+    expect(MECH_ROLE_VALUES).toContain("Instigator");
   });
 
   it("rejects non-guid mech id", () => {

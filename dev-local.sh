@@ -17,6 +17,7 @@ if [[ "${USE_REMOTE_API:-0}" == "1" ]]; then
   echo "Starting app only with remote API: $DEFAULT_REMOTE_API"
   cd "$APP_DIR"
   VITE_API_PROXY_TARGET="${DEFAULT_REMOTE_API%/api}" \
+    VITE_DEV_APP_ROLE="Pilot" \
     VITE_DISABLE_DISCORD_AUTH=false \
     npm run dev -- --host 0.0.0.0 --port 5173
   exit 0
@@ -45,4 +46,4 @@ API_PID=$!
 
 echo "Starting app on http://127.0.0.1:5173 ..."
 cd "$APP_DIR"
-VITE_DISABLE_DISCORD_AUTH=false npm run dev -- --host 0.0.0.0 --port 5173
+VITE_DEV_APP_ROLE="Pilot" VITE_DISABLE_DISCORD_AUTH=false npm run dev -- --host 0.0.0.0 --port 5173

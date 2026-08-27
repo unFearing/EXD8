@@ -88,23 +88,22 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
       : "";
 
   const flattenedOptions = useMemo(() => {
-    const normalizedChassis = chassisValue.toLowerCase();
     const items: Array<{ token: string; label: string; indent: boolean }> = [];
     for (const group of grouped) {
       const chassisLabel = Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis;
       items.push({ token: `chassis|${group.chassis}`, label: chassisLabel, indent: false });
-      if (normalizedChassis && group.chassis.toLowerCase() === normalizedChassis) {
-        for (const variant of group.variants) {
-          items.push({
-            token: `variant|${group.chassis}|${variant.variant}`,
-            label: variant.name ? `${variant.variant} / ${variant.name}` : variant.variant,
-            indent: true,
-          });
-        }
+      for (const variant of group.variants) {
+        items.push({
+          token: `variant|${group.chassis}|${variant.variant}`,
+          label: variant.name ? `${variant.variant} / ${variant.name}` : variant.variant,
+          indent: true,
+        });
       }
     }
     return items;
-  }, [chassisValue, grouped]);
+  }, [grouped]);
+
+  const safeSelectedToken = flattenedOptions.some((option) => option.token === selectedToken) ? selectedToken : "";
 
   const tokenToMechId = useMemo(() => {
     const map = new Map<string, string>();
@@ -117,7 +116,7 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
       <FormControl size="small" variant="standard" fullWidth>
         <Select
           displayEmpty
-          value={selectedToken}
+          value={safeSelectedToken}
           disabled={disabled || flattenedOptions.length === 0}
           renderValue={(value) => {
             const token = String(value);
