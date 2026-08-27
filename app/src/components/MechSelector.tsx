@@ -81,67 +81,63 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
   );
   const chassisValue = selectedChassis || selectedOption?.chassis || "";
   const variantValue = selectedVariant || selectedOption?.variant || "";
-  const selectedToken = variantValue
-    ? `variant|${chassisValue}|${variantValue}`
-    : chassisValue
-      ? `chassis|${chassisValue}`
-      : "";
-
-  const flattenedOptions = useMemo(() => {
-    const items: Array<{ token: string; label: string; indent: boolean }> = [];
-    for (const group of grouped) {
-      const chassisLabel = Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis;
-      items.push({ token: `chassis|${group.chassis}`, label: chassisLabel, indent: false });
-      for (const variant of group.variants) {
-        items.push({
-          token: `variant|${group.chassis}|${variant.variant}`,
-          label: variant.name ? `${variant.variant} / ${variant.name}` : variant.variant,
-          indent: true,
-        });
-      }
-    }
-    return items;
-  }, [grouped]);
-
-  const safeSelectedToken = flattenedOptions.some((option) => option.token === selectedToken) ? selectedToken : "";
-
-  const tokenToMechId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const option of options) map.set(`variant|${option.chassis}|${option.variant}`, option.mechId);
-    return map;
-  }, [options]);
+  const chassisOptions = grouped;
+  const variantOptions = useMemo(
+    () => chassisOptions.find((group) => group.chassis === chassisValue)?.variants ?? [],
+    [chassisOptions, chassisValue],
+  );
+  const chassisMenuOptions = chassisOptions;
+  const variantMenuOptions = chassisValue ? variantOptions : [];
 
   return (
-    <Stack spacing={1} sx={{ width: "100%" }}>
+    <Stack sx={{ width: "100%" }}>
       <FormControl size="small" variant="standard" fullWidth>
         <Select
           displayEmpty
-          value={safeSelectedToken}
-          disabled={disabled || flattenedOptions.length === 0}
+          value={variantValue || chassisValue || ""}
+          disabled={disabled || (chassisValue ? variantOptions.length === 0 : chassisOptions.length === 0)}
           renderValue={(value) => {
-            const token = String(value);
-            if (!token) return "Select Mech";
-            const [kind, chassis, variant] = token.split("|");
-            const selected = options.find((option) => option.chassis === chassis && option.variant === variant);
-            if (kind === "chassis") return Number.isFinite(selected?.tonnage) ? `${chassis} (${selected?.tonnage}t)` : chassis;
-            return `${chassis} / ${variant}${selectedName?.trim() ? ` / ${selectedName.trim()}` : ""}`;
+            const selected = typeof value === "string" ? value : "";
+            if (!selected) return "Select Mech";
+            if (chassisValue && variantValue) {
+              const chosen = variantOptions.find((entry) => entry.variant === variantValue);
+              const label = chosen?.name ? `${variantValue} / ${chosen.name}` : variantValue;
+              return `${chassisValue} / ${label}${selectedName?.trim() ? ` / ${selectedName.trim()}` : ""}`;
+            }
+            return selected;
           }}
           onChange={(event) => {
-            const token = String(event.target.value);
-            const [kind, chassis, variant] = token.split("|");
-            if (kind === "chassis") {
-              onChange({ mechId: "", chassis, variant: "" });
+            const nextValue = String(event.target.value || "");
+            if (!chassisValue) {
+              const nextChassis = nextValue;
+              if (!nextChassis) {
+                onChange({ mechId: "", chassis: "", variant: "" });
+                return;
+              }
+              onChange({ mechId: "", chassis: nextChassis, variant: "" });
               return;
             }
-            onChange({ mechId: tokenToMechId.get(token) ?? "", chassis, variant: variant ?? "" });
+
+            if (!nextValue) {
+              onChange({ mechId: "", chassis: chassisValue, variant: "" });
+              return;
+            }
+
+            const match = options.find((option) => option.chassis === chassisValue && option.variant === nextValue);
+            onChange({ mechId: match?.mechId ?? "", chassis: chassisValue, variant: nextValue });
           }}
         >
-          <MenuItem value="">Select Mech</MenuItem>
-          {flattenedOptions.map((option) => (
-            <MenuItem key={option.token} value={option.token} sx={option.indent ? { pl: 4 } : undefined}>
-              {option.indent ? `- ${option.label}` : option.label}
-            </MenuItem>
-          ))}
+          {chassisValue
+            ? variantMenuOptions.map((variant) => (
+                <MenuItem key={`${chassisValue}:${variant.variant}`} value={variant.variant}>
+                  {variant.name ? `${variant.variant} / ${variant.name}` : variant.variant}
+                </MenuItem>
+              ))
+            : chassisMenuOptions.map((group) => (
+                <MenuItem key={group.chassis} value={group.chassis}>
+                  {Number.isFinite(group.tonnage) ? `${group.chassis} (${group.tonnage}t)` : group.chassis}
+                </MenuItem>
+              ))}
         </Select>
       </FormControl>
     </Stack>

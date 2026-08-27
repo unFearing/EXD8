@@ -30,10 +30,8 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import AddIcon from "@mui/icons-material/Add";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import ParkIcon from "@mui/icons-material/Park";
 import BackspaceIcon from "@mui/icons-material/Backspace";
 import StarIcon from "@mui/icons-material/Star";
-import mechWarrior3Cutout from "../assets/mw3-mech-cutout.png";
 import { deleteDropDeck, getDropDecks, getMapConfigs, getMechRoles, getMechs, getQuickslots, parseMechBuild, saveDropDeck, saveMapConfig, saveQuickslots } from "../api/client";
 import { CS26_COMPETITION } from "../constants/competition";
 import { useMatchNightApi } from "../hooks/useMatchNightApi";
@@ -58,6 +56,7 @@ import type {
 import { resolveAppRole } from "../utils/discordRoles";
 import { LIGHT_VIEW_APP_BAR, LIGHT_VIEW_BACKGROUND, LIGHT_VIEW_PANEL } from "../constants/viewPalette";
 import { getMechSkillTreeCode } from "../utils/skillTree";
+import mw3MechIcon from "../assets/mw3-mech-cutout.png";
 
 type EditMode = "view" | "edit";
 type MapTileMode = "static" | "iframe";
@@ -95,12 +94,6 @@ type DeckTemplate = {
   updatedAt?: string;
   updatedBy?: string;
   rows: DeckRow[];
-};
-
-type CopiedCell = {
-  templateId: string;
-  slot: number;
-  field: "export" | "skill";
 };
 
 type BuildOption = {
@@ -237,7 +230,7 @@ function HoverRevealCodeField({
   };
 
   const maskedValue = value.trim();
-  const displayValue = revealed ? value : maskedValue ? `${maskedValue.slice(0, 3)}${maskedValue.length > 3 ? "…" : ""}` : "";
+  const displayValue = revealed ? value : maskedValue ? `${maskedValue.slice(0, Math.min(3, maskedValue.length))}▌` : "";
 
   const handleCopy = async () => {
     if (!value || revealed || disabled) return;
@@ -264,8 +257,15 @@ function HoverRevealCodeField({
         fullWidth
         value={displayValue}
         disabled={disabled}
-        onClick={() => {
-          if (!revealed) {
+        onMouseDown={(event) => {
+          if (!revealed && !disabled && value) {
+            event.preventDefault();
+            void handleCopy();
+          }
+        }}
+        onKeyDown={(event) => {
+          if ((event.key === "Enter" || event.key === " ") && !revealed && !disabled && value) {
+            event.preventDefault();
             void handleCopy();
           }
         }}
@@ -298,7 +298,7 @@ function HoverRevealCodeField({
               transition: "text-shadow 140ms ease, opacity 140ms ease, width 140ms ease",
               whiteSpace: "nowrap",
               overflow: "hidden",
-              textOverflow: "ellipsis",
+              textOverflow: "clip",
             },
           },
         }}
@@ -315,7 +315,7 @@ function HoverRevealCodeField({
             fontSize: "0.74rem",
             letterSpacing: revealed ? "0.08em" : "0.16em",
             fontFamily: "monospace",
-            textOverflow: "ellipsis",
+            textOverflow: "clip",
             whiteSpace: "nowrap",
           },
           "& .MuiInput-underline:before": {
@@ -1049,7 +1049,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
   const [maproomUrlInput, setMaproomUrlInput] = useState("");
   const [maproomSaving, setMaproomSaving] = useState(false);
   const [maproomNotice, setMaproomNotice] = useState("");
-  const [copiedCell, setCopiedCell] = useState<CopiedCell | null>(null);
   const maproomUrlInputRef = useRef<HTMLInputElement | null>(null);
   const textInputDebounceRef = useRef<Map<string, number>>(new Map());
 
@@ -1077,12 +1076,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
     const timeoutId = window.setTimeout(() => setMaproomNotice(""), 2500);
     return () => window.clearTimeout(timeoutId);
   }, [maproomNotice]);
-
-  useEffect(() => {
-    if (!copiedCell) return;
-    const timeoutId = window.setTimeout(() => setCopiedCell(null), 1100);
-    return () => window.clearTimeout(timeoutId);
-  }, [copiedCell]);
 
   useEffect(() => {
     return () => {
@@ -1676,28 +1669,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
         [field]: [],
       })),
     }));
-  };
-
-  const copyBuildCode = async (value: string, templateId: string, slot: number) => {
-    const code = value.trim();
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCell({ templateId, slot, field: "export" });
-    } catch {
-      setDeckError("Failed to copy export code.");
-    }
-  };
-
-  const copySkillTreeCode = async (value: string, templateId: string, slot: number) => {
-    const code = value.trim();
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCell({ templateId, slot, field: "skill" });
-    } catch {
-      setDeckError("Failed to copy skill tree code.");
-    }
   };
 
   const openMechInRepository = (mechId: string | undefined, chassis: string, variant: string) => {
@@ -2782,6 +2753,7 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                         >
                           {TABLE_HEADERS.map((header, headerIndex) => {
                             const clearField = header === "Primary" ? "primary" : header === "Alternates" ? "alternates" : null;
+                            const isRepoHeader = header === "Repo";
                             return (
                               <Stack
                                 key={`${header}-${headerIndex}`}
@@ -2789,17 +2761,33 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                 spacing={0.35}
                                 sx={{
                                   alignItems: "center",
-                                  justifyContent: clearField ? "space-between" : "flex-start",
+                                  justifyContent: clearField ? "space-between" : isRepoHeader ? "center" : "flex-start",
                                   minWidth: 0,
                                   width: "100%",
                                 }}
                               >
-                                <Typography
-                                  variant="caption"
-                                  sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700, letterSpacing: "0.02em", display: "inline-flex", alignItems: "center", gap: 0.35 }}
-                                >
-                                  {header}
-                                </Typography>
+                                {isRepoHeader ? (
+                                  <Box
+                                    component="img"
+                                    src={mw3MechIcon}
+                                    alt="Repository"
+                                    sx={{
+                                      width: 19,
+                                      height: 19,
+                                      objectFit: "contain",
+                                      display: "block",
+                                      opacity: 0.95,
+                                      filter: isLight ? "drop-shadow(0 0 8px rgba(58, 111, 189, 0.35))" : "drop-shadow(0 0 8px rgba(137, 184, 255, 0.38))",
+                                    }}
+                                  />
+                                ) : (
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: isLight ? "#4f6282" : "#c9d8ff", fontWeight: 700, letterSpacing: "0.02em", display: "inline-flex", alignItems: "center", gap: 0.35 }}
+                                  >
+                                    {header}
+                                  </Typography>
+                                )}
                                 {clearField && editMode === "edit" && (
                                   <Tooltip title={`Clear ${clearField === "primary" ? "primary" : "alternate"} pilots`}>
                                     <IconButton
@@ -3123,32 +3111,6 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                       }}
                                     />
                                   ) : null}
-                                  {exportCode ? (
-                                    <Tooltip title={copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "export" ? "Copied" : "Copy export code"}>
-                                      <IconButton
-                                        size="small"
-                                        aria-label={`Copy export code slot ${row.slot}`}
-                                        onClick={() => void copyBuildCode(exportCode, template.id, row.slot)}
-                                        sx={{
-                                          p: 0.25,
-                                          flexShrink: 0,
-                                          "&:hover": { background: isLight ? "rgba(176, 37, 29, 0.08)" : "rgba(231, 79, 67, 0.12)" },
-                                          "&:hover img": {
-                                            filter: isLight
-                                              ? "drop-shadow(1px 0 #7f1712) drop-shadow(-1px 0 #7f1712) drop-shadow(0 1px #7f1712) drop-shadow(0 -1px #7f1712) drop-shadow(0 0 3px rgba(176, 37, 29, 0.8))"
-                                              : "drop-shadow(1px 0 #fff) drop-shadow(-1px 0 #fff) drop-shadow(0 1px #fff) drop-shadow(0 -1px #fff) drop-shadow(0 0 3px rgba(255, 255, 255, 0.85))",
-                                          },
-                                        }}
-                                      >
-                                        <Box
-                                          component="img"
-                                          src={mechWarrior3Cutout}
-                                          alt=""
-                                          sx={{ width: 16, height: 22, objectFit: "contain", transition: "filter 120ms ease" }}
-                                        />
-                                      </IconButton>
-                                    </Tooltip>
-                                  ) : null}
                                 </Stack>
 
                                 <Stack direction="row" spacing={0.1} sx={{ alignItems: "center", minWidth: 0 }}>
@@ -3177,49 +3139,38 @@ export function DeckBoard({ mode, onToggleMode, user, onLogout, hasRole, viewMod
                                       }}
                                     />
                                   ) : null}
-                                  {skillTreeCode ? (
-                                      <Tooltip title={copiedCell?.templateId === template.id && copiedCell.slot === row.slot && copiedCell.field === "skill" ? "Copied" : "Copy skill tree code"}>
-                                        <IconButton
-                                          size="small"
-                                          aria-label={`Copy skill tree code slot ${row.slot}`}
-                                          onClick={() => void copySkillTreeCode(skillTreeCode, template.id, row.slot)}
-                                          sx={{
-                                            color: isLight ? "#397348" : "#8fd9a4",
-                                            background: isLight ? "rgba(57, 115, 72, 0.08)" : "rgba(143, 217, 164, 0.1)",
-                                            border: isLight ? "1px solid rgba(57, 115, 72, 0.22)" : "1px solid rgba(143, 217, 164, 0.24)",
-                                            p: 0.4,
-                                            flexShrink: 0,
-                                          }}
-                                        >
-                                          <ParkIcon fontSize="inherit" />
-                                        </IconButton>
-                                      </Tooltip>
-                                  ) : null}
                                 </Stack>
 
                                 <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
                                   {hasSelectedRepositoryBuild ? (
-                                    <Tooltip title="Open this mech in Repository">
+                                    <Tooltip title="Open in repo">
                                       <IconButton
                                         size="small"
-                                        aria-label={`Open repository build slot ${row.slot}`}
+                                        aria-label="Open in repo"
                                         onClick={() => openMechInRepository(mech?.id, rowChassis, rowVariant)}
                                         sx={{
-                                          p: 0.25,
-                                          flexShrink: 0,
-                                          "&:hover": { background: isLight ? "rgba(176, 37, 29, 0.08)" : "rgba(231, 79, 67, 0.12)" },
-                                          "&:hover img": {
-                                            filter: isLight
-                                              ? "drop-shadow(1px 0 #7f1712) drop-shadow(-1px 0 #7f1712) drop-shadow(0 1px #7f1712) drop-shadow(0 -1px #7f1712) drop-shadow(0 0 3px rgba(176, 37, 29, 0.8))"
-                                              : "drop-shadow(1px 0 #fff) drop-shadow(-1px 0 #fff) drop-shadow(0 1px #fff) drop-shadow(0 -1px #fff) drop-shadow(0 0 3px rgba(255, 255, 255, 0.85))",
+                                          color: isLight ? "#2c5fa5" : "#a9d0ff",
+                                          p: 0.45,
+                                          borderRadius: 1,
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          "&:hover": {
+                                            backgroundColor: isLight ? "rgba(44, 95, 165, 0.08)" : "rgba(169, 208, 255, 0.1)",
                                           },
                                         }}
                                       >
                                         <Box
                                           component="img"
-                                          src={mechWarrior3Cutout}
-                                          alt=""
-                                          sx={{ width: 16, height: 22, objectFit: "contain", transition: "filter 120ms ease" }}
+                                          src={mw3MechIcon}
+                                          alt="Open in repo"
+                                          sx={{
+                                            width: 18,
+                                            height: 18,
+                                            objectFit: "contain",
+                                            display: "block",
+                                            filter: isLight ? "drop-shadow(0 0 8px rgba(58, 111, 189, 0.3))" : "drop-shadow(0 0 8px rgba(137, 184, 255, 0.35))",
+                                          }}
                                         />
                                       </IconButton>
                                     </Tooltip>
