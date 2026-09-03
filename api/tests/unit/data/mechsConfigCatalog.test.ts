@@ -23,3 +23,21 @@ describe("mechs config hero aliases", () => {
     }
   });
 });
+
+describe("mechs config Marauder resolution", () => {
+  it.each([
+    ["MAD-BH2", "Marauder", "BOUNTY HUNTER II", "IS", 75, "Heavy"],
+    ["MAD-4A", "Marauder Ii", "MAD-4A", "IS", 100, "Assault"],
+    ["MAD-IIC", "Marauder Iic", "MAD-IIC", "Clan", 85, "Assault"],
+  ])(
+    "resolves %s to the correct chassis family",
+    (submittedVariant, chassis, variant, tech, tonnage, className) => {
+      const result = resolveConfigMech("MAD", submittedVariant);
+
+      expect(result).toMatchObject({
+        status: "ok",
+        value: { chassis, variant, tech, tonnage, className },
+      });
+    },
+  );
+});

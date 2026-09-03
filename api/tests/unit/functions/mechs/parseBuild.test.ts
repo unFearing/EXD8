@@ -4,9 +4,12 @@ import { parseMechBuildHandler } from "../../../../src/functions/mechs/parseBuil
 
 describe("parseMechBuildHandler", () => {
   it.each([
-    ["4d5427ea_MAD-X", "MAD-X"],
-    ["efb3b5c3_MAD-XS", "MAD-XS"],
-  ])("resolves %s as a Marauder II", async (buildToken, expectedVariant) => {
+    ["4d5427ea_MAD-X", "Marauder Ii", "MAD-X", "IS", 100, "Assault"],
+    ["efb3b5c3_MAD-XS", "Marauder Ii", "MAD-X(S)", "IS", 100, "Assault"],
+    ["4d5427ea_MAD-BH2", "Marauder", "BOUNTY HUNTER II", "IS", 75, "Heavy"],
+    ["4d5427ea_MAD-4A", "Marauder Ii", "MAD-4A", "IS", 100, "Assault"],
+    ["4d5427ea_MAD-IIC", "Marauder Iic", "MAD-IIC", "Clan", 85, "Assault"],
+  ])("resolves Marauder URL variant %s", async (buildToken, chassis, variant, tech, tonnage, className) => {
     global.fetch = vi.fn(async () => {
       throw new Error("Network unavailable");
     }) as never;
@@ -20,14 +23,36 @@ describe("parseMechBuildHandler", () => {
 
     expect(response.status).toBe(200);
     const body = response.jsonBody as {
-      data?: { draft?: { chassis?: string; variant?: string; tech?: string; tonnage?: number } };
+      data?: { draft?: { chassis?: string; variant?: string; tech?: string; tonnage?: number; class?: string } };
     };
     expect(body.data?.draft).toMatchObject({
-      chassis: "Marauder Ii",
-      variant: expectedVariant,
-      tech: "IS",
-      tonnage: 100,
+      chassis,
+      variant,
+      tech,
+      tonnage,
+      class: className,
     });
+  });
+
+  it.each([
+    ["4d5427ea_MAD-ZZZ", "MAD", "MAD-ZZZ", "matches multiple known chassis families"],
+    ["4d5427ea_ZZZ-1", "ZZZ", "ZZZ-1", "No mechs_config chassis mapping found"],
+  ])("keeps fallback import available for unresolved URL variant %s", async (buildToken, chassis, variant, warning) => {
+    global.fetch = vi.fn(async () => {
+      throw new Error("Network unavailable");
+    }) as never;
+
+    const response = await parseMechBuildHandler({
+      json: async () => ({ url: `https://mwo.nav-alpha.com/mechlab?b=${buildToken}` }),
+      headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
+    } as never);
+
+    expect(response.status).toBe(200);
+    const body = response.jsonBody as {
+      data?: { draft?: { chassis?: string; variant?: string; tonnage?: number }; warnings?: string[] };
+    };
+    expect(body.data?.draft).toMatchObject({ chassis, variant, tonnage: 50 });
+    expect(body.data?.warnings).toEqual(expect.arrayContaining([expect.stringContaining(warning)]));
   });
 
   it("detects Magshot weapons from rendered mechlab builds", async () => {

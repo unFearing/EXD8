@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { fail, ok } from "../../middleware/http.js";
 import type { CreateMechInput, WeightClass } from "../../types/contracts.js";
+import { resolveConfigMech } from "../../data/mechsConfigCatalog.js";
 
 type ParseBuildResponse = {
   sourceUrl: string;
@@ -946,11 +947,19 @@ async function fetchBuildFromApi(buildToken: string, apiKey: string): Promise<Js
 
 function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: string[]): ParseBuildResponse {
   const variantUpper = variantCode.toUpperCase();
-  const fromVariant =
-    mechsConfigCatalog.byVariant[variantUpper] ??
-    Object.entries(mechsConfigCatalog.byVariant).find(
-      ([knownVariant]) => normalizeLookupToken(knownVariant) === normalizeLookupToken(variantCode),
-    )?.[1];
+  const submittedChassisToken = variantCode.split(/[-_]/)[0] || variantCode;
+  const directResolution = resolveConfigMech(submittedChassisToken, variantCode);
+  const resolvedConfig = directResolution.status === "ok" ? directResolution.value : undefined;
+  const useLegacyFallback = directResolution.status === "not_found";
+  if (directResolution.status === "ambiguous") {
+    warnings.push(`Variant ${variantCode} matches multiple known chassis families; using generic fallback values.`);
+  }
+  const fromVariant = !useLegacyFallback
+    ? undefined
+    : mechsConfigCatalog.byVariant[variantUpper] ??
+      Object.entries(mechsConfigCatalog.byVariant).find(
+        ([knownVariant]) => normalizeLookupToken(knownVariant) === normalizeLookupToken(variantCode),
+      )?.[1];
   const chassisCode = resolveChassisCodeFromVariant(variantCode);
   const variantSuffixCandidates = Array.from(
     new Set(
@@ -963,9 +972,9 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       ].filter(Boolean),
     ),
   );
-  const catalog = fromVariant ?? mechsConfigCatalog.byCode[chassisCode];
+  const catalog = useLegacyFallback ? fromVariant ?? mechsConfigCatalog.byCode[chassisCode] : undefined;
 
-  const chassis = catalog?.chassis ?? chassisCode;
+  const chassis = resolvedConfig?.chassis ?? catalog?.chassis ?? chassisCode;
   const variantInfo = catalog?.variants
     ? variantSuffixCandidates
         .map((suffix) =>
@@ -986,11 +995,11 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
       })()
     : undefined;
   const resolvedVariantInfo = variantInfo ?? variantInfoFromPrefix;
-  const tonnage = catalog?.tonnage ?? 50;
-  const tech = resolvedVariantInfo?.tech ?? catalog?.defaultTech ?? "IS";
-  const variantLabel = resolvedVariantInfo?.label ?? variantCode;
+  const tonnage = resolvedConfig?.tonnage ?? catalog?.tonnage ?? 50;
+  const tech = resolvedConfig?.tech ?? resolvedVariantInfo?.tech ?? catalog?.defaultTech ?? "IS";
+  const variantLabel = resolvedConfig?.variant ?? resolvedVariantInfo?.label ?? variantCode;
 
-  if (!catalog) {
+  if (directResolution.status === "not_found" && !catalog) {
     warnings.push(`No mechs_config chassis mapping found for code ${chassisCode}; using generic fallback values.`);
   }
 
@@ -1000,12 +1009,12 @@ function makeDraftFromVariant(sourceUrl: string, variantCode: string, warnings: 
     metadata: {
       variantCode,
       chassisCode,
-      cachedChassis: catalog?.chassis ?? null,
-      cachedVariantLabel: resolvedVariantInfo?.label ?? null,
+      cachedChassis: resolvedConfig?.chassis ?? catalog?.chassis ?? null,
+      cachedVariantLabel: resolvedConfig?.variant ?? resolvedVariantInfo?.label ?? null,
       parseMode: "url-and-mechs-config",
     },
     draft: {
-      class: inferWeightClass(tonnage),
+      class: resolvedConfig?.className ?? inferWeightClass(tonnage),
       tech,
       tonnage,
       chassis,

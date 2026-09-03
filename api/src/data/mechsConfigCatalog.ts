@@ -48,6 +48,7 @@ const LEGACY_VARIANT_ALIASES: Record<string, string[]> = {
   "fs9-fs": ["firestorm"],
   "bane-l": ["leviathan"],
   // Common shorthand for hero variants.
+  "mad-bh2": ["bounty hunter ii"],
   "bsw-hr": ["high roller"],
   "high roller": ["bsw-hr"],
   "fle-r5k": ["romeo 5000"],
