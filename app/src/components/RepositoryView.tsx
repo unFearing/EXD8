@@ -9,7 +9,7 @@ import { Typography } from "@mui/material";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import type { MechDoc, PresenceDoc, WeightClassSummary } from "../types/contracts";
-import { deleteMech, getMechHierarchy, getMechs, parseMechBuild, updateMech } from "../api/client";
+import { deleteMech, getMechHierarchy, getMechRoles, getMechs, parseMechBuild, updateMech } from "../api/client";
 import type { DiscordUser } from "../hooks/useDiscordAuth";
 import { AddBuildDialog } from "./AddBuildDialog";
 import { resolveAppRole } from "../utils/discordRoles";
@@ -128,10 +128,11 @@ export function RepositoryView({
   const [weaponryDrafts, setWeaponryDrafts] = useState<Record<string, string>>({});
   const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
+  const [mechRoles, setMechRoles] = useState<string[]>([]);
   const [suggestedBuildDrafts, setSuggestedBuildDrafts] = useState<Record<string, boolean>>({});
   const [skillCodeDrafts, setSkillCodeDrafts] = useState<Record<string, string>>({});
   const [skillTreeUrlDrafts, setSkillTreeUrlDrafts] = useState<Record<string, string>>({});
-  const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [buildCodesDrafts, setBuildCodesDrafts] = useState<Record<string, string>>({});
   const [focusTarget, setFocusTarget] = useState<{ mechId?: string; chassis?: string; variant?: string } | null>(null);
   const [highlightedMechId, setHighlightedMechId] = useState<string | null>(null);
   const [parserReview, setParserReview] = useState<ParserReviewState | null>(null);
@@ -157,6 +158,20 @@ export function RepositoryView({
 
   useEffect(() => {
     void loadHierarchy();
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void getMechRoles()
+      .then((roles) => {
+        if (active) setMechRoles(roles);
+      })
+      .catch(() => {
+        if (active) setMechRoles([]);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -292,7 +307,10 @@ export function RepositoryView({
     const skillTreeUrl = (skillTreeUrlDrafts[id] ?? source.skillTreeUrl ?? "").trim();
     const name = normalizeBuildName(nameDrafts[id] ?? source.name);
     const role = (roleDrafts[id] ?? source.role ?? "").trim();
-    const buildCodes = getDisplayBuildCodes(buildCodesDrafts[id] ?? source.buildCodes ?? {}).reduce<Record<string, string>>(
+    const buildCodesSource = id in buildCodesDrafts
+      ? parseBuildCodesText(buildCodesDrafts[id])
+      : source.buildCodes ?? {};
+    const buildCodes = getDisplayBuildCodes(buildCodesSource).reduce<Record<string, string>>(
       (result, [key, value]) => {
         result[key] = value;
         return result;
@@ -890,6 +908,7 @@ export function RepositoryView({
                               const nameValue = nameDrafts[build.id] ?? sourceBuild?.name ?? "";
                               const trimmedNameValue = nameValue.trim();
                               const roleValue = roleDrafts[build.id] ?? sourceBuild?.role ?? "";
+                              const editableRoleOptions = Array.from(new Set([...mechRoles, roleValue.trim()].filter(Boolean)));
                               const rangeMin = sourceBuild?.primaryRangeBracket?.[0] ?? sourceBuild?.metadata?.ranges?.idealMin ?? 0;
                               const rangeMax = sourceBuild?.primaryRangeBracket?.[1] ?? sourceBuild?.metadata?.ranges?.idealMax ?? 0;
                               const optimalRange = sourceBuild?.optimalRange ?? sourceBuild?.metadata?.ranges?.optimal ?? 0;
@@ -953,13 +972,19 @@ export function RepositoryView({
                                             }
                                             label="Suggested build"
                                           />
-                                          <TextField
-                                            label="Role"
-                                            size="small"
-                                            value={roleValue}
-                                            onChange={(event) => setRoleDrafts((previous) => ({ ...previous, [build.id]: event.target.value }))}
-                                            sx={{ minWidth: { sm: 150 }, flex: 1 }}
-                                          />
+                                          <FormControl size="small" sx={{ minWidth: { sm: 150 }, width: { xs: "100%", sm: "auto" }, flex: 1 }}>
+                                            <InputLabel id={`repo-role-label-${build.id}`}>Role</InputLabel>
+                                            <Select
+                                              labelId={`repo-role-label-${build.id}`}
+                                              label="Role"
+                                              value={roleValue}
+                                              onChange={(event) => setRoleDrafts((previous) => ({ ...previous, [build.id]: event.target.value }))}
+                                            >
+                                              {editableRoleOptions.map((role) => (
+                                                <MenuItem key={role} value={role}>{role}</MenuItem>
+                                              ))}
+                                            </Select>
+                                          </FormControl>
                                         </Stack>
                                       ) : (
                                         <Box sx={{ px: 0.8, py: 0.2, borderRadius: 0, border: isLight ? `1px solid ${MOXIE_BLUE}66` : `1px solid ${MOXIE_NIGHT_LINE}88`, background: isLight ? "rgba(248, 228, 214, 0.5)" : "rgba(22, 35, 67, 0.7)" }}>
@@ -1121,12 +1146,11 @@ export function RepositoryView({
                                               size="small"
                                               fullWidth
                                               slotProps={{ inputLabel: { shrink: true } }}
-                                              value={buildCodesDrafts[build.id] ? getEditableBuildCodesText(buildCodesDrafts[build.id]) : getEditableBuildCodesText(sourceBuild?.buildCodes)}
+                                              value={buildCodesDrafts[build.id] ?? getEditableBuildCodesText(sourceBuild?.buildCodes)}
                                               onChange={(event) => {
-                                                const codes = parseBuildCodesText(event.target.value);
                                                 setBuildCodesDrafts((previous) => ({
                                                   ...previous,
-                                                  [build.id]: codes,
+                                                  [build.id]: event.target.value,
                                                 }));
                                               }}
                                             />

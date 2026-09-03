@@ -86,25 +86,35 @@ const MechSelectorComponent: React.FC<MechSelectorProps> = ({
     () => chassisOptions.find((group) => group.chassis === chassisValue)?.variants ?? [],
     [chassisOptions, chassisValue],
   );
+  const resolvedChassisValue = useMemo(() => {
+    if (!chassisValue) return "";
+    return chassisOptions.some((group) => group.chassis === chassisValue) ? chassisValue : selectedOption?.chassis || "";
+  }, [chassisOptions, chassisValue, selectedOption?.chassis]);
+  const resolvedVariantValue = useMemo(() => {
+    if (!resolvedChassisValue) return "";
+    if (variantOptions.some((entry) => entry.variant === variantValue)) return variantValue;
+    return selectedOption?.variant || "";
+  }, [resolvedChassisValue, selectedOption?.variant, variantOptions, variantValue]);
+  const selectValue = useMemo(() => {
+    if (!resolvedChassisValue) return "";
+    return resolvedVariantValue || "";
+  }, [resolvedChassisValue, resolvedVariantValue]);
   const chassisMenuOptions = chassisOptions;
-  const variantMenuOptions = chassisValue ? variantOptions : [];
+  const variantMenuOptions = resolvedChassisValue ? variantOptions : [];
 
   return (
     <Stack sx={{ width: "100%" }}>
       <FormControl size="small" variant="standard" fullWidth>
         <Select
           displayEmpty
-          value={variantValue || chassisValue || ""}
-          disabled={disabled || (chassisValue ? variantOptions.length === 0 : chassisOptions.length === 0)}
-          renderValue={(value) => {
-            const selected = typeof value === "string" ? value : "";
-            if (!selected) return "Select Mech";
-            if (chassisValue && variantValue) {
-              const chosen = variantOptions.find((entry) => entry.variant === variantValue);
-              const label = chosen?.name ? `${variantValue} / ${chosen.name}` : variantValue;
-              return `${chassisValue} / ${label}${selectedName?.trim() ? ` / ${selectedName.trim()}` : ""}`;
-            }
-            return selected;
+          value={selectValue}
+          disabled={disabled || (resolvedChassisValue ? variantOptions.length === 0 : chassisOptions.length === 0)}
+          renderValue={() => {
+            if (!resolvedChassisValue) return "Select Mech";
+            if (!resolvedVariantValue) return resolvedChassisValue;
+            const chosen = variantOptions.find((entry) => entry.variant === resolvedVariantValue);
+            const label = chosen?.name ? `${resolvedVariantValue} / ${chosen.name}` : resolvedVariantValue;
+            return `${resolvedChassisValue} / ${label}${selectedName?.trim() ? ` / ${selectedName.trim()}` : ""}`;
           }}
           onChange={(event) => {
             const nextValue = String(event.target.value || "");

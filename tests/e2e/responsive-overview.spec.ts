@@ -158,7 +158,7 @@ async function mockApi(page: Page, appRole: "TL" | "Pilot" = "TL") {
     }
     if (url.pathname.endsWith("/api/mechs")) return success(duplicateWeaponBuilds);
     if (url.pathname.endsWith("/api/config/maps")) return success([]);
-    if (url.pathname.endsWith("/api/config/mech-roles")) return success([]);
+    if (url.pathname.endsWith("/api/config/mech-roles")) return success(["Brawler", "Flanker"]);
     return success([]);
   });
 }
@@ -406,10 +406,13 @@ test("Repository prioritizes suggested builds and supports complete build editin
   await expect(suggestedCard.getByRole("link", { name: "Open build" })).toBeVisible();
 
   const suggestedCheckbox = suggestedCard.getByRole("checkbox", { name: "Suggested build" });
-  const roleInput = suggestedCard.getByRole("textbox", { name: "Role" });
+  const roleInput = suggestedCard.getByRole("combobox", { name: "Role" });
   const nameInput = suggestedCard.getByPlaceholder("Optional short name");
   await expect(suggestedCheckbox).toBeChecked();
-  await expect(roleInput).toHaveValue("Skirmisher");
+  await expect(roleInput).toHaveText("Skirmisher");
+  await roleInput.click();
+  await expect(page.getByRole("option", { name: "Skirmisher" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   const headerBottom = Math.max(
     (await suggestedCheckbox.boundingBox())?.y ?? 0,
@@ -418,18 +421,27 @@ test("Repository prioritizes suggested builds and supports complete build editin
   expect((await nameInput.boundingBox())?.y).toBeGreaterThan(headerBottom);
 
   await suggestedCheckbox.uncheck();
-  await roleInput.fill("Flanker");
+  await roleInput.click();
+  await page.getByRole("option", { name: "Flanker" }).click();
+  const buildCodesInput = suggestedCard.getByRole("textbox", { name: "Build Codes (key: value per line)" });
+  await buildCodesInput.fill("asym left");
+  await expect(buildCodesInput).toHaveValue("asym left");
+  await buildCodesInput.fill("asym left: NAMED-LEFT\nright torso: NAMED-RIGHT\nexport: OMIT-ME\nincomplete");
   const updateRequest = page.waitForRequest((request) => request.url().endsWith(`/api/mechs/${duplicateWeaponBuilds[1].id}`) && request.method() === "PUT");
   await suggestedCard.getByRole("button", { name: "Save Build" }).click();
-  expect((await updateRequest).postDataJSON()).toMatchObject({
+  const updatePayload = (await updateRequest).postDataJSON();
+  expect(updatePayload).toMatchObject({
     suggestedBuild: false,
     role: "Flanker",
     skillTreeCode: kitlaanSkillCode,
     skillTreeUrl: kitlaanSkillTreeUrl,
   });
+  expect(updatePayload.buildCodes).toEqual({
+    "asym left": "NAMED-LEFT",
+    "right torso": "NAMED-RIGHT",
+  });
 
   const skillCodeInput = suggestedCard.getByRole("textbox", { name: "Skill Tree Code" });
-  const buildCodesInput = suggestedCard.getByRole("textbox", { name: "Build Codes (key: value per line)" });
   const skillCodeBox = await skillCodeInput.boundingBox();
   const buildCodesBox = await buildCodesInput.boundingBox();
   expect(skillCodeBox && buildCodesBox && skillCodeBox.y + skillCodeBox.height <= buildCodesBox.y).toBe(true);
