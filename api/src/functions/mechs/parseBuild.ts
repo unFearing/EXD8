@@ -769,7 +769,7 @@ function parseBuildFromRenderedText(renderedText: string): { weaponry: string; e
   const equipmentLines = Array.from(equipmentCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
   const exportCode = pickBestExportCode(extractExportCodeCandidates(renderedText));
 
-  if (!weaponLines.length && !equipmentLines.length) {
+  if (!weaponLines.length && !equipmentLines.length && !exportCode) {
     return null;
   }
 
@@ -811,6 +811,15 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
   const exportCodeCandidates: string[] = [];
 
   visitJson(data, (obj) => {
+    for (const value of Object.values(obj)) {
+      const asString = stringValue(value);
+      if (!asString) continue;
+      const matches = extractExportCodeCandidates(asString);
+      if (matches.length) {
+        exportCodeCandidates.push(...matches);
+      }
+    }
+
     const itemTypeRaw = stringValue(obj.item_type);
     const itemType = itemTypeRaw?.toLowerCase();
     const baseName =
@@ -824,15 +833,6 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
 
     const count = numberValue(obj.count) ?? numberValue(obj.qty) ?? numberValue(obj.quantity) ?? 1;
     const safeCount = Math.max(1, Math.floor(count));
-
-    for (const value of Object.values(obj)) {
-      const asString = stringValue(value);
-      if (!asString) continue;
-      const matches = extractExportCodeCandidates(asString);
-      if (matches.length) {
-        exportCodeCandidates.push(...matches);
-      }
-    }
 
     if (itemType === "weapon") {
       weaponCounts.set(baseName, (weaponCounts.get(baseName) ?? 0) + safeCount);
@@ -860,7 +860,7 @@ function parseBuildFromApiData(data: JsonValue): { weaponry: string; equipment: 
   const equipmentLines = Array.from(equipmentCounts.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(toLine);
   const exportCode = pickBestExportCode(exportCodeCandidates);
 
-  if (!weaponLines.length && !equipmentLines.length) {
+  if (!weaponLines.length && !equipmentLines.length && !exportCode) {
     return null;
   }
 
@@ -1109,7 +1109,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
           if (publicExportCode) {
             result.draft.buildCodes = {
               ...result.draft.buildCodes,
-              export: publicExportCode,
+              default: publicExportCode,
             };
             result.metadata.extractedExportCode = true;
           }
@@ -1127,16 +1127,17 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if (!result.metadata.extractedWeaponLines || !result.metadata.extractedEquipmentLines) {
+    const needsRenderedLoadout = !result.metadata.extractedWeaponLines || !result.metadata.extractedEquipmentLines;
+    if (needsRenderedLoadout || !result.metadata.extractedExportCode) {
       try {
         const renderedText = await fetchRenderedBuildText(parsedUrl.toString());
         const parsed = parseBuildFromRenderedText(renderedText);
-        if (parsed?.weaponry) {
+        if (parsed?.weaponry && !result.metadata.extractedWeaponLines) {
           result.draft.weaponry = parsed.weaponry;
           result.metadata.extractedWeaponLines = parsed.weaponry.split("|").length;
           result.metadata.parseMode = "rendered-sidebar";
         }
-        if (parsed?.equipment.length) {
+        if (parsed?.equipment.length && !result.metadata.extractedEquipmentLines) {
           result.draft.metadata.equipment = parsed.equipment;
           result.draft.equipment = parsed.equipment;
           result.metadata.extractedEquipmentLines = parsed.equipment.length;
@@ -1149,7 +1150,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: parsed.exportCode,
+            default: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1160,16 +1161,17 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if ((!result.draft.weaponry || result.draft.weaponry.startsWith("Parsed from link")) && navApiKey && buildToken) {
+    const needsApiLoadout = !result.draft.weaponry || result.draft.weaponry.startsWith("Parsed from link");
+    if ((needsApiLoadout || !result.metadata.extractedExportCode) && navApiKey && buildToken) {
       try {
         const apiData = await fetchBuildFromApi(buildToken, navApiKey);
         const parsed = parseBuildFromApiData(apiData);
-        if (parsed?.weaponry) {
+        if (parsed?.weaponry && needsApiLoadout) {
           result.draft.weaponry = parsed.weaponry;
           result.metadata.extractedWeaponLines = parsed.weaponry.split("|").length;
           result.metadata.parseMode = "nav-alpha-api";
         }
-        if (parsed?.equipment.length) {
+        if (parsed?.equipment.length && !result.metadata.extractedEquipmentLines) {
           result.draft.metadata.equipment = parsed.equipment;
           result.draft.equipment = parsed.equipment;
           result.metadata.extractedEquipmentLines = parsed.equipment.length;
@@ -1179,7 +1181,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
         if (parsed?.exportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: parsed.exportCode,
+            default: parsed.exportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1191,22 +1193,23 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if (!result.draft.weaponry || result.draft.weaponry.startsWith("Parsed from link")) {
+    const needsHtmlLoadout = !result.draft.weaponry || result.draft.weaponry.startsWith("Parsed from link");
+    if (needsHtmlLoadout || !result.metadata.extractedExportCode) {
       try {
         const html = await fetchHtml(parsedUrl.toString());
         const weaponLines = parseWeaponsFromHtml(html);
         const htmlExportCode = pickBestExportCode(extractExportCodeCandidates(html));
-        if (weaponLines.length) {
+        if (weaponLines.length && needsHtmlLoadout) {
           result.metadata.extractedWeaponLines = weaponLines.length;
           result.draft.weaponry = weaponLines.join(" | ");
           result.metadata.parseMode = "html-fallback";
-        } else {
+        } else if (needsHtmlLoadout) {
           warnings.push("Could not extract weapon list from page HTML. Fill weaponry manually.");
         }
-        if (htmlExportCode) {
+        if (htmlExportCode && !result.metadata.extractedExportCode) {
           result.draft.buildCodes = {
             ...result.draft.buildCodes,
-            export: htmlExportCode,
+            default: htmlExportCode,
           };
           result.metadata.extractedExportCode = true;
         }
@@ -1215,7 +1218,7 @@ export async function parseMechBuildHandler(request: HttpRequest) {
       }
     }
 
-    if (!result.draft.buildCodes.export) {
+    if (!result.draft.buildCodes.default) {
       warnings.push("Could not extract MWO export code from source data. If available, use the Export button in NAV-Alpha and paste it manually.");
     }
 

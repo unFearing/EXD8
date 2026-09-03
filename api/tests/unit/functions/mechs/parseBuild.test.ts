@@ -1,6 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseMechBuildHandler } from "../../../../src/functions/mechs/parseBuild.js";
+
+const originalFetch = global.fetch;
+
+const requestFor = (buildToken: string) => ({
+  json: async () => ({ url: `https://mwo.nav-alpha.com/mechlab?b=${buildToken}` }),
+  headers: new Headers({ "x-team-id": "EXD8", "x-user-id": "pilot-1", "x-user-role": "Pilot" }),
+}) as never;
+
+afterEach(() => {
+  global.fetch = originalFetch;
+  vi.unstubAllEnvs();
+});
 
 describe("parseMechBuildHandler", () => {
   it.each([
@@ -90,5 +102,114 @@ Heat Sinks: 10
     expect(body.data?.draft?.weaponry).toContain("Magshot");
     expect(body.data?.draft?.buildCodes?.default).toBe("A123456789012345678901");
     expect(body.data?.draft?.buildCodes?.export).toBeUndefined();
+  });
+
+  it("stores an HTML fallback export code as default", async () => {
+    const fallbackCode = "AHTML12345678901234567890";
+
+    global.fetch = vi.fn(async (url: string) => {
+      const value = String(url);
+      if (value.startsWith("https://mwo.nav-alpha.com/api/build/")) {
+        throw new Error("Public API unavailable");
+      }
+      if (value.startsWith("https://r.jina.ai/http://")) {
+        throw new Error("Rendered source unavailable");
+      }
+      return new Response(`Weapon: Magshot\nBuild Code: ${fallbackCode}`, { status: 200 });
+    }) as never;
+
+    const response = await parseMechBuildHandler(requestFor("5eb157b1_FS9-FS"));
+    const body = response.jsonBody as {
+      data?: { draft?: { buildCodes?: Record<string, string> }; warnings?: string[] };
+    };
+
+    expect(body.data?.draft?.buildCodes).toMatchObject({ default: fallbackCode });
+    expect(body.data?.draft?.buildCodes?.export).toBeUndefined();
+    expect(body.data?.warnings).not.toEqual(expect.arrayContaining([expect.stringContaining("paste it manually")]));
+  });
+
+  it("preserves a rendered export code when the API returns a lower-priority code", async () => {
+    const renderedCode = "ARENDERED1234567890123456";
+    const apiCode = "AAPI123456789012345678901";
+    vi.stubEnv("NAV_ALPHA_API_KEY", "test-key");
+
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const value = String(url);
+      const authorization = new Headers(init?.headers).get("authorization");
+      if (value.startsWith("https://mwo.nav-alpha.com/api/build/") && authorization?.startsWith("Native ")) {
+        throw new Error("Public API unavailable");
+      }
+      if (value.startsWith("https://r.jina.ai/http://")) {
+        return new Response(`Heat Sink ${renderedCode}`, { status: 200 });
+      }
+      if (value.startsWith("https://mwo.nav-alpha.com/api/build/") && authorization === "Bearer test-key") {
+        return Response.json({
+          ok: true,
+          data: [{ build_code: apiCode }],
+        });
+      }
+      throw new Error(`Unexpected fetch: ${value}`);
+    }) as never;
+
+    const response = await parseMechBuildHandler(requestFor("5eb157b1_FS9-FS"));
+    const body = response.jsonBody as { data?: { draft?: { buildCodes?: Record<string, string> } } };
+
+    expect(body.data?.draft?.buildCodes?.default).toBe(renderedCode);
+    expect(body.data?.draft?.buildCodes?.default).not.toBe(apiCode);
+    expect(body.data?.draft?.buildCodes?.export).toBeUndefined();
+  });
+
+  it("uses an API export code when rendered data has a loadout but no code", async () => {
+    const apiCode = "AAPI123456789012345678901";
+    vi.stubEnv("NAV_ALPHA_API_KEY", "test-key");
+
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const value = String(url);
+      const authorization = new Headers(init?.headers).get("authorization");
+      if (value.startsWith("https://mwo.nav-alpha.com/api/build/") && authorization?.startsWith("Native ")) {
+        throw new Error("Public API unavailable");
+      }
+      if (value.startsWith("https://r.jina.ai/http://")) {
+        return new Response("Magshot\nHeat Sinks: 10", { status: 200 });
+      }
+      if (value.startsWith("https://mwo.nav-alpha.com/api/build/") && authorization === "Bearer test-key") {
+        return Response.json({
+          ok: true,
+          data: [{ item_type: "weapon", short_name: "Medium Laser", build_code: apiCode }],
+        });
+      }
+      throw new Error(`Unexpected fetch: ${value}`);
+    }) as never;
+
+    const response = await parseMechBuildHandler(requestFor("5eb157b1_FS9-FS"));
+    const body = response.jsonBody as {
+      data?: { draft?: { weaponry?: string; buildCodes?: Record<string, string> }; warnings?: string[] };
+    };
+
+    expect(body.data?.draft?.weaponry).toContain("Magshot");
+    expect(body.data?.draft?.buildCodes?.default).toBe(apiCode);
+    expect(body.data?.draft?.buildCodes?.export).toBeUndefined();
+    expect(body.data?.warnings).not.toEqual(expect.arrayContaining([expect.stringContaining("paste it manually")]));
+  });
+
+  it("warns for manual entry when no source returns an export code", async () => {
+    global.fetch = vi.fn(async (url: string) => {
+      if (String(url).startsWith("https://mwo.nav-alpha.com/api/build/")) {
+        throw new Error("Public API unavailable");
+      }
+      if (String(url).startsWith("https://r.jina.ai/http://")) {
+        throw new Error("Rendered source unavailable");
+      }
+      return new Response("No build details available", { status: 200 });
+    }) as never;
+
+    const response = await parseMechBuildHandler(requestFor("5eb157b1_FS9-FS"));
+    const body = response.jsonBody as {
+      data?: { draft?: { buildCodes?: Record<string, string> }; warnings?: string[] };
+    };
+
+    expect(body.data?.draft?.buildCodes?.default).toBeUndefined();
+    expect(body.data?.draft?.buildCodes?.export).toBeUndefined();
+    expect(body.data?.warnings).toEqual(expect.arrayContaining([expect.stringContaining("paste it manually")]));
   });
 });
